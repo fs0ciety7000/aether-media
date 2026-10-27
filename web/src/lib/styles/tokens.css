@@ -1,0 +1,225 @@
+/*
+ * Aether — design tokens.
+ * Semantic tokens only: a theme redefines colours, shadows and grain, nothing else.
+ * Default theme (Salle obscure) lives on :root; others are applied with
+ * [data-theme="…"] on <html> — or on any element, for local previews.
+ * Contrast is verified by scripts/check-contrast.mjs (npm run check:contrast).
+ */
+
+:root {
+	/* Typography */
+	--font-display: 'Cormorant Garamond Variable', 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+	--font-ui: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+	--fs-hero: clamp(2.75rem, 5vw, 4.5rem);
+	--lh-hero: 1.05;
+	--fs-h1: 2.25rem;
+	--lh-h1: 1.15;
+	--fs-h2: 1.5rem;
+	--lh-h2: 1.25;
+	--fs-h3: 1.125rem;
+	--lh-h3: 1.35;
+	--fs-body: 1rem;
+	--lh-body: 1.6;
+	--fs-small: 0.875rem;
+	--lh-small: 1.5;
+	--fs-micro: 0.75rem;
+	--lh-micro: 1.4;
+	--ls-micro: 0.06em;
+
+	/* Spacing (base 4) */
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-5: 24px;
+	--sp-6: 32px;
+	--sp-7: 48px;
+	--sp-8: 64px;
+	--sp-9: 96px;
+	--sp-10: 128px;
+
+	/* Page gutters: 16 (mobile) · 32 (tablet) · 64 (desktop) */
+	--gutter: var(--sp-4);
+
+	/* Radii */
+	--r-sm: 4px;
+	--r-md: 8px;
+	--r-lg: 14px;
+	--r-full: 999px;
+
+	/* Motion */
+	--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--dur-fast: 150ms;
+	--dur-base: 260ms;
+	--dur-slow: 480ms;
+
+	/* Shell metrics */
+	--header-h: 72px;
+	--tabbar-h: 64px;
+}
+
+@media (min-width: 768px) {
+	:root {
+		--gutter: var(--sp-6);
+	}
+}
+
+@media (min-width: 1200px) {
+	:root {
+		--gutter: var(--sp-8);
+	}
+}
+
+/* ——— Salle obscure (default) — sombre, chaud ——— */
+:root,
+[data-theme='salle-obscure'] {
+	color-scheme: dark;
+	--bg: #121010;
+	--bg-sunken: #0c0b0a;
+	--surface: #1a1716;
+	--surface-raised: #221e1c;
+	--line: rgba(237, 230, 218, 0.07);
+	--text: #ede6da;
+	--text-muted: #a89f92;
+	--text-faint: #6e665c;
+	--accent: #b89a6a;
+	--accent-contrast: #1a1510;
+	--accent-ink: #b89a6a; /* accent for small text (chips, links) */
+	--accent-soft: rgba(184, 154, 106, 0.12);
+	--danger: #b4675a;
+	--success: #7f9474;
+	--scrim: linear-gradient(to top, rgba(18, 16, 16, 0.92) 0%, rgba(18, 16, 16, 0.55) 40%, rgba(18, 16, 16, 0) 75%);
+	--scrim-side: linear-gradient(to right, rgba(18, 16, 16, 0.78) 0%, rgba(18, 16, 16, 0.35) 45%, rgba(18, 16, 16, 0) 70%);
+	--shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.18);
+	--shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
+	--shadow-3: 0 12px 24px rgba(0, 0, 0, 0.32), 0 32px 64px rgba(0, 0, 0, 0.3);
+	--grain-opacity: 0.22;
+}
+
+/* ——— Velours — rideau bordeaux, très sombre ——— */
+[data-theme='velours'] {
+	color-scheme: dark;
+	--bg: #140f10;
+	--bg-sunken: #0d0a0b;
+	--surface: #1d1617;
+	--surface-raised: #261d1e;
+	--line: rgba(239, 229, 223, 0.07);
+	--text: #efe5df;
+	--text-muted: #ad9e98;
+	--text-faint: #76665f;
+	--accent: #a8786a;
+	--accent-contrast: #1a0f0e;
+	--accent-ink: #bd8f80; /* accent for small text (chips, links) */
+	--accent-soft: rgba(168, 120, 106, 0.14);
+	--danger: #b8695c;
+	--success: #82937a;
+	--scrim: linear-gradient(to top, rgba(20, 15, 16, 0.92) 0%, rgba(20, 15, 16, 0.55) 40%, rgba(20, 15, 16, 0) 75%);
+	--scrim-side: linear-gradient(to right, rgba(20, 15, 16, 0.78) 0%, rgba(20, 15, 16, 0.35) 45%, rgba(20, 15, 16, 0) 70%);
+	--shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.18);
+	--shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
+	--shadow-3: 0 12px 24px rgba(0, 0, 0, 0.32), 0 32px 64px rgba(0, 0, 0, 0.3);
+	--grain-opacity: 0.22;
+}
+
+/* ——— Ardoise — froid, minéral, nordique ——— */
+[data-theme='ardoise'] {
+	color-scheme: dark;
+	--bg: #101214;
+	--bg-sunken: #0a0c0d;
+	--surface: #181b1e;
+	--surface-raised: #1f2327;
+	--line: rgba(228, 230, 232, 0.07);
+	--text: #e4e6e8;
+	--text-muted: #9aa1a7;
+	--text-faint: #646b71;
+	--accent: #8fa3ae;
+	--accent-contrast: #0f1417;
+	--accent-ink: #8fa3ae; /* accent for small text (chips, links) */
+	--accent-soft: rgba(143, 163, 174, 0.13);
+	--danger: #b06e64;
+	--success: #7d9182;
+	--scrim: linear-gradient(to top, rgba(16, 18, 20, 0.92) 0%, rgba(16, 18, 20, 0.55) 40%, rgba(16, 18, 20, 0) 75%);
+	--scrim-side: linear-gradient(to right, rgba(16, 18, 20, 0.78) 0%, rgba(16, 18, 20, 0.35) 45%, rgba(16, 18, 20, 0) 70%);
+	--shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.18);
+	--shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
+	--shadow-3: 0 12px 24px rgba(0, 0, 0, 0.32), 0 32px 64px rgba(0, 0, 0, 0.3);
+	--grain-opacity: 0.2;
+}
+
+/* ——— Noyer — bois sombre, bibliothèque ——— */
+[data-theme='noyer'] {
+	color-scheme: dark;
+	--bg: #13110e;
+	--bg-sunken: #0c0b09;
+	--surface: #1c1915;
+	--surface-raised: #24201b;
+	--line: rgba(236, 228, 212, 0.07);
+	--text: #ece4d4;
+	--text-muted: #a99f8d;
+	--text-faint: #716857;
+	--accent: #a8875a;
+	--accent-contrast: #17120b;
+	--accent-ink: #b39268; /* accent for small text (chips, links) */
+	--accent-soft: rgba(168, 135, 90, 0.13);
+	--danger: #b16a57;
+	--success: #839272;
+	--scrim: linear-gradient(to top, rgba(19, 17, 14, 0.92) 0%, rgba(19, 17, 14, 0.55) 40%, rgba(19, 17, 14, 0) 75%);
+	--scrim-side: linear-gradient(to right, rgba(19, 17, 14, 0.78) 0%, rgba(19, 17, 14, 0.35) 45%, rgba(19, 17, 14, 0) 70%);
+	--shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.18);
+	--shadow-2: 0 4px 12px rgba(0, 0, 0, 0.28), 0 12px 32px rgba(0, 0, 0, 0.22);
+	--shadow-3: 0 12px 24px rgba(0, 0, 0, 0.32), 0 32px 64px rgba(0, 0, 0, 0.3);
+	--grain-opacity: 0.22;
+}
+
+/* ——— Lin (clair) — matinée, papier, galerie ——— */
+[data-theme='lin'] {
+	color-scheme: light;
+	--bg: #f3efe8;
+	--bg-sunken: #e9e4db;
+	--surface: #fbf9f5;
+	--surface-raised: #fdfcf9;
+	--line: rgba(42, 38, 34, 0.09);
+	--text: #2a2622;
+	--text-muted: #6b635a;
+	--text-faint: #8c8378;
+	--accent: #8a6e45;
+	--accent-contrast: #fbf9f5;
+	--accent-ink: #755b35; /* accent for small text (chips, links) */
+	--accent-soft: rgba(138, 110, 69, 0.11);
+	--danger: #a35a4c;
+	--success: #5f7556;
+	--scrim: linear-gradient(to top, rgba(24, 21, 18, 0.88) 0%, rgba(24, 21, 18, 0.5) 40%, rgba(24, 21, 18, 0) 75%);
+	--scrim-side: linear-gradient(to right, rgba(24, 21, 18, 0.72) 0%, rgba(24, 21, 18, 0.3) 45%, rgba(24, 21, 18, 0) 70%);
+	--shadow-1: 0 1px 2px rgba(30, 26, 22, 0.08), 0 2px 8px rgba(30, 26, 22, 0.06);
+	--shadow-2: 0 4px 12px rgba(30, 26, 22, 0.09), 0 12px 32px rgba(30, 26, 22, 0.08);
+	--shadow-3: 0 12px 24px rgba(30, 26, 22, 0.1), 0 32px 64px rgba(30, 26, 22, 0.12);
+	--grain-opacity: 0.3;
+}
+
+/* ——— Système : suit prefers-color-scheme (Salle obscure ↔ Lin) ——— */
+@media (prefers-color-scheme: light) {
+	[data-theme='system'] {
+		color-scheme: light;
+		--bg: #f3efe8;
+		--bg-sunken: #e9e4db;
+		--surface: #fbf9f5;
+		--surface-raised: #fdfcf9;
+		--line: rgba(42, 38, 34, 0.09);
+		--text: #2a2622;
+		--text-muted: #6b635a;
+		--text-faint: #8c8378;
+		--accent: #8a6e45;
+		--accent-contrast: #fbf9f5;
+		--accent-ink: #755b35; /* accent for small text (chips, links) */
+		--accent-soft: rgba(138, 110, 69, 0.11);
+		--danger: #a35a4c;
+		--success: #5f7556;
+		--scrim: linear-gradient(to top, rgba(24, 21, 18, 0.88) 0%, rgba(24, 21, 18, 0.5) 40%, rgba(24, 21, 18, 0) 75%);
+		--scrim-side: linear-gradient(to right, rgba(24, 21, 18, 0.72) 0%, rgba(24, 21, 18, 0.3) 45%, rgba(24, 21, 18, 0) 70%);
+		--shadow-1: 0 1px 2px rgba(30, 26, 22, 0.08), 0 2px 8px rgba(30, 26, 22, 0.06);
+		--shadow-2: 0 4px 12px rgba(30, 26, 22, 0.09), 0 12px 32px rgba(30, 26, 22, 0.08);
+		--shadow-3: 0 12px 24px rgba(30, 26, 22, 0.1), 0 32px 64px rgba(30, 26, 22, 0.12);
+		--grain-opacity: 0.3;
+	}
+}

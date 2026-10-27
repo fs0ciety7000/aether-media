@@ -1,4 +1,4 @@
-# Aether — Design System (draft v0.1)
+# Aether — Design System (v0.2)
 
 > **Intention** : une salle de cinéma privée. Velours, bois sombre, lumière tamisée, silence avant la séance.
 > **Luxe discret** : mat, ombres douces, beaucoup d'espace. L'affiche est la star ; l'interface s'efface.
@@ -37,7 +37,11 @@ Les tokens sont **sémantiques**. Un thème ne redéfinit que ces variables.
 | `--accent` | action principale, progression, focus |
 | `--accent-contrast` | texte sur l'accent |
 | `--danger` / `--success` | états (désaturés) |
-| `--scrim` | voile sur les images (lisibilité du texte) |
+| `--accent-ink` | accent pour le **petit texte** (chips sélectionnées, liens) : variante plus contrastée de l'accent |
+| `--accent-soft` | fond teinté accent (chips sélectionnées, survols) |
+| `--scrim` / `--scrim-side` | voiles bas et latéral sur les images (lisibilité du texte) |
+| `--on-image` / `--on-image-muted` | texte posé sur une image : clair, identique dans tous les thèmes |
+| `--grain-opacity` | intensité du grain pellicule, par thème |
 
 ### Thème par défaut — « Salle obscure » (sombre, chaud)
 ```css
@@ -57,12 +61,27 @@ Les tokens sont **sémantiques**. Un thème ne redéfinit que ces variables.
 ```
 
 ### Thèmes additionnels (sobres)
-| Thème | Ambiance | `--bg` | `--surface` | `--text` | `--accent` |
-|---|---|---|---|---|---|
-| **Velours** | rideau bordeaux, très sombre | `#140F10` | `#1D1617` | `#EFE5DF` | `#A8786A` (vieux rose cuivré) |
-| **Ardoise** | froid, minéral, nordique | `#101214` | `#181B1E` | `#E4E6E8` | `#8FA3AE` (bleu-gris) |
-| **Noyer** | bois sombre, bibliothèque | `#13110E` | `#1C1915` | `#ECE4D4` | `#A8875A` (ambre éteint) |
-| **Lin** (clair) | matinée, papier, galerie | `#F3EFE8` | `#FBF9F5` | `#2A2622` | `#8A6E45` (bronze) |
+Valeurs complètes, implémentées dans `web/src/lib/styles/tokens.css` (source de vérité) :
+
+| Token | Velours | Ardoise | Noyer | Lin (clair) |
+|---|---|---|---|---|
+| ambiance | rideau bordeaux | minéral, nordique | bois sombre, bibliothèque | matinée, papier |
+| `--bg` | `#140F10` | `#101214` | `#13110E` | `#F3EFE8` |
+| `--bg-sunken` | `#0D0A0B` | `#0A0C0D` | `#0C0B09` | `#E9E4DB` |
+| `--surface` | `#1D1617` | `#181B1E` | `#1C1915` | `#FBF9F5` |
+| `--surface-raised` | `#261D1E` | `#1F2327` | `#24201B` | `#FDFCF9` |
+| `--text` | `#EFE5DF` | `#E4E6E8` | `#ECE4D4` | `#2A2622` |
+| `--text-muted` | `#AD9E98` | `#9AA1A7` | `#A99F8D` | `#6B635A` |
+| `--text-faint` | `#76665F` | `#646B71` | `#716857` | `#8C8378` |
+| `--accent` | `#A8786A` | `#8FA3AE` | `#A8875A` | `#8A6E45` |
+| `--accent-ink` | `#BD8F80` | `#8FA3AE` | `#B39268` | `#755B35` |
+| `--accent-contrast` | `#1A0F0E` | `#0F1417` | `#17120B` | `#FBF9F5` |
+| `--danger` | `#B8695C` | `#B06E64` | `#B16A57` | `#A35A4C` |
+| `--success` | `#82937A` | `#7D9182` | `#839272` | `#5F7556` |
+
+Pour Salle obscure, `--accent-ink` = `--accent`. Contrastes vérifiés par `npm run check:contrast` (CI) : texte ≥ 4.5:1 sur toutes les surfaces, `accent-ink` ≥ 4.5:1 y compris sur `accent-soft`, `text-faint` ≥ 3:1.
+
+**Choix assumé** : en thème Lin, le hero garde un voile sombre et un texte clair (il reste un « écran » dans une page claire).
 
 Option utilisateur : **« Teinte ambiante »**. L'arrière-plan de la page de détail reprend la couleur dominante de l'affiche, **désaturée à ≤ 20 %** et assombrie : une ambiance, jamais un aplat vif.
 
@@ -162,4 +181,5 @@ Règles : 60–72 caractères maximum par ligne pour les synopsis. Pas de gras d
 - Tokens dans `web/src/lib/styles/tokens.css`, et thèmes via `[data-theme="velours"]` sur `<html>`.
 - Thème `system` : suit `prefers-color-scheme` (Salle obscure ↔ Lin).
 - Contrastes vérifiés automatiquement en CI (texte/fond ≥ 4.5:1, texte large ≥ 3:1).
+- Galerie vivante de tous les tokens et composants : route `/design`. Captures de référence dans `docs/screenshots/m1/`.
 - **Note de méthode** : le skill `frontend-design` n'est pas installé dans cette session. Les principes ci-dessus en reprennent l'esprit (direction affirmée, typographie distinctive, pas d'esthétique « IA générique »). Il sera utilisé pour les maquettes dès qu'il sera disponible.

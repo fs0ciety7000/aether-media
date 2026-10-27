@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr" data-theme="salle-obscure" data-grain="on">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#121010" />
+		<meta name="color-scheme" content="dark light" />
+		<title>Aether</title>
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<script>
+			// Apply the stored theme before first paint (no flash). Mirrors src/lib/theme.svelte.ts.
+			(function () {
+				var bg = { 'salle-obscure': '#121010', velours: '#140F10', ardoise: '#101214', noyer: '#13110E', lin: '#F3EFE8' };
+				var root = document.documentElement;
+				var theme = 'salle-obscure';
+				var grain = 'on';
+				try {
+					var t = localStorage.getItem('aether:theme');
+					if (t && (bg[t] || t === 'system')) theme = t;
+					if (localStorage.getItem('aether:grain') === 'off') grain = 'off';
+				} catch (e) {}
+				root.setAttribute('data-theme', theme);
+				root.setAttribute('data-grain', grain);
+				var resolved = theme === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'lin' : 'salle-obscure') : theme;
+				document.querySelector('meta[name="theme-color"]').setAttribute('content', bg[resolved]);
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
