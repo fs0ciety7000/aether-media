@@ -32,7 +32,7 @@ body {
 	font-family: var(--font-ui);
 	font-size: var(--fs-body);
 	line-height: var(--lh-body);
-	font-weight: 400;
+	font-weight: var(--fw-regular);
 	font-feature-settings: 'kern', 'liga';
 	overflow-x: hidden;
 	transition:
@@ -40,13 +40,7 @@ body {
 		color var(--dur-slow) var(--ease);
 }
 
-/* Constant ink for text set over imagery (hero, posters), whatever the theme. */
-:root {
-	--on-image: #efe8dc;
-	--on-image-muted: rgba(239, 232, 220, 0.78);
-}
-
-/* Film grain — SVG noise at 2–3 % over the background, under the content. */
+/* Optional film grain — SVG noise over the background, under the content (off by default). */
 body::before {
 	content: '';
 	position: fixed;
@@ -109,20 +103,20 @@ h1,
 h2,
 h3,
 h4 {
-	font-family: var(--font-display);
-	font-weight: 500;
+	font-weight: var(--fw-bold);
 	text-wrap: balance;
 }
 
 h1 {
 	font-size: var(--fs-h1);
 	line-height: var(--lh-h1);
-	letter-spacing: -0.01em;
+	letter-spacing: -0.015em;
 }
 
 h2 {
 	font-size: var(--fs-h2);
 	line-height: var(--lh-h2);
+	letter-spacing: -0.005em;
 }
 
 h3 {
@@ -169,20 +163,23 @@ ol[role='list'] {
 	font-size: var(--fs-micro);
 	line-height: var(--lh-micro);
 	letter-spacing: var(--ls-micro);
-	text-transform: uppercase;
-	font-weight: 500;
+	font-weight: var(--fw-medium);
 }
 
 .tabular {
 	font-variant-numeric: tabular-nums;
 }
 
-.serif {
-	font-family: var(--font-display);
+.page {
+	padding: var(--sp-3) var(--gutter) var(--sp-9);
 }
 
-.page {
-	padding: calc(var(--header-h) + var(--sp-6)) var(--gutter) var(--sp-9);
+/* Panel: raised surface with the soft corner tint of the active theme. */
+.panel {
+	position: relative;
+	background: var(--tint), var(--surface);
+	border-radius: var(--r-xl);
+	box-shadow: inset 0 0 0 1px var(--line);
 }
 
 /* Scrollbars: thin and quiet. */

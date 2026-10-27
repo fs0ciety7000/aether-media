@@ -1,28 +1,37 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import Avatar from '$lib/components/Avatar.svelte';
+	import Logo from '$lib/components/brand/Logo.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import CategoryTile from '$lib/components/CategoryTile.svelte';
 	import Chip from '$lib/components/Chip.svelte';
+	import ContinueTile from '$lib/components/ContinueTile.svelte';
 	import Icon, { ICON_NAMES } from '$lib/components/Icon.svelte';
+	import IconButton from '$lib/components/IconButton.svelte';
 	import Input from '$lib/components/Input.svelte';
 	import PosterCard from '$lib/components/PosterCard.svelte';
 	import SearchField from '$lib/components/SearchField.svelte';
+	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
+	import Tag from '$lib/components/Tag.svelte';
 	import ThumbCard from '$lib/components/ThumbCard.svelte';
+	import UserChip from '$lib/components/UserChip.svelte';
 	import BackdropArt from '$lib/demo/BackdropArt.svelte';
 	import PosterArt from '$lib/demo/PosterArt.svelte';
-	import { dominant, films } from '$lib/demo/data';
+	import { currentUser, dominant, films, genres } from '$lib/demo/data';
 	import { theme, THEMES } from '$lib/theme.svelte';
 	import { toasts } from '$lib/toast.svelte';
 
 	const colorTokens = [
 		['--bg', 'Fond de l’application'],
-		['--bg-sunken', 'Zones en retrait, champs'],
-		['--surface', 'Cartes, panneaux'],
-		['--surface-raised', 'Menus, modales'],
-		['--line', 'Séparateurs'],
+		['--bg-sunken', 'Zones en retrait'],
+		['--surface', 'Cartes, tuiles, champs'],
+		['--surface-raised', 'Menus, survols'],
+		['--surface-active', 'Navigation active'],
+		['--line', 'Séparateurs, contours'],
 		['--text', 'Texte principal'],
 		['--text-muted', 'Texte secondaire'],
-		['--text-faint', 'Légendes, placeholders'],
+		['--text-faint', 'Placeholders'],
 		['--accent', 'Action, progression, focus'],
 		['--accent-ink', 'Accent pour petit texte'],
 		['--accent-contrast', 'Texte sur l’accent'],
@@ -32,26 +41,34 @@
 	] as const;
 
 	const typeScale = [
-		{ token: '--fs-hero', spec: 'clamp(2.75 → 4.5rem) / 1.05', cls: 'hero', sample: 'Les Heures claires' },
-		{ token: '--fs-h1', spec: '2.25rem / 1.15', cls: 'h1', sample: 'Bibliothèque de films' },
-		{ token: '--fs-h2', spec: '1.5rem / 1.25', cls: 'h2', sample: 'Récemment ajoutés' },
-		{ token: '--fs-h3', spec: '1.125rem / 1.35', cls: 'h3', sample: 'Marée basse' },
-		{ token: '--fs-body', spec: '1rem / 1.6', cls: 'body', sample: 'Sur une île de la Manche, un gardien de phare à la retraite et une biologiste venue du continent attendent la plus grande marée du siècle.' },
-		{ token: '--fs-small', spec: '0.875rem / 1.5', cls: 'small', sample: 'Réalisé par Jonas Lefèvre · VOSTFR · 4K HDR' },
-		{ token: '--fs-micro', spec: '0.75rem / 1.4 · +0.06em · capitales', cls: 'micro', sample: 'Film · 2019 · 2 h 12' }
+		{ token: '--fs-hero', spec: '30 → 40 px / 112 % · ExtraBold', cls: 'hero', sample: 'Les Heures claires' },
+		{ token: '--fs-h1', spec: 'Heading · 40 px / 120 % · Bold', cls: 'h1', sample: 'Bibliothèque de films' },
+		{ token: '--fs-h2', spec: 'Title · 20 px / 135 % · Bold', cls: 'h2', sample: 'Reprendre la lecture' },
+		{ token: '--fs-h3', spec: '16 px / 140 % · Bold', cls: 'h3', sample: 'Marée basse' },
+		{ token: '--fs-body', spec: 'Body · 14 px / 150 %', cls: 'body', sample: 'Sur une île de la Manche, un gardien de phare à la retraite et une biologiste venue du continent attendent la plus grande marée du siècle.' },
+		{ token: '--fs-small', spec: '13 px / 145 %', cls: 'small', sample: 'Réalisé par Jonas Lefèvre · VOSTFR · 4K HDR' },
+		{ token: '--fs-micro', spec: '12 px / 135 % · SemiBold', cls: 'micro', sample: 'Film · 2019 · 2 h 12' }
 	];
 
-	const spacing = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-	const radii = ['sm', 'md', 'lg', 'full'];
+	const spacing = [1, 2, 3, 4, 5, 6, 7, 8];
+	const radii = [
+		['xs', '6 px', 'badges'],
+		['sm', '10 px', 'tuiles, nav'],
+		['md', '12 px', 'champs, icônes'],
+		['lg', '16 px', 'cartes'],
+		['xl', '20 px', 'panneaux, hero'],
+		['full', '∞', 'pilules']
+	];
 	const shadows = [1, 2, 3];
 	const motion = [
-		['--ease', 'cubic-bezier(.2, .7, .2, 1)', 'Sortie douce, jamais de rebond'],
-		['--dur-fast', '150 ms', 'Survols, focus'],
-		['--dur-base', '260 ms', 'Apparitions, menus'],
-		['--dur-slow', '480 ms', 'Hero, fondus d’images']
+		['--ease', 'cubic-bezier(.22, .8, .26, 1)', 'Sortie douce, jamais de rebond'],
+		['--dur-fast', '140 ms', 'Survols, focus'],
+		['--dur-base', '220 ms', 'Apparitions, menus'],
+		['--dur-slow', '420 ms', 'Hero, fondus d’images']
 	];
 	const states = ['Repos', 'Survol', 'Focus', 'Désactivé'] as const;
 	const demoAttr = (s: (typeof states)[number]) => (s === 'Survol' ? 'hover' : s === 'Focus' ? 'focus' : undefined);
+	const toolIcons = ['search', 'heart', 'home', 'genres', 'clock', 'download', 'layers', 'bell', 'monitor', 'settings', 'compass', 'play'] as const;
 
 	let values = $state<Record<string, string>>({});
 	$effect(() => {
@@ -62,7 +79,7 @@
 		});
 	});
 
-	let genres = $state([
+	let filters = $state([
 		{ label: 'Drame', selected: true, count: 48 },
 		{ label: 'Documentaire', selected: false, count: 21 },
 		{ label: 'Science-fiction', selected: true, count: 17 },
@@ -84,36 +101,48 @@
 </svelte:head>
 
 <div class="page design">
-	<header class="intro">
-		<p class="micro eyebrow">Aether · Système de design · v0.1</p>
-		<h1>Une salle de cinéma privée.</h1>
-		<p class="lede">
-			Velours, bois sombre, lumière tamisée. L’affiche est la star ; l’interface s’efface. Cette page rassemble les
-			fondations et les composants, rendus en direct dans le thème actif.
-		</p>
+	<header class="intro panel">
+		<div class="intro-copy">
+			<p class="eyebrow">Aether · Système de design · v0.2 « Nuit »</p>
+			<h1>Bleu nuit, sarcelle mate, formes douces.</h1>
+			<p class="lede">
+				Une seule famille arrondie (Nunito), des tuiles généreuses, des panneaux teintés au coin. L’affiche reste la
+				star ; l’accent est réservé à l’action et à la progression. Tout est rendu en direct dans le thème actif.
+			</p>
+		</div>
+		<div class="intro-mark" aria-hidden="true"><Logo size={88} wordmark={false} /></div>
 	</header>
 
 	<!-- Thèmes -->
 	<section class="block" aria-labelledby="s-themes">
 		<div class="heading">
-			<span class="num micro tabular">01</span>
+			<span class="num tabular">01</span>
 			<h2 id="s-themes">Thèmes</h2>
-			<p>Cinq ambiances sobres. Chaque aperçu est rendu avec ses propres tokens.</p>
+			<p>Nuit par défaut, cinq variantes. Chaque aperçu est rendu avec ses propres tokens. « Système » suit Nuit ↔ Lin.</p>
 		</div>
 		<div class="themes">
 			{#each THEMES as t (t.id)}
 				{@const active = theme.resolved === t.id}
 				<button type="button" class="theme-card" data-theme={t.id} class:active aria-pressed={active} onclick={() => theme.set(t.id)}>
-					<span class="theme-preview" aria-hidden="true">
-						<span class="tp-poster">
-							<PosterArt title={films[1].title} credit={films[1].director} hue={films[1].hue} layout="horizon" />
+					<span class="tp" aria-hidden="true">
+						<span class="tp-side">
+							<span class="tp-logo"><Logo size={14} wordmark={false} /></span>
+							<span class="tp-nav on"></span>
+							<span class="tp-nav"></span>
+							<span class="tp-nav"></span>
 						</span>
-						<span class="tp-text">
-							<span class="micro tp-meta">Film · 2021</span>
-							<span class="tp-title">Marée basse</span>
-							<span class="tp-muted">1 h 44 · VOSTFR</span>
-							<span class="tp-actions">
-								<span class="tp-btn">Lecture</span>
+						<span class="tp-main">
+							<span class="tp-hero">
+								<BackdropArt hue={films[1].hue} hue2={films[1].hue2} scene="aurora" focus={0.7} />
+								<span class="tp-hero-copy">
+									<span class="tp-title">Nord magnétique</span>
+									<span class="tp-btn"><Icon name="play" size={8} filled />Lecture</span>
+								</span>
+							</span>
+							<span class="tp-panel">
+								<span class="tp-line w60"></span>
+								<span class="tp-line w40 muted"></span>
+								<span class="tp-bar"><span></span></span>
 							</span>
 						</span>
 					</span>
@@ -122,7 +151,7 @@
 							<span class="theme-name">{t.label}</span>
 							<span class="theme-mood">{t.mood}</span>
 						</span>
-						<span class="theme-state micro" class:on={active}>
+						<span class="theme-state" class:on={active}>
 							{#if active}<Icon name="check" size={14} />Actif{:else}Choisir{/if}
 						</span>
 					</span>
@@ -138,9 +167,9 @@
 	<!-- Couleurs -->
 	<section class="block" aria-labelledby="s-colors">
 		<div class="heading">
-			<span class="num micro tabular">02</span>
+			<span class="num tabular">02</span>
 			<h2 id="s-colors">Couleurs</h2>
-			<p>Tokens sémantiques. Un thème ne redéfinit que ces variables.</p>
+			<p>Tokens sémantiques. Un thème ne redéfinit que ces variables, plus la teinte de coin des panneaux.</p>
 		</div>
 		<ul class="swatches" role="list">
 			{#each colorTokens as [token, role] (token)}
@@ -157,11 +186,11 @@
 	<!-- Typographie -->
 	<section class="block" aria-labelledby="s-type">
 		<div class="heading">
-			<span class="num micro tabular">03</span>
+			<span class="num tabular">03</span>
 			<h2 id="s-type">Typographie</h2>
-			<p>Cormorant Garamond pour l’affiche et le générique, Instrument Sans pour l’interface. Auto-hébergées.</p>
+			<p>Nunito partout, auto-hébergée (variable 200–1000). Heading 40, Title 20, Body 14 — et un titre d’affiche plus large.</p>
 		</div>
-		<div class="type-scale">
+		<div class="type-scale panel">
 			{#each typeScale as t (t.token)}
 				<div class="type-row">
 					<div class="type-meta">
@@ -171,25 +200,18 @@
 					<p class="specimen {t.cls}">{t.sample}</p>
 				</div>
 			{/each}
-			<div class="type-row">
-				<div class="type-meta">
-					<span class="sw-name">Italique serif</span>
-					<span class="sw-value">citations, taglines</span>
-				</div>
-				<p class="specimen tagline">« Ce que la mer rend, elle le reprend. »</p>
-			</div>
 		</div>
 	</section>
 
 	<!-- Espace, rayons, ombres -->
 	<section class="block" aria-labelledby="s-space">
 		<div class="heading">
-			<span class="num micro tabular">04</span>
+			<span class="num tabular">04</span>
 			<h2 id="s-space">Espace, formes, matière</h2>
-			<p>Base 4. Gouttières de 16, 32 puis 64 px. Ombres neutres, larges et diffuses.</p>
+			<p>Base 4. Gouttières 16 / 24 / 28 px, espacement entre cartes 12–16 px. Rayons généreux, ombres profondes et diffuses.</p>
 		</div>
 		<div class="foundations">
-			<div class="panel">
+			<div class="card panel">
 				<h3>Espacement</h3>
 				<ul class="spacing" role="list">
 					{#each spacing as n (n)}
@@ -200,17 +222,18 @@
 					{/each}
 				</ul>
 			</div>
-			<div class="panel">
+			<div class="card panel">
 				<h3>Rayons</h3>
 				<ul class="radii" role="list">
-					{#each radii as r (r)}
+					{#each radii as [r, px, use] (r)}
 						<li>
 							<span class="radius-box" style:border-radius="var(--r-{r})"></span>
 							<span class="sw-name">--r-{r}</span>
+							<span class="sw-role">{px} · {use}</span>
 						</li>
 					{/each}
 				</ul>
-				<h3 class="mt">Ombres</h3>
+				<h3 class="mt">Ombres et teinte de panneau</h3>
 				<ul class="shadows" role="list">
 					{#each shadows as s (s)}
 						<li>
@@ -218,6 +241,10 @@
 							<span class="sw-name">--shadow-{s}</span>
 						</li>
 					{/each}
+					<li>
+						<span class="shadow-box tinted"></span>
+						<span class="sw-name">--tint</span>
+					</li>
 				</ul>
 			</div>
 		</div>
@@ -226,9 +253,9 @@
 	<!-- Mouvement -->
 	<section class="block" aria-labelledby="s-motion">
 		<div class="heading">
-			<span class="num micro tabular">05</span>
+			<span class="num tabular">05</span>
 			<h2 id="s-motion">Mouvement</h2>
-			<p>Feutré : fondus et légères translations. Avec « réduire les animations », seuls les fondus restent.</p>
+			<p>Court et fluide : fondus et légères translations. Avec « réduire les animations », seuls les fondus restent.</p>
 		</div>
 		<div class="motion">
 			{#each motion as [token, value, use] (token)}
@@ -249,33 +276,50 @@
 		</div>
 	</section>
 
-	<!-- Icônes -->
+	<!-- Marque et icônes -->
 	<section class="block" aria-labelledby="s-icons">
 		<div class="heading">
-			<span class="num micro tabular">06</span>
-			<h2 id="s-icons">Icônes</h2>
-			<p>Trait de 1,5 px, coins arrondis, monochromes. Le plein est réservé aux états actifs.</p>
+			<span class="num tabular">06</span>
+			<h2 id="s-icons">Marque et icônes</h2>
+			<p>Monogramme « A » plié en deux facettes. Icônes au trait de 1,5 px ; en tuile carrée arrondie quand elles sont actionnables.</p>
+		</div>
+		<div class="foundations">
+			<div class="card panel brand">
+				<Logo size={56} />
+				<div class="brand-sizes">
+					<span class="app-icon lg"><Logo size={44} wordmark={false} /></span>
+					<span class="app-icon md"><Logo size={30} wordmark={false} /></span>
+					<span class="app-icon sm"><Logo size={18} wordmark={false} /></span>
+				</div>
+			</div>
+			<div class="card panel">
+				<h3>Tuiles d’icônes</h3>
+				<div class="tool-grid">
+					{#each toolIcons as name (name)}
+						<IconButton icon={name} size="lg" variant={name === 'home' ? 'accent' : 'surface'} filled={name === 'home'} aria-label={name} />
+					{/each}
+				</div>
+			</div>
 		</div>
 		<ul class="icons" role="list">
 			{#each ICON_NAMES as name (name)}
-				<li><Icon {name} size={24} /><span>{name}</span></li>
+				<li><Icon {name} size={22} /><span>{name}</span></li>
 			{/each}
-			<li><Icon name="heart" size={24} filled /><span>heart · actif</span></li>
 		</ul>
 	</section>
 
 	<!-- Boutons -->
 	<section class="block" aria-labelledby="s-buttons">
 		<div class="heading">
-			<span class="num micro tabular">07</span>
+			<span class="num tabular">07</span>
 			<h2 id="s-buttons">Boutons</h2>
-			<p>Une seule action primaire par vue. Hauteurs 40 et 48 px.</p>
+			<p>Pilules. Une seule action primaire par vue (sarcelle pleine, encre sombre). Hauteurs 40 et 46 px.</p>
 		</div>
-		<div class="matrix">
+		<div class="matrix panel">
 			<span></span>
-			{#each states as s (s)}<span class="micro col-head">{s}</span>{/each}
+			{#each states as s (s)}<span class="col-head">{s}</span>{/each}
 			{#each ['primary', 'secondary', 'tertiary'] as const as v (v)}
-				<span class="micro row-head">{v === 'primary' ? 'Primaire' : v === 'secondary' ? 'Secondaire' : 'Tertiaire'}</span>
+				<span class="row-head">{v === 'primary' ? 'Primaire' : v === 'secondary' ? 'Secondaire' : 'Tertiaire'}</span>
 				{#each states as s (s)}
 					<div>
 						<Button variant={v} icon={v === 'primary' ? 'play' : undefined} iconFilled data-demo={demoAttr(s)} disabled={s === 'Désactivé'}>
@@ -284,29 +328,35 @@
 					</div>
 				{/each}
 			{/each}
+			<span class="row-head">Icône</span>
+			{#each states as s (s)}
+				<div>
+					<IconButton icon="bell" aria-label="Notifications" data-demo={demoAttr(s)} disabled={s === 'Désactivé'} badge={s === 'Repos'} />
+				</div>
+			{/each}
 		</div>
 		<div class="row-inline">
 			<Button variant="primary" size="lg" icon="play" iconFilled>Lecture</Button>
 			<Button variant="secondary" size="lg" icon="plus">Ma liste</Button>
 			<Button variant="tertiary" size="lg">Bande-annonce</Button>
-			<Button variant="secondary" size="lg" round icon="heart" aria-label="Ajouter aux favoris" />
-			<Button variant="secondary" round icon="sliders" aria-label="Filtres" />
-			<Button variant="tertiary" round icon="x" aria-label="Fermer" />
+			<IconButton icon="heart" size="lg" aria-label="Ajouter aux favoris" />
+			<IconButton icon="sliders" aria-label="Filtres" />
+			<IconButton icon="x" variant="ghost" aria-label="Fermer" />
 		</div>
 	</section>
 
 	<!-- Chips et champs -->
 	<section class="block" aria-labelledby="s-inputs">
 		<div class="heading">
-			<span class="num micro tabular">08</span>
-			<h2 id="s-inputs">Filtres et champs</h2>
-			<p>Champs en retrait, sans bordure au repos ; une ligne d’accent au focus.</p>
+			<span class="num tabular">08</span>
+			<h2 id="s-inputs">Filtres, étiquettes et champs</h2>
+			<p>Champs sur surface, contour discret ; anneau sarcelle mat au focus.</p>
 		</div>
 		<div class="foundations">
-			<div class="panel">
-				<h3>Chips</h3>
+			<div class="card panel">
+				<h3>Chips de filtre</h3>
 				<div class="chips">
-					{#each genres as g (g.label)}
+					{#each filters as g (g.label)}
 						<Chip bind:selected={g.selected} count={g.count}>{g.label}</Chip>
 					{/each}
 				</div>
@@ -317,8 +367,18 @@
 					<Chip selected>Sélectionné</Chip>
 					<Chip disabled>Désactivé</Chip>
 				</div>
+				<h3 class="mt">Étiquettes</h3>
+				<div class="chips">
+					<Tag>4K HDR</Tag>
+					<Tag variant="accent">Nouveau</Tag>
+					<span class="tag-on-image">
+						<BackdropArt hue={286} hue2={236} scene="forest" />
+						<Tag variant="image">Animation</Tag>
+						<Tag variant="image" icon="trending">Tendance</Tag>
+					</span>
+				</div>
 			</div>
-			<div class="panel fields">
+			<div class="card panel fields">
 				<h3>Champs</h3>
 				<SearchField bind:value={search} size="lg" label="Rechercher dans la bibliothèque" />
 				<Input placeholder="Repos" aria-label="Exemple au repos" />
@@ -332,45 +392,68 @@
 	<!-- Cartes -->
 	<section class="block" aria-labelledby="s-cards">
 		<div class="heading">
-			<span class="num micro tabular">09</span>
-			<h2 id="s-cards">Cartes</h2>
-			<p>Affiche 2:3 et vignette 16:9. L’image apparaît en fondu depuis sa couleur dominante.</p>
+			<span class="num tabular">09</span>
+			<h2 id="s-cards">Cartes et tuiles</h2>
+			<p>Affiche 2:3, vignette 16:9, tuile « Reprendre » avec temps écoulé / durée, tuile de catégorie.</p>
 		</div>
+
+		<SectionHeader title="Titre de section" href="/design" />
+
 		{#key reveal}
 			<div class="posters">
 				{#each sample as f, i (f.id)}
-					<PosterCard
-						href="/design"
-						title={f.title}
-						year={f.year}
-						progress={i === 1 ? 0.62 : i === 3 ? 0.18 : undefined}
-						color={dominant(f.hue, f.sat)}
-						data-demo={i === 2 ? 'hover' : undefined}
-					>
+					<PosterCard href="/design" title={f.title} year={f.year} progress={i === 1 ? 0.62 : undefined} color={dominant(f.hue, f.hue2)} data-demo={i === 2 ? 'hover' : undefined}>
 						{#snippet art()}
-							<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} sat={f.sat} layout={f.layout} />
+							<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />
 						{/snippet}
 					</PosterCard>
 				{/each}
 				<div class="loading">
-					<Skeleton ratio="2 / 3" />
+					<Skeleton ratio="2 / 3" radius="lg" />
 					<Skeleton lines={2} width="70%" />
 				</div>
 			</div>
 		{/key}
+
+		<div class="continue-demo">
+			<div class="ct-featured">
+				<ContinueTile featured href="/design" title="Les Veilleurs" subtitle="S2 · É4 · Le Phare de Kéréon" elapsed="57:36" total="1:30:00" progress={0.64} color={dominant(278, 232)}>
+					{#snippet art()}<BackdropArt hue={278} hue2={232} scene="city" focus={0.55} />{/snippet}
+				</ContinueTile>
+			</div>
+			<ContinueTile href="/design" title="Archipel" elapsed="24:56" total="29:00" progress={0.86} color={dominant(196, 238)}>
+				{#snippet art()}<BackdropArt hue={196} hue2={238} scene="planet" focus={0.5} />{/snippet}
+			</ContinueTile>
+			<ContinueTile href="/design" title="Hautes Terres" elapsed="22:48" total="1:00:00" progress={0.38} color={dominant(120, 210)} data-demo="hover">
+				{#snippet art()}<BackdropArt hue={120} hue2={210} scene="forest" focus={0.5} />{/snippet}
+			</ContinueTile>
+		</div>
+
 		<div class="thumbs">
-			<ThumbCard href="/design" eyebrow="Les Veilleurs · S2 · É4" title="Le Phare de Kéréon" detail="Reste 34 min" progress={0.35} color={dominant(205)}>
-				{#snippet art()}<BackdropArt hue={205} scene="sea" />{/snippet}
+			<ThumbCard href="/design" eyebrow="Drame · 2021" title="Marée basse" detail="1 h 44" progress={0.35} color={dominant(188, 226)}>
+				{#snippet art()}<BackdropArt hue={188} hue2={226} scene="sea" />{/snippet}
 			</ThumbCard>
-			<ThumbCard href="/design" eyebrow="Hautes Terres · S1 · É7" title="Ce qui reste du feu" detail="Reste 15 min" progress={0.68} color={dominant(30)}>
-				{#snippet art()}<BackdropArt hue={30} scene="ridges" />{/snippet}
+			<ThumbCard href="/design" eyebrow="Science-fiction · 2023" title="Atlas" detail="2 h 36" color={dominant(198, 266)} data-demo="hover">
+				{#snippet art()}<BackdropArt hue={198} hue2={266} scene="planet" />{/snippet}
 			</ThumbCard>
 			<div class="loading">
-				<Skeleton ratio="16 / 9" />
+				<Skeleton ratio="16 / 9" radius="lg" />
 				<Skeleton lines={2} width="80%" />
 			</div>
 		</div>
+
+		<div class="cats">
+			{#each genres.slice(0, 4) as g, i (g.id)}
+				<CategoryTile label={g.label} href="/design" color={dominant(g.hue, g.hue2)} data-demo={i === 1 ? 'hover' : undefined}>
+					{#snippet art()}<BackdropArt hue={g.hue} hue2={g.hue2} scene={g.scene} focus={0.5} />{/snippet}
+				</CategoryTile>
+			{/each}
+		</div>
+
 		<div class="row-inline">
+			<UserChip name={currentUser.name} detail={currentUser.email} hue={currentUser.hue} href="/design" />
+			<Avatar name="Noé Martin" hue={28} size={40} />
+			<Avatar name="Inès Moreau" hue={300} size={32} />
 			<Button variant="tertiary" icon="image" onclick={() => reveal++}>Rejouer le fondu</Button>
 		</div>
 	</section>
@@ -378,14 +461,12 @@
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
-			<span class="num micro tabular">10</span>
+			<span class="num tabular">10</span>
 			<h2 id="s-toasts">Notifications</h2>
-			<p>En bas à droite, sur surface relevée, sans icône colorée.</p>
+			<p>En bas à droite (au-dessus de la barre d’onglets sur mobile), sur surface relevée.</p>
 		</div>
 		<div class="row-inline">
-			<Button variant="secondary" onclick={() => toasts.show('Bibliothèque « Films » analysée', { detail: '12 nouveaux titres' })}>
-				Notification simple
-			</Button>
+			<Button variant="secondary" onclick={() => toasts.show('Bibliothèque « Films » analysée', { detail: '12 nouveaux titres' })}>Notification simple</Button>
 			<Button
 				variant="secondary"
 				onclick={() =>
@@ -402,35 +483,49 @@
 <style>
 	.design {
 		display: grid;
-		gap: var(--sp-9);
+		gap: var(--sp-8);
 	}
 
 	.intro {
-		max-width: 760px;
-		padding-top: var(--sp-6);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--sp-6);
+		padding: var(--sp-7) var(--sp-7);
+	}
+
+	.intro-copy {
+		max-width: 720px;
+	}
+
+	.intro-mark {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 168px;
+		height: 168px;
+		border-radius: 36px;
+		background: var(--bg);
+		box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line);
 	}
 
 	.eyebrow {
 		color: var(--accent-ink);
-		margin-bottom: var(--sp-4);
-	}
-
-	.intro h1 {
-		font-size: var(--fs-hero);
-		line-height: var(--lh-hero);
-		letter-spacing: -0.015em;
+		font-size: var(--fs-small);
+		font-weight: var(--fw-bold);
+		margin-bottom: var(--sp-3);
 	}
 
 	.lede {
-		margin-top: var(--sp-5);
-		max-width: 60ch;
+		margin-top: var(--sp-4);
+		max-width: 62ch;
 		color: var(--text-muted);
-		font-size: 1.0625rem;
+		font-size: 1rem;
 	}
 
 	.block {
 		display: grid;
-		gap: var(--sp-6);
+		gap: var(--sp-5);
 		min-width: 0;
 	}
 
@@ -439,24 +534,32 @@
 		grid-template-columns: auto 1fr;
 		column-gap: var(--sp-4);
 		align-items: baseline;
-		padding-top: var(--sp-5);
-		border-top: 1px solid var(--line);
 	}
 
 	.heading h2 {
-		font-size: var(--fs-h1);
-		line-height: var(--lh-h1);
+		font-size: 1.75rem;
+		line-height: 1.25;
 	}
 
 	.heading p {
 		grid-column: 2;
 		color: var(--text-muted);
-		max-width: 62ch;
-		margin-top: var(--sp-2);
+		max-width: 70ch;
+		margin-top: var(--sp-1);
 	}
 
 	.num {
-		color: var(--text-muted);
+		display: inline-grid;
+		place-items: center;
+		min-width: 36px;
+		height: 28px;
+		padding: 0 8px;
+		border-radius: var(--r-full);
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+		font-size: var(--fs-micro);
+		font-weight: var(--fw-bold);
+		transform: translateY(-3px);
 	}
 
 	.row-inline {
@@ -468,7 +571,7 @@
 
 	.sw-name {
 		font-size: var(--fs-small);
-		font-weight: 500;
+		font-weight: var(--fw-bold);
 		color: var(--text);
 	}
 
@@ -479,42 +582,36 @@
 		color: var(--text-muted);
 	}
 
-	.panel {
+	.card {
 		min-width: 0;
-		padding: var(--sp-6);
-		background: var(--surface);
-		border-radius: var(--r-md);
-		box-shadow: var(--shadow-1);
+		padding: var(--sp-5);
 	}
 
-	.panel h3 {
-		font-family: var(--font-ui);
-		font-size: var(--fs-micro);
-		letter-spacing: var(--ls-micro);
-		text-transform: uppercase;
-		font-weight: 500;
-		color: var(--text-muted);
-		margin-bottom: var(--sp-5);
+	.card h3 {
+		font-size: var(--fs-h3);
+		color: var(--text);
+		margin-bottom: var(--sp-4);
 	}
 
-	.panel h3.mt {
-		margin-top: var(--sp-7);
+	.card h3.mt {
+		margin-top: var(--sp-6);
 	}
 
 	/* Themes */
 	.themes {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 184px), 1fr));
-		gap: var(--sp-4);
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 172px), 1fr));
+		gap: var(--gap);
 	}
 
 	.theme-card {
 		display: block;
 		width: 100%;
 		text-align: left;
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		overflow: hidden;
-		box-shadow: var(--shadow-2), 0 0 0 1px var(--line);
+		background: var(--surface);
+		box-shadow: var(--shadow-1), 0 0 0 1px var(--line);
 		transition:
 			box-shadow var(--dur-base) var(--ease),
 			transform var(--dur-base) var(--ease);
@@ -529,70 +626,131 @@
 	}
 
 	.theme-card.active {
-		box-shadow: var(--shadow-2), 0 0 0 1.5px var(--accent);
+		box-shadow: var(--shadow-2), 0 0 0 2px var(--accent);
 	}
 
-	.theme-preview {
+	.tp {
 		display: flex;
-		gap: var(--sp-3);
-		padding: var(--sp-4);
+		gap: 8px;
+		height: 128px;
+		padding: 10px;
 		background: var(--bg);
 	}
 
-	.tp-poster {
-		position: relative;
+	.tp-side {
+		display: grid;
+		align-content: start;
+		gap: 5px;
+		width: 44px;
 		flex: none;
-		width: 56px;
-		aspect-ratio: 2 / 3;
-		border-radius: var(--r-sm);
-		overflow: hidden;
-		box-shadow: var(--shadow-1);
 	}
 
-	.tp-text {
+	.tp-logo {
+		display: block;
+		height: 18px;
+		padding-left: 2px;
+	}
+
+	.tp-nav {
+		height: 10px;
+		border-radius: 3px;
+		background: var(--surface);
+	}
+
+	.tp-nav.on {
+		background: var(--surface-active);
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+
+	.tp-main {
+		flex: 1;
 		display: grid;
-		align-content: center;
-		gap: 2px;
+		grid-template-rows: 1fr auto;
+		gap: 6px;
 		min-width: 0;
 	}
 
-	.tp-meta {
-		color: var(--text-muted);
-		font-size: 0.625rem;
+	.tp-hero {
+		position: relative;
+		overflow: hidden;
+		border-radius: 8px;
+		isolation: isolate;
+	}
+
+	.tp-hero::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: var(--scrim-side);
+	}
+
+	.tp-hero-copy {
+		position: absolute;
+		left: 8px;
+		bottom: 7px;
+		z-index: 1;
+		display: grid;
+		justify-items: start;
+		gap: 4px;
 	}
 
 	.tp-title {
-		font-family: var(--font-display);
-		font-size: 1.1875rem;
-		line-height: 1.15;
-		color: var(--text);
-		white-space: nowrap;
-	}
-
-	.tp-muted {
-		font-size: var(--fs-micro);
-		color: var(--text-muted);
-	}
-
-	.tp-actions {
-		display: flex;
-		gap: 6px;
-		margin-top: var(--sp-3);
-	}
-
-	.tp-btn {
-		display: inline-grid;
-		place-items: center;
-		height: 24px;
-		padding: 0 10px;
-		border-radius: var(--r-sm);
 		font-size: 0.6875rem;
-		font-weight: 500;
+		font-weight: var(--fw-heavy);
+		color: var(--on-image);
 	}
 
 	.tp-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		height: 14px;
+		padding: 0 6px;
+		border-radius: var(--r-full);
 		background: var(--accent);
 		color: var(--accent-contrast);
+		font-size: 0.5rem;
+		font-weight: var(--fw-bold);
+	}
+
+	.tp-panel {
+		display: grid;
+		gap: 4px;
+		padding: 6px 8px;
+		border-radius: 6px;
+		background: var(--tint), var(--surface);
+	}
+
+	.tp-line {
+		height: 4px;
+		border-radius: 2px;
+		background: var(--text);
+	}
+
+	.tp-line.muted {
+		background: var(--text-muted);
+	}
+
+	.w60 {
+		width: 60%;
+	}
+
+	.w40 {
+		width: 40%;
+	}
+
+	.tp-bar {
+		height: 3px;
+		border-radius: 2px;
+		background: var(--line-strong);
+	}
+
+	.tp-bar span {
+		display: block;
+		width: 58%;
+		height: 100%;
+		border-radius: inherit;
+		background: var(--accent);
 	}
 
 	.theme-foot {
@@ -600,9 +758,8 @@
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: var(--sp-3);
-		padding: var(--sp-3) var(--sp-4) var(--sp-4);
-		background: var(--surface);
-		border-top: 1px solid var(--line);
+		padding: var(--sp-3) var(--sp-4) 14px;
+		color: var(--text);
 	}
 
 	.theme-name,
@@ -610,23 +767,10 @@
 		display: block;
 	}
 
-	.theme-state {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		flex: none;
-		color: var(--text-muted);
-	}
-
-	.theme-state.on {
-		color: var(--accent-ink);
-	}
-
 	.theme-name {
-		font-family: var(--font-display);
 		font-size: var(--fs-h3);
-		font-weight: 500;
-		line-height: 1.2;
+		font-weight: var(--fw-bold);
+		line-height: 1.3;
 	}
 
 	.theme-mood {
@@ -634,11 +778,25 @@
 		color: var(--text-muted);
 	}
 
+	.theme-state {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		flex: none;
+		font-size: var(--fs-micro);
+		font-weight: var(--fw-bold);
+		color: var(--text-muted);
+	}
+
+	.theme-state.on {
+		color: var(--accent-ink);
+	}
+
 	/* Colours */
 	.swatches {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
-		gap: var(--sp-5) var(--sp-4);
+		gap: var(--sp-5) var(--gap);
 	}
 
 	.swatch {
@@ -649,23 +807,28 @@
 
 	.chip-color {
 		height: 72px;
-		margin-bottom: var(--sp-3);
+		margin-bottom: var(--sp-2);
 		border-radius: var(--r-md);
-		box-shadow: inset 0 0 0 1px var(--line), var(--shadow-1);
+		box-shadow: inset 0 0 0 1px var(--line-strong);
 	}
 
 	/* Type */
 	.type-scale {
 		display: grid;
+		padding: var(--sp-2) var(--sp-5);
 	}
 
 	.type-row {
 		display: grid;
-		grid-template-columns: 220px minmax(0, 1fr);
+		grid-template-columns: 240px minmax(0, 1fr);
 		gap: var(--sp-5);
 		align-items: baseline;
-		padding: var(--sp-5) 0;
+		padding: var(--sp-4) 0;
 		border-bottom: 1px solid var(--line);
+	}
+
+	.type-row:last-child {
+		border-bottom: 0;
 	}
 
 	.type-meta {
@@ -679,37 +842,33 @@
 	}
 
 	.specimen.hero {
-		font-family: var(--font-display);
 		font-size: var(--fs-hero);
 		line-height: var(--lh-hero);
-		font-weight: 500;
-		letter-spacing: -0.015em;
-	}
-
-	.specimen.h1,
-	.specimen.h2,
-	.specimen.h3 {
-		font-family: var(--font-display);
-		font-weight: 500;
+		font-weight: var(--fw-heavy);
+		letter-spacing: -0.02em;
 	}
 
 	.specimen.h1 {
 		font-size: var(--fs-h1);
 		line-height: var(--lh-h1);
+		font-weight: var(--fw-bold);
+		letter-spacing: -0.015em;
 	}
 
 	.specimen.h2 {
 		font-size: var(--fs-h2);
 		line-height: var(--lh-h2);
+		font-weight: var(--fw-bold);
 	}
 
 	.specimen.h3 {
 		font-size: var(--fs-h3);
 		line-height: var(--lh-h3);
+		font-weight: var(--fw-bold);
 	}
 
 	.specimen.body {
-		max-width: 66ch;
+		max-width: 70ch;
 	}
 
 	.specimen.small {
@@ -719,21 +878,17 @@
 	}
 
 	.specimen.micro {
+		font-size: var(--fs-micro);
+		line-height: var(--lh-micro);
+		font-weight: var(--fw-medium);
 		color: var(--text-muted);
-	}
-
-	.specimen.tagline {
-		font-family: var(--font-display);
-		font-style: italic;
-		font-size: 1.5rem;
-		line-height: 1.3;
 	}
 
 	/* Foundations */
 	.foundations {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-		gap: var(--sp-5);
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+		gap: var(--gap);
 	}
 
 	.spacing {
@@ -750,48 +905,54 @@
 
 	.bar {
 		height: 8px;
-		border-radius: 2px;
+		border-radius: var(--r-full);
 		background: var(--accent);
-		opacity: 0.8;
 	}
 
 	.radii,
 	.shadows {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--sp-6);
+		gap: var(--sp-5);
 	}
 
 	.radii li,
 	.shadows li {
 		display: grid;
 		justify-items: start;
-		gap: var(--sp-3);
+		gap: 4px;
 	}
 
 	.radius-box {
 		width: 64px;
 		height: 64px;
-		background: var(--surface-raised);
+		margin-bottom: 4px;
+		background: var(--surface-active);
 		box-shadow: inset 0 0 0 1px var(--line);
 	}
 
 	.shadow-box {
 		width: 88px;
 		height: 64px;
-		border-radius: var(--r-md);
+		margin-bottom: 4px;
+		border-radius: var(--r-lg);
 		background: var(--surface-raised);
+	}
+
+	.shadow-box.tinted {
+		background: var(--tint), var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line);
 	}
 
 	/* Motion */
 	.motion {
 		display: grid;
-		gap: var(--sp-3);
+		gap: var(--sp-2);
 	}
 
 	.motion-row {
 		display: grid;
-		grid-template-columns: 120px 180px minmax(0, 1fr) minmax(0, 1.2fr);
+		grid-template-columns: 120px 200px minmax(0, 1fr) minmax(0, 1.2fr);
 		align-items: center;
 		gap: var(--sp-4);
 		padding: var(--sp-3) 0;
@@ -800,16 +961,17 @@
 
 	.track {
 		position: relative;
-		height: 2px;
-		background: var(--line);
+		height: 3px;
+		border-radius: var(--r-full);
+		background: var(--line-strong);
 	}
 
 	.puck {
 		position: absolute;
 		top: -5px;
 		left: 0;
-		width: 12px;
-		height: 12px;
+		width: 13px;
+		height: 13px;
 		border-radius: 50%;
 		background: var(--accent);
 		transition-property: left;
@@ -817,23 +979,73 @@
 	}
 
 	.puck.played {
-		left: calc(100% - 12px);
+		left: calc(100% - 13px);
 	}
 
-	/* Icons */
+	/* Brand & icons */
+	.brand {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--sp-5);
+	}
+
+	.brand :global(.word) {
+		font-size: 2.5rem;
+	}
+
+	.brand-sizes {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--sp-3);
+	}
+
+	.app-icon {
+		display: grid;
+		place-items: center;
+		background: var(--bg);
+		box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line-strong);
+	}
+
+	.app-icon.lg {
+		width: 88px;
+		height: 88px;
+		border-radius: 22px;
+	}
+
+	.app-icon.md {
+		width: 60px;
+		height: 60px;
+		border-radius: 16px;
+	}
+
+	.app-icon.sm {
+		width: 38px;
+		height: 38px;
+		border-radius: 10px;
+	}
+
+	.tool-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
 	.icons {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-		gap: var(--sp-2);
+		grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+		gap: 8px;
 	}
 
 	.icons li {
 		display: grid;
 		justify-items: center;
-		gap: var(--sp-3);
-		padding: var(--sp-5) var(--sp-2) var(--sp-4);
+		gap: var(--sp-2);
+		padding: var(--sp-4) var(--sp-2) var(--sp-3);
 		border-radius: var(--r-md);
 		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line);
 		color: var(--text);
 	}
 
@@ -846,15 +1058,17 @@
 	/* Buttons */
 	.matrix {
 		display: grid;
-		grid-template-columns: 120px repeat(4, minmax(0, max-content));
+		grid-template-columns: 110px repeat(4, minmax(0, max-content));
 		gap: var(--sp-4) var(--sp-6);
 		align-items: center;
 		overflow-x: auto;
-		padding: var(--sp-1);
+		padding: var(--sp-5);
 	}
 
 	.col-head,
 	.row-head {
+		font-size: var(--fs-micro);
+		font-weight: var(--fw-bold);
 		color: var(--text-muted);
 	}
 
@@ -862,13 +1076,28 @@
 	.chips {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: var(--sp-2);
 	}
 
 	.states-row {
-		margin-top: var(--sp-6);
-		padding-top: var(--sp-5);
+		margin-top: var(--sp-4);
+		padding-top: var(--sp-4);
 		border-top: 1px solid var(--line);
+	}
+
+	.tag-on-image {
+		position: relative;
+		display: inline-flex;
+		gap: 6px;
+		padding: 10px;
+		border-radius: var(--r-sm);
+		overflow: hidden;
+		isolation: isolate;
+	}
+
+	.tag-on-image :global(.art) {
+		z-index: -1;
 	}
 
 	.fields {
@@ -878,20 +1107,34 @@
 	}
 
 	.fields h3 {
-		margin-bottom: var(--sp-1);
+		margin-bottom: 0;
 	}
 
 	/* Cards */
 	.posters {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(46%, 150px), 1fr));
-		gap: var(--sp-6) var(--sp-5);
+		gap: var(--sp-5) var(--gap);
+	}
+
+	.continue-demo {
+		display: grid;
+		grid-template-columns: 1.4fr 1fr 1fr;
+		grid-auto-rows: 200px;
+		gap: var(--gap);
 	}
 
 	.thumbs {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-		gap: var(--sp-6) var(--sp-5);
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+		gap: var(--sp-5) var(--gap);
+	}
+
+	.cats {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(46%, 170px), 1fr));
+		grid-auto-rows: 84px;
+		gap: 10px;
 	}
 
 	.loading {
@@ -902,11 +1145,29 @@
 
 	@media (max-width: 767px) {
 		.design {
-			gap: var(--sp-8);
+			gap: var(--sp-7);
+		}
+
+		.intro {
+			flex-direction: column-reverse;
+			align-items: flex-start;
+			padding: var(--sp-5);
+		}
+
+		.intro-mark {
+			width: 96px;
+			height: 96px;
+			border-radius: 24px;
+		}
+
+		.intro-mark :global(svg) {
+			width: 52px;
+			height: 52px;
 		}
 
 		.heading {
 			grid-template-columns: 1fr;
+			justify-items: start;
 		}
 
 		.heading p {
@@ -927,12 +1188,18 @@
 			row-gap: var(--sp-2);
 		}
 
-		.panel {
-			padding: var(--sp-5);
+		.matrix {
+			grid-template-columns: 90px repeat(4, max-content);
 		}
 
-		.matrix {
-			grid-template-columns: 96px repeat(4, max-content);
+		.continue-demo {
+			grid-template-columns: 1fr 1fr;
+			grid-auto-rows: 132px;
+		}
+
+		.ct-featured {
+			grid-column: 1 / -1;
+			grid-row: span 2;
 		}
 	}
 </style>

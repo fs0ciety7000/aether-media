@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { account, home, isActive, libraries, search, type NavItem } from '$lib/nav';
+	import { discover, isActive, library, settings, type NavItem } from '$lib/nav';
+	import Logo from '../brand/Logo.svelte';
 	import Icon from '../Icon.svelte';
 
 	interface Props {
@@ -22,7 +23,7 @@
 			aria-current={active ? 'page' : undefined}
 			title={collapsed ? item.label : undefined}
 		>
-			<Icon name={item.icon} />
+			<Icon name={item.icon} size={18} filled={active && item.icon === 'home'} />
 			<span class="label">{item.label}</span>
 		</a>
 	</li>
@@ -30,47 +31,40 @@
 
 <aside class="sidebar" class:collapsed aria-label="Navigation principale">
 	<a class="brand" href="/" aria-label="Aether — accueil">
-		<span class="mark" aria-hidden="true">A</span>
-		<span class="word" aria-hidden="true">ether</span>
+		<Logo size={30} wordmark={!collapsed} />
 	</a>
 
-	<nav>
+	<nav aria-label="Rubriques">
 		<ul role="list">
-			{@render link(home)}
+			{#each discover as item (item.href)}{@render link(item)}{/each}
 		</ul>
 
-		<p class="section micro">Bibliothèques</p>
-		<ul role="list">
-			{#each libraries as item (item.href)}{@render link(item)}{/each}
-		</ul>
-
-		<hr />
-		<ul role="list">
-			{@render link(search)}
+		<ul role="list" class="group" aria-label="Bibliothèque">
+			{#each library as item (item.href)}{@render link(item)}{/each}
 		</ul>
 	</nav>
 
 	<div class="bottom">
 		<ul role="list">
-			{#each account as item (item.href)}{@render link(item)}{/each}
+			{@render link(settings)}
 		</ul>
 
-		<button
-			class="link collapse"
-			type="button"
-			aria-expanded={!collapsed}
-			aria-label={collapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
-			title={collapsed ? 'Déplier' : undefined}
-			onclick={ontoggle}
-		>
-			<Icon name="panel" />
-			<span class="label">Replier</span>
-		</button>
-
-		<p class="foot micro">
-			<a href="/design">Système de design</a>
-			{#if version}<span class="tabular">v{version}</span>{/if}
-		</p>
+		<div class="foot">
+			<p class="meta">
+				<a href="/design">Système de design</a>
+				{#if version}<span class="tabular">Aether v{version}</span>{/if}
+			</p>
+			<button
+				class="collapse"
+				type="button"
+				aria-expanded={!collapsed}
+				aria-label={collapsed ? 'Déplier la barre latérale' : 'Replier la barre latérale'}
+				title={collapsed ? 'Déplier' : 'Replier'}
+				onclick={ontoggle}
+			>
+				<Icon name="panel" size={18} />
+			</button>
+		</div>
 	</div>
 </aside>
 
@@ -82,153 +76,159 @@
 		flex-direction: column;
 		height: 100vh;
 		height: 100dvh;
-		padding: 0 var(--sp-4) var(--sp-5);
-		border-right: 1px solid var(--line);
-		background: var(--bg);
+		padding: 0 var(--sp-4) var(--sp-4);
 		overflow: hidden auto;
 		scrollbar-width: none;
 	}
 
 	.brand {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		height: var(--header-h);
 		flex: none;
-		padding: 0 14px;
-		margin-bottom: var(--sp-4);
-		font-family: var(--font-display);
-		font-size: 1.875rem;
-		font-weight: 500;
-		letter-spacing: 0.01em;
-		line-height: var(--header-h);
-		color: var(--text);
-		border-radius: var(--r-md);
-	}
-
-	.mark {
-		color: var(--accent);
-		font-weight: 600;
-	}
-
-	.word,
-	.label,
-	.section,
-	.foot {
-		transition: opacity var(--dur-base) var(--ease);
-		white-space: nowrap;
+		padding: 0 6px;
+		margin-bottom: var(--sp-1);
+		border-radius: var(--r-sm);
 	}
 
 	ul {
 		display: grid;
-		gap: 2px;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--sp-2);
 	}
 
-	.section {
-		padding: var(--sp-6) 14px var(--sp-3);
-		color: var(--text-muted);
-	}
-
-	hr {
-		border: 0;
-		height: 1px;
-		background: var(--line);
-		margin: var(--sp-5) 14px;
+	.group {
+		margin-top: var(--sp-6);
 	}
 
 	.link {
-		position: relative;
 		display: flex;
 		align-items: center;
-		gap: 14px;
+		gap: var(--sp-3);
 		width: 100%;
-		height: 44px;
-		padding: 0 14px;
-		border-radius: var(--r-md);
-		color: var(--text-muted);
-		font-size: 0.9375rem;
-		font-weight: 500;
-		text-align: left;
+		height: 40px;
+		padding: 0 var(--sp-3);
+		border-radius: var(--r-sm);
+		background: color-mix(in srgb, var(--surface) 72%, transparent);
+		color: color-mix(in srgb, var(--text) 82%, var(--bg));
+		font-size: var(--fs-body);
+		font-weight: var(--fw-medium);
+		white-space: nowrap;
 		transition:
 			color var(--dur-fast) var(--ease),
 			background-color var(--dur-fast) var(--ease);
 	}
 
+	.link :global(svg) {
+		color: var(--text-muted);
+		transition: color var(--dur-fast) var(--ease);
+	}
+
 	.link:hover {
 		color: var(--text);
-		background: color-mix(in srgb, var(--text) 5%, transparent);
+		background: var(--surface-raised);
+	}
+
+	.link:hover :global(svg) {
+		color: var(--text);
 	}
 
 	.link.active {
 		color: var(--text);
-		background: color-mix(in srgb, var(--text) 6%, transparent);
-	}
-
-	.link.active::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 13px;
-		bottom: 13px;
-		width: 2px;
-		border-radius: 1px;
-		background: var(--accent);
+		background: var(--surface-active);
+		font-weight: var(--fw-bold);
 	}
 
 	.link.active :global(svg) {
 		color: var(--accent);
 	}
 
+	.label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		transition: opacity var(--dur-base) var(--ease);
+	}
+
 	.bottom {
 		margin-top: auto;
 		padding-top: var(--sp-6);
 		display: grid;
-		gap: 2px;
-	}
-
-	.collapse {
-		color: var(--text-muted);
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--sp-3);
 	}
 
 	.foot {
 		display: flex;
+		align-items: center;
 		justify-content: space-between;
 		gap: var(--sp-2);
-		padding: var(--sp-4) 14px 0;
-		margin-top: var(--sp-3);
-		border-top: 1px solid var(--line);
-		color: var(--text-muted);
-		letter-spacing: 0.04em;
-		text-transform: none;
-		font-weight: 400;
+		padding: var(--sp-2) 0 0 var(--sp-1);
 	}
 
-	.foot a:hover {
+	.meta {
+		display: grid;
+		min-width: 0;
+		font-size: var(--fs-micro);
+		line-height: var(--lh-micro);
+		color: var(--text-muted);
+		white-space: nowrap;
+		transition: opacity var(--dur-base) var(--ease);
+	}
+
+	.meta a {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		border-radius: var(--r-xs);
+	}
+
+	.meta a:hover {
 		color: var(--text);
 	}
 
-	/* Collapsed: icons only. */
+	.collapse {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 36px;
+		height: 36px;
+		border-radius: var(--r-sm);
+		color: var(--text-muted);
+		transition:
+			color var(--dur-fast) var(--ease),
+			background-color var(--dur-fast) var(--ease);
+	}
+
+	.collapse:hover {
+		color: var(--text);
+		background: var(--surface-raised);
+	}
+
+	/* Collapsed: icon tiles only. */
 	.collapsed {
-		padding-inline: var(--sp-3);
-	}
-
-	.collapsed .word,
-	.collapsed .label,
-	.collapsed .foot {
-		opacity: 0;
-		pointer-events: none;
-	}
-
-	.collapsed .section {
-		opacity: 0;
-		height: var(--sp-5);
-		padding: 0;
+		padding-inline: 14px;
 	}
 
 	.collapsed .brand {
-		padding: 0 17px;
+		padding: 0 5px;
 	}
 
 	.collapsed .link {
 		padding: 0 14px;
+	}
+
+	.collapsed .label,
+	.collapsed .meta {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.collapsed .meta {
+		display: none;
+	}
+
+	.collapsed .foot {
+		justify-content: center;
+		padding-left: 0;
 	}
 </style>

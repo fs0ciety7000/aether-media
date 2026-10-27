@@ -2,13 +2,16 @@
 	export interface HeroItem {
 		id: string;
 		title: string;
-		/** Micro-caps line, e.g. "Film · 2019 · 2 h 12". */
-		meta: string;
-		tagline?: string;
+		/** Genre tags shown as small chips at the top-left. */
+		tags?: string[];
+		/** Badge at the top-right, e.g. "Tendance". */
+		badge?: string;
+		/** Optional metadata line under the title, e.g. "2019 · 2 h 12". */
+		meta?: string;
 		synopsis?: string;
 		/** Backdrop image; otherwise the `backdrop` snippet or the dominant colour. */
 		src?: string;
-		/** Title logo image (replaces the serif title when present). */
+		/** Title logo image (replaces the text title when present). */
 		logo?: string;
 		color?: string;
 		href?: string;
@@ -17,9 +20,9 @@
 
 <script lang="ts" generics="T extends HeroItem">
 	import type { Snippet } from 'svelte';
-	import { shell } from '$lib/shell.svelte';
 	import Button from './Button.svelte';
 	import Icon from './Icon.svelte';
+	import Tag from './Tag.svelte';
 
 	interface Props {
 		items: T[];
@@ -29,9 +32,10 @@
 		onplay?: (item: T) => void;
 		secondaryLabel?: string;
 		onsecondary?: (item: T) => void;
+		class?: string;
 	}
 
-	let { items, backdrop, interval = 8000, onplay, secondaryLabel = 'Plus d’infos', onsecondary }: Props = $props();
+	let { items, backdrop, interval = 9000, onplay, secondaryLabel = 'Plus d’infos', onsecondary, class: className }: Props = $props();
 
 	let index = $state(0);
 	let progress = $state(0);
@@ -41,12 +45,6 @@
 
 	const paused = $derived(userPaused || hovering || focusWithin || items.length < 2);
 	const current = $derived(items[index]);
-
-	// The header switches to on-image ink while it floats over the hero.
-	$effect(() => {
-		shell.overImage = true;
-		return () => (shell.overImage = false);
-	});
 
 	// Time-based rotation; pausing freezes progress exactly where it is.
 	$effect(() => {
@@ -68,7 +66,7 @@
 </script>
 
 <section
-	class="hero"
+	class={['hero', className]}
 	aria-roledescription="carrousel"
 	aria-label="À l’affiche"
 	onmouseenter={() => (hovering = true)}
@@ -89,65 +87,75 @@
 		<div class="scrim" aria-hidden="true"></div>
 	</div>
 
-	<div class="content">
-		{#key current.id}
-			<div class="copy" aria-live={paused ? 'polite' : 'off'}>
-				<p class="meta micro">{current.meta}</p>
-				{#if current.logo}
-					<h1 class="logo"><img src={current.logo} alt={current.title} /></h1>
-				{:else}
-					<h1 class="title">{current.title}</h1>
-				{/if}
-				{#if current.tagline}<p class="tagline">{current.tagline}</p>{/if}
-				{#if current.synopsis}<p class="synopsis">{current.synopsis}</p>{/if}
-			</div>
-		{/key}
+	{#key current.id}
+		<div class="top">
+			{#if current.tags?.length}
+				<ul class="tags" role="list" aria-label="Genres">
+					{#each current.tags.slice(0, 2) as tag (tag)}<li><Tag variant="image">{tag}</Tag></li>{/each}
+				</ul>
+			{/if}
+			{#if current.badge}<span class="badge"><Tag variant="image" icon="trending">{current.badge}</Tag></span>{/if}
+		</div>
 
+		<div class="copy" aria-live={paused ? 'polite' : 'off'}>
+			{#if current.logo}
+				<h2 class="logo"><img src={current.logo} alt={current.title} /></h2>
+			{:else}
+				<h2 class="title">{current.title}</h2>
+			{/if}
+			{#if current.meta}<p class="meta">{current.meta}</p>{/if}
+			{#if current.synopsis}<p class="synopsis">{current.synopsis}</p>{/if}
+		</div>
+	{/key}
+
+	<div class="bottom">
 		<div class="actions">
 			<Button variant="primary" size="lg" icon="play" iconFilled onclick={() => onplay?.(current)}>Lecture</Button>
 			<Button variant="secondary" size="lg" href={current.href} onclick={() => onsecondary?.(current)}>{secondaryLabel}</Button>
 		</div>
-	</div>
 
-	{#if items.length > 1}
-		<div class="controls">
-			<div class="dots">
-				{#each items as item, i (item.id)}
-					<button
-						type="button"
-						class="dot"
-						class:active={i === index}
-						aria-label="Afficher {item.title}"
-						aria-current={i === index ? 'true' : undefined}
-						onclick={() => go(i)}
-					>
-						<span style:transform={i === index ? `scaleX(${progress})` : undefined}></span>
-					</button>
-				{/each}
+		{#if items.length > 1}
+			<div class="controls">
+				<div class="dots">
+					{#each items as item, i (item.id)}
+						<button
+							type="button"
+							class="dot"
+							class:active={i === index}
+							aria-label="Afficher {item.title}"
+							aria-current={i === index ? 'true' : undefined}
+							onclick={() => go(i)}
+						>
+							<span style:transform={i === index ? `scaleX(${progress})` : undefined}></span>
+						</button>
+					{/each}
+				</div>
+				<button
+					type="button"
+					class="pause"
+					aria-label={userPaused ? 'Reprendre la rotation' : 'Mettre la rotation en pause'}
+					aria-pressed={userPaused}
+					onclick={() => (userPaused = !userPaused)}
+				>
+					<Icon name={userPaused ? 'play' : 'pause'} size={13} filled={userPaused} />
+				</button>
 			</div>
-			<button
-				type="button"
-				class="pause"
-				aria-label={userPaused ? 'Reprendre la rotation' : 'Mettre la rotation en pause'}
-				aria-pressed={userPaused}
-				onclick={() => (userPaused = !userPaused)}
-			>
-				<Icon name={userPaused ? 'play' : 'pause'} size={14} />
-			</button>
-		</div>
-	{/if}
+		{/if}
+	</div>
 </section>
 
 <style>
 	.hero {
 		position: relative;
-		height: clamp(540px, 84vh, 880px);
-		height: clamp(540px, 84svh, 880px);
 		display: flex;
 		flex-direction: column;
-		justify-content: flex-end;
+		min-height: 360px;
+		padding: var(--sp-5) 28px 28px;
+		border-radius: var(--r-xl);
 		isolation: isolate;
 		overflow: hidden;
+		background: var(--bg-sunken);
+		box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line);
 		/* Ink is constant over imagery, whatever the theme. */
 		--text: var(--on-image);
 		--text-muted: var(--on-image-muted);
@@ -158,14 +166,13 @@
 		position: absolute;
 		inset: 0;
 		z-index: -1;
-		background: var(--bg-sunken);
 	}
 
 	.slide {
 		position: absolute;
 		inset: 0;
 		opacity: 0;
-		transition: opacity calc(var(--dur-slow) * 2.5) var(--ease);
+		transition: opacity calc(var(--dur-slow) * 2) var(--ease);
 	}
 
 	.slide.active {
@@ -183,44 +190,60 @@
 		.slide {
 			transform: scale(1.04);
 			transition:
-				opacity calc(var(--dur-slow) * 2.5) var(--ease),
-				transform 0s linear calc(var(--dur-slow) * 2.5);
+				opacity calc(var(--dur-slow) * 2) var(--ease),
+				transform 0s linear calc(var(--dur-slow) * 2);
 		}
 		.slide.active {
 			transform: scale(1);
 			transition:
-				opacity calc(var(--dur-slow) * 2.5) var(--ease),
-				transform 12s linear;
+				opacity calc(var(--dur-slow) * 2) var(--ease),
+				transform 14s linear;
 		}
 	}
 
 	.scrim {
 		position: absolute;
 		inset: 0;
-		background: var(--scrim), var(--scrim-side);
+		background: var(--scrim-side), linear-gradient(to top, rgba(2, 10, 16, 0.55), transparent 45%);
 	}
 
-	.scrim::before {
-		content: '';
-		position: absolute;
-		inset: 0 0 auto;
-		height: 160px;
-		background: linear-gradient(to bottom, rgba(12, 11, 10, 0.45), transparent);
+	.top {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--sp-3);
+		animation: fade var(--dur-slow) var(--ease) both;
 	}
 
-	.content {
-		padding: 0 var(--gutter) var(--sp-8);
-		max-width: calc(680px + 2 * var(--gutter));
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		list-style: none;
+		padding: 0;
+	}
+
+	.badge {
+		margin-left: auto;
 	}
 
 	.copy {
+		max-width: min(440px, 62%);
+		margin-top: auto;
+		padding-top: var(--sp-6);
 		animation: rise var(--dur-slow) var(--ease) both;
 	}
 
 	@keyframes rise {
 		from {
 			opacity: 0;
-			transform: translateY(8px);
+			transform: translateY(6px);
+		}
+	}
+
+	@keyframes fade {
+		from {
+			opacity: 0;
 		}
 	}
 
@@ -232,37 +255,37 @@
 		}
 	}
 
-	.meta {
-		color: var(--on-image-muted);
-		margin-bottom: var(--sp-4);
-	}
-
 	.title {
 		font-size: var(--fs-hero);
 		line-height: var(--lh-hero);
-		font-weight: 500;
-		letter-spacing: -0.015em;
+		font-weight: var(--fw-heavy);
+		letter-spacing: -0.02em;
 		color: var(--on-image);
+		text-shadow: 0 2px 18px rgba(0, 0, 0, 0.25);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
 
 	.logo img {
-		max-height: 140px;
-		max-width: min(100%, 460px);
+		max-height: 120px;
+		max-width: min(100%, 420px);
 	}
 
-	.tagline {
-		margin-top: var(--sp-3);
-		font-family: var(--font-display);
-		font-style: italic;
-		font-size: 1.375rem;
-		line-height: 1.35;
-		color: var(--on-image);
-		opacity: 0.88;
+	.meta {
+		margin-top: var(--sp-2);
+		font-size: var(--fs-small);
+		font-weight: var(--fw-medium);
+		color: var(--on-image-muted);
 	}
 
 	.synopsis {
-		margin-top: var(--sp-4);
-		max-width: 54ch;
+		margin-top: var(--sp-3);
+		max-width: 46ch;
+		font-size: var(--fs-body);
+		line-height: var(--lh-body);
 		color: var(--on-image-muted);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
@@ -271,41 +294,45 @@
 		overflow: hidden;
 	}
 
+	.bottom {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: var(--sp-4);
+		margin-top: var(--sp-5);
+	}
+
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--sp-3);
-		margin-top: var(--sp-6);
 	}
 
-	/* Secondary action over imagery: matte, dark, no blur. */
+	/* Secondary action over imagery: dark matte pill, no blur. */
 	.actions :global(.btn.secondary) {
-		background: rgba(18, 16, 16, 0.52);
+		background: rgba(4, 14, 22, 0.6);
 		color: var(--on-image);
-		box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.16);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 	}
 
 	.actions :global(.btn.secondary:hover) {
-		background: rgba(18, 16, 16, 0.7);
+		background: rgba(4, 14, 22, 0.78);
 	}
 
 	.controls {
-		position: absolute;
-		right: var(--gutter);
-		bottom: var(--sp-8);
 		display: flex;
 		align-items: center;
-		gap: var(--sp-4);
+		gap: var(--sp-2);
 	}
 
 	.dots {
 		display: flex;
-		gap: var(--sp-2);
+		gap: 2px;
 	}
 
 	.dot {
 		position: relative;
-		width: 28px;
+		width: 26px;
 		height: 24px;
 	}
 
@@ -313,15 +340,15 @@
 	.dot span {
 		content: '';
 		position: absolute;
-		left: 0;
-		right: 0;
-		top: 11px;
-		height: 2px;
-		border-radius: 1px;
+		left: 3px;
+		right: 3px;
+		top: 10.5px;
+		height: 3px;
+		border-radius: var(--r-full);
 	}
 
 	.dot::before {
-		background: rgba(239, 232, 220, 0.28);
+		background: rgba(255, 255, 255, 0.28);
 	}
 
 	.dot span {
@@ -330,15 +357,15 @@
 		transform-origin: left;
 	}
 
-
 	.pause {
 		display: grid;
 		place-items: center;
-		width: 32px;
-		height: 32px;
-		border-radius: var(--r-full);
+		width: 30px;
+		height: 30px;
+		border-radius: var(--r-sm);
+		background: rgba(4, 14, 22, 0.5);
 		color: var(--on-image-muted);
-		box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.22);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 		transition: color var(--dur-fast) var(--ease);
 	}
 
@@ -348,13 +375,26 @@
 
 	@media (max-width: 767px) {
 		.hero {
-			height: auto;
-			min-height: min(78svh, 680px);
+			min-height: 400px;
+			padding: var(--sp-4) var(--sp-4) var(--sp-4);
+			border-radius: var(--r-lg);
 		}
 
-		.content {
-			padding-bottom: var(--sp-7);
-			padding-top: calc(var(--header-h) + 30svh);
+		.scrim {
+			background: var(--scrim);
+		}
+
+		.copy {
+			max-width: none;
+		}
+
+		.title {
+			font-size: 1.75rem;
+		}
+
+		.slide :global(svg) {
+			/* Portrait crop: keep the key light in frame. */
+			transform: translateX(-4%) scale(1.3);
 		}
 
 		.synopsis {
@@ -362,8 +402,9 @@
 			line-clamp: 2;
 		}
 
-		.tagline {
-			font-size: 1.125rem;
+		.bottom {
+			flex-direction: column;
+			align-items: stretch;
 		}
 
 		.actions :global(.btn) {
@@ -371,10 +412,7 @@
 		}
 
 		.controls {
-			position: static;
-			padding: 0 var(--gutter) var(--sp-5);
-			justify-content: space-between;
-			margin-top: calc(-1 * var(--sp-4));
+			justify-content: center;
 		}
 	}
 </style>

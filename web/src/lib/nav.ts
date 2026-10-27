@@ -8,22 +8,28 @@ export interface NavItem {
 
 export const home: NavItem = { href: '/', label: 'Accueil', icon: 'home' };
 
-export const libraries: NavItem[] = [
-	{ href: '/films', label: 'Films', icon: 'film' },
-	{ href: '/series', label: 'Séries', icon: 'tv' },
-	{ href: '/musique', label: 'Musique', icon: 'music' },
-	{ href: '/collections', label: 'Collections', icon: 'collection' }
+/** Sidebar, first group: discovery. */
+export const discover: NavItem[] = [
+	home,
+	{ href: '/explorer', label: 'Explorer', icon: 'compass' },
+	{ href: '/favoris', label: 'Favoris', icon: 'heart' },
+	{ href: '/genres', label: 'Genres', icon: 'genres' }
 ];
 
+/** Sidebar, second group: the user's library. */
+export const library: NavItem[] = [
+	{ href: '/collection', label: 'Ma collection', icon: 'layers' },
+	{ href: '/recents', label: 'Récemment ajoutés', icon: 'monitor' },
+	{ href: '/reprendre', label: 'Reprendre', icon: 'clock' },
+	{ href: '/collections', label: 'Collections', icon: 'folder' }
+];
+
+export const settings: NavItem = { href: '/reglages', label: 'Réglages', icon: 'settings' };
 export const search: NavItem = { href: '/recherche', label: 'Recherche', icon: 'search' };
-
-export const account: NavItem[] = [
-	{ href: '/reglages', label: 'Réglages', icon: 'settings' },
-	{ href: '/profil', label: 'Profil', icon: 'user' }
-];
+export const profile: NavItem = { href: '/profil', label: 'Profil', icon: 'user' };
 
 /** Mobile tab bar: five destinations at most. */
-export const tabs: NavItem[] = [home, libraries[0], libraries[1], libraries[2], search];
+export const tabs: NavItem[] = [home, discover[1], search, discover[2], profile];
 
 export function isActive(pathname: string, href: string) {
 	return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');

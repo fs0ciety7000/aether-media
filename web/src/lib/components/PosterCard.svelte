@@ -38,7 +38,7 @@
 	.poster-card {
 		display: block;
 		width: 100%;
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		color: var(--text-muted);
 	}
 
@@ -48,9 +48,10 @@
 
 	.frame {
 		position: relative;
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		overflow: hidden;
-		box-shadow: var(--shadow-1);
+		box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+		isolation: isolate;
 		transition:
 			box-shadow var(--dur-base) var(--ease),
 			transform var(--dur-base) var(--ease);
@@ -59,31 +60,27 @@
 	a.poster-card:hover .frame,
 	.poster-card[data-demo='hover'] .frame {
 		box-shadow: var(--shadow-2);
-		transform: scale(1.02);
+		transform: translateY(-3px);
 	}
 
 	.meta {
 		display: grid;
 		gap: 1px;
-		padding: var(--sp-3) 2px 0;
-		font-size: var(--fs-small);
+		padding: 10px 4px 0;
+		font-size: var(--fs-body);
 		line-height: var(--lh-small);
 	}
 
 	.title {
-		font-weight: 500;
+		font-weight: var(--fw-bold);
+		color: var(--text);
 		overflow: hidden;
 		white-space: nowrap;
 		text-overflow: ellipsis;
 		transition: color var(--dur-fast) var(--ease);
 	}
 
-	a.poster-card:hover .title {
-		color: var(--text);
-	}
-
 	.year {
 		font-size: var(--fs-micro);
-		letter-spacing: 0.02em;
 	}
 </style>

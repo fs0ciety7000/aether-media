@@ -22,12 +22,19 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 
 ## M1 — Design system & shell ✅
 - [x] T-020 `tokens.css` + 5 thèmes + sélecteur de thème
-- [x] T-021 Polices auto-hébergées (Cormorant Garamond, Instrument Sans)
+- [x] T-021 Polices auto-hébergées (remplacées par Nunito en M1b)
 - [x] T-022 Composants : Button, Card (poster/thumb), Row, Hero, Input, Chip, Skeleton, Toast
 - [x] T-023 App shell (sidebar / barre basse, header au scroll)
 - [x] T-024 Page `/design` (galerie de composants) + test de contraste en CI
 - [ ] T-025 Images réelles dans le Hero : `object-position` mobile, logos de titre
 - [ ] T-026 Flèches des rangées accessibles au clavier
+
+## M1b — Refonte UI (référence Nexify) ✅
+- [x] T-027 Thème « Nuit » par défaut (bleu nuit + teal adouci), 5 thèmes alternatifs adaptés
+- [x] T-028 Nunito partout (Cormorant Garamond et Instrument Sans retirés)
+- [x] T-029 Shell dashboard : sidebar en tuiles, top bar (recherche, notifications, utilisateur), tab bar mobile
+- [x] T-02A Accueil : hero en carte, panneau Catégories, mosaïque « Reprendre », rangées
+- [ ] T-02B Validation visuelle M1b par le PO
 
 ## M2 — Scan & indexation
 - [ ] T-030 `naming` : films (titre, année, edition, ids *arr)

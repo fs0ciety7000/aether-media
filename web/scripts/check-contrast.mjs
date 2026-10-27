@@ -13,10 +13,15 @@ const PAIRS = [
 	['--text', '--bg', 4.5, 'texte courant'],
 	['--text', '--surface', 4.5, 'texte sur carte'],
 	['--text', '--surface-raised', 4.5, 'texte sur menu'],
+	['--text', '--surface-active', 4.5, 'navigation active'],
 	['--text-muted', '--bg', 4.5, 'métadonnées'],
 	['--text-muted', '--surface', 4.5, 'métadonnées sur carte'],
+	['--text-muted', '--surface-raised', 4.5, 'métadonnées sur menu'],
+	['--text-muted', '--surface-active', 4.5, 'métadonnées sur tuile active'],
 	['--accent-contrast', '--accent', 4.5, 'bouton primaire'],
 	['--accent', '--bg', 3, 'focus, progression (non-texte)'],
+	['--accent', '--surface', 3, 'icône / focus sur carte (non-texte)'],
+	['--accent', '--surface-active', 3, 'icône de navigation active (non-texte)'],
 	['--text-faint', '--bg', 3, 'grand texte / placeholder'],
 	['--accent-ink', '--accent-soft@--surface', 4.5, 'chip sélectionnée'],
 	['--accent-ink', '--bg', 4.5, 'lien accentué']
@@ -29,7 +34,7 @@ for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
 	for (const part of selector.split(',').map((s) => s.trim())) {
 		const m = part.match(/data-theme=['"]([\w-]+)['"]/);
 		if (m && m[1] !== 'system') names.push(m[1]);
-		else if (part === ':root' && /--bg\s*:/.test(body)) names.push('salle-obscure');
+		else if (part === ':root' && /--bg\s*:/.test(body)) names.push('nuit');
 	}
 	if (!names.length) continue;
 	const vars = {};
@@ -79,7 +84,7 @@ function ratio(a, b) {
 	return (l1 + 0.05) / (l2 + 0.05);
 }
 
-const expected = ['salle-obscure', 'velours', 'ardoise', 'noyer', 'lin'];
+const expected = ['nuit', 'salle-obscure', 'velours', 'ardoise', 'noyer', 'lin'];
 let failures = 0;
 
 for (const name of expected) {

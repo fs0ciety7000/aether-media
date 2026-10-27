@@ -8,7 +8,7 @@
 
 	const options: { id: ThemePref; label: string; swatch: string[] }[] = [
 		...THEMES.map((t) => ({ id: t.id as ThemePref, label: t.label, swatch: [t.swatch.bg, t.swatch.surface, t.swatch.accent] })),
-		{ id: 'system', label: 'Système', swatch: ['#121010', '#F3EFE8', '#B89A6A'] }
+		{ id: 'system', label: 'Système (Nuit ↔ Lin)', swatch: ['#04121D', '#F3EFE8', '#5EC4C0'] }
 	];
 
 	function onWindowPointer(e: PointerEvent) {
@@ -71,17 +71,21 @@
 		place-items: center;
 		width: 40px;
 		height: 40px;
-		border-radius: var(--r-full);
+		border-radius: var(--r-md);
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line);
 		color: var(--text-muted);
 		transition:
 			color var(--dur-fast) var(--ease),
-			background-color var(--dur-fast) var(--ease);
+			background-color var(--dur-fast) var(--ease),
+			box-shadow var(--dur-fast) var(--ease);
 	}
 
 	.trigger:hover,
 	.trigger[aria-expanded='true'] {
 		color: var(--text);
-		background: color-mix(in srgb, var(--text) 8%, transparent);
+		background: var(--surface-raised);
+		box-shadow: inset 0 0 0 1px var(--line-strong);
 	}
 
 	.panel {
@@ -89,10 +93,10 @@
 		right: 0;
 		top: calc(100% + var(--sp-2));
 		z-index: 40;
-		width: 248px;
+		width: 264px;
 		padding: var(--sp-2);
-		background: var(--surface-raised);
-		border-radius: var(--r-md);
+		background: var(--tint), var(--surface-raised);
+		border-radius: var(--r-lg);
 		box-shadow: var(--shadow-3), inset 0 0 0 1px var(--line);
 		color: var(--text);
 		animation: appear var(--dur-base) var(--ease);
@@ -124,7 +128,7 @@
 		height: 40px;
 		padding: 0 var(--sp-3);
 		border-radius: var(--r-sm);
-		font-size: var(--fs-small);
+		font-size: var(--fs-body);
 		color: var(--text-muted);
 		cursor: pointer;
 		transition:
@@ -156,7 +160,7 @@
 		display: flex;
 		width: 30px;
 		height: 18px;
-		border-radius: 3px;
+		border-radius: var(--r-xs);
 		overflow: hidden;
 		box-shadow: 0 0 0 1px var(--line);
 	}
@@ -191,7 +195,7 @@
 		margin-top: var(--sp-2);
 		padding: var(--sp-3) var(--sp-3) var(--sp-2);
 		border-top: 1px solid var(--line);
-		font-size: var(--fs-small);
+		font-size: var(--fs-body);
 		color: var(--text-muted);
 		cursor: pointer;
 	}

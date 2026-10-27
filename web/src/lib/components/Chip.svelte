@@ -32,13 +32,13 @@
 	.chip {
 		display: inline-flex;
 		align-items: center;
-		height: 32px;
-		padding: 0 var(--sp-3);
-		border-radius: var(--r-sm);
+		height: 34px;
+		padding: 0 14px;
+		border-radius: var(--r-full);
 		background: var(--surface);
 		color: var(--text-muted);
-		font-size: var(--fs-small);
-		font-weight: 500;
+		font-size: var(--fs-body);
+		font-weight: var(--fw-medium);
 		white-space: nowrap;
 		box-shadow: inset 0 0 0 1px var(--line);
 		transition:
@@ -50,7 +50,7 @@
 	.chip:hover:not(:disabled),
 	.chip[data-demo='hover'] {
 		color: var(--text);
-		background: color-mix(in srgb, var(--surface) 92%, var(--text));
+		background: var(--surface-raised);
 	}
 
 	.check {

@@ -1,7 +1,5 @@
 <script lang="ts">
-	import '@fontsource-variable/cormorant-garamond/wght.css';
-	import '@fontsource-variable/cormorant-garamond/wght-italic.css';
-	import '@fontsource-variable/instrument-sans/wght.css';
+	import '@fontsource-variable/nunito/wght.css';
 	import '$lib/styles/tokens.css';
 	import '$lib/styles/base.css';
 
@@ -70,7 +68,7 @@
 
 <style>
 	.shell {
-		--sidebar-w: 240px;
+		--sidebar-w: 248px;
 		display: grid;
 		grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
 		min-height: 100vh;
@@ -81,8 +79,16 @@
 		--sidebar-w: 76px;
 	}
 
+	.side {
+		box-shadow: inset -1px 0 0 var(--line);
+	}
+
 	.main {
 		min-width: 0;
+	}
+
+	main {
+		display: block;
 	}
 
 	main:focus {
@@ -102,8 +108,8 @@
 		border-radius: var(--r-md);
 		background: var(--accent);
 		color: var(--accent-contrast);
-		font-size: var(--fs-small);
-		font-weight: 500;
+		font-size: var(--fs-body);
+		font-weight: var(--fw-bold);
 		transform: translateY(-200%);
 	}
 
@@ -122,6 +128,7 @@
 
 		.main {
 			padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+			overflow-x: clip;
 		}
 
 		.tabs {

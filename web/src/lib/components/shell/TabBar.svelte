@@ -10,7 +10,7 @@
 			{@const active = isActive(page.url.pathname, item.href)}
 			<li>
 				<a href={item.href} class:active aria-current={active ? 'page' : undefined}>
-					<Icon name={item.icon} size={22} />
+					<Icon name={item.icon} size={21} filled={active && item.icon === 'home'} />
 					<span>{item.label}</span>
 				</a>
 			</li>
@@ -25,52 +25,46 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		padding-bottom: env(safe-area-inset-bottom, 0px);
+		padding: 0 var(--sp-2) env(safe-area-inset-bottom, 0px);
 		background: var(--surface);
-		box-shadow: 0 -1px 0 var(--line), 0 -8px 24px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 -1px 0 var(--line), 0 -12px 28px rgba(0, 0, 0, 0.22);
 	}
 
 	ul {
 		display: grid;
 		grid-template-columns: repeat(5, 1fr);
 		height: var(--tabbar-h);
+		align-items: center;
 	}
 
 	a {
-		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 4px;
-		height: 100%;
+		gap: 3px;
+		height: 54px;
+		margin: 0 3px;
+		border-radius: var(--r-md);
 		color: var(--text-muted);
 		font-size: 0.6875rem;
-		font-weight: 500;
-		letter-spacing: 0.02em;
-		transition: color var(--dur-fast) var(--ease);
+		font-weight: var(--fw-medium);
+		transition:
+			color var(--dur-fast) var(--ease),
+			background-color var(--dur-fast) var(--ease);
 	}
 
 	a:focus-visible {
-		outline-offset: -4px;
+		outline-offset: -2px;
 	}
 
 	a.active {
 		color: var(--text);
+		background: var(--surface-active);
+		font-weight: var(--fw-bold);
 	}
 
 	a.active :global(svg) {
 		color: var(--accent);
-	}
-
-	a.active::before {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: calc(50% - 10px);
-		width: 20px;
-		height: 2px;
-		border-radius: 0 0 1px 1px;
-		background: var(--accent);
 	}
 </style>

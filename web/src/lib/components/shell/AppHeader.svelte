@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { shell } from '$lib/shell.svelte';
-	import Icon from '../Icon.svelte';
+	import { currentUser } from '$lib/demo/data';
+	import { toasts } from '$lib/toast.svelte';
+	import Logo from '../brand/Logo.svelte';
+	import IconButton from '../IconButton.svelte';
 	import SearchField from '../SearchField.svelte';
 	import ThemeSwitcher from '../ThemeSwitcher.svelte';
+	import UserChip from '../UserChip.svelte';
 
 	let scrolled = $state(false);
 	let query = $state('');
 
-	const onImage = $derived(shell.overImage && !scrolled);
-
 	function onScroll() {
-		scrolled = window.scrollY > 12;
+		scrolled = window.scrollY > 8;
 	}
 
 	function submit(e: SubmitEvent) {
@@ -25,16 +26,23 @@
 
 <svelte:window onscroll={onScroll} />
 
-<header class="header" class:scrolled class:on-image={onImage}>
-	<a class="brand" href="/" aria-label="Aether — accueil"><span class="mark">A</span>ether</a>
+<header class="header" class:scrolled>
+	<a class="brand" href="/" aria-label="Aether — accueil"><Logo size={26} /></a>
 
 	<form class="search" role="search" onsubmit={submit}>
-		<SearchField bind:value={query} shortcut />
+		<SearchField bind:value={query} size="lg" shortcut placeholder="Rechercher un film, un réalisateur, un acteur…" />
 	</form>
 
 	<div class="end">
-		<a class="icon-link search-link" href="/recherche" aria-label="Rechercher"><Icon name="search" /></a>
 		<ThemeSwitcher />
+		<IconButton
+			icon="bell"
+			badge
+			aria-label="Notifications (2 nouvelles)"
+			onclick={() => toasts.show('2 nouveaux titres', { detail: 'La bibliothèque « Films » a été analysée.' })}
+		/>
+		<span class="user-full"><UserChip name={currentUser.name} detail={currentUser.email} hue={currentUser.hue} /></span>
+		<span class="user-compact"><UserChip name={currentUser.name} hue={currentUser.hue} compact /></span>
 	</div>
 </header>
 
@@ -47,99 +55,68 @@
 		align-items: center;
 		gap: var(--sp-4);
 		height: var(--header-h);
-		margin-bottom: calc(-1 * var(--header-h));
 		padding: 0 var(--gutter);
-		background: transparent;
-		transition:
-			background-color var(--dur-base) var(--ease),
-			box-shadow var(--dur-base) var(--ease);
+		background: var(--bg);
+		transition: box-shadow var(--dur-base) var(--ease);
 	}
 
 	.header.scrolled {
-		background: var(--surface);
-		box-shadow: 0 1px 0 var(--line), var(--shadow-1);
+		box-shadow: 0 1px 0 var(--line), 0 10px 24px -14px rgba(0, 0, 0, 0.45);
 	}
 
 	.brand {
 		display: none;
-		font-family: var(--font-display);
-		font-size: 1.625rem;
-		font-weight: 500;
-		letter-spacing: 0.01em;
-		color: var(--text);
 		border-radius: var(--r-sm);
 	}
 
-	.mark {
-		color: var(--accent);
-		font-weight: 600;
+	.search {
+		flex: 0 1 520px;
+		min-width: 0;
 	}
 
-	.search {
-		width: min(380px, 100%);
+	.search :global(.control) {
+		border-radius: var(--r-md);
 	}
 
 	.end {
 		display: flex;
 		align-items: center;
-		gap: var(--sp-1);
+		gap: var(--sp-2);
 		margin-left: auto;
 	}
 
-	.icon-link {
+	.user-full {
+		margin-left: var(--sp-2);
+		min-width: 0;
+		max-width: 260px;
+	}
+
+	.user-compact {
 		display: none;
-		place-items: center;
-		width: 40px;
-		height: 40px;
-		border-radius: var(--r-full);
-		color: var(--text-muted);
 	}
 
-	/* Over a full-bleed image: constant light ink, matte dark field. */
-	.on-image .brand {
-		color: var(--on-image);
-	}
+	@media (max-width: 1023px) {
+		.user-full {
+			display: none;
+		}
 
-	.on-image :global(.switcher .trigger),
-	.on-image .icon-link {
-		color: var(--on-image-muted);
-	}
-
-	.on-image :global(.switcher .trigger:hover) {
-		color: var(--on-image);
-		background: rgba(239, 232, 220, 0.1);
-	}
-
-	.on-image .search :global(.control) {
-		background: rgba(12, 11, 10, 0.42);
-		color: var(--on-image-muted);
-		box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.1);
-	}
-
-	.on-image .search :global(input) {
-		color: var(--on-image);
-	}
-
-	.on-image .search :global(input::placeholder) {
-		color: rgba(239, 232, 220, 0.6);
-	}
-
-	.on-image .search :global(kbd) {
-		color: var(--on-image-muted);
-		box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.18);
+		.user-compact {
+			display: block;
+			margin-left: var(--sp-1);
+		}
 	}
 
 	@media (max-width: 767px) {
+		.header {
+			height: 64px;
+		}
+
 		.brand {
 			display: block;
 		}
 
 		.search {
 			display: none;
-		}
-
-		.icon-link {
-			display: grid;
 		}
 	}
 </style>

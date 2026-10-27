@@ -1,185 +1,133 @@
-# Aether — Design System (v0.2)
+# Aether — Design System (v0.3)
 
-> **Intention** : une salle de cinéma privée. Velours, bois sombre, lumière tamisée, silence avant la séance.
-> **Luxe discret** : mat, ombres douces, beaucoup d'espace. L'affiche est la star ; l'interface s'efface.
+> **Intention** : un tableau de bord de streaming moderne, bleu nuit, net et généreux. Les visuels sont la star ; l'interface les encadre par des panneaux calmes.
+> **Référence validée par le PO** : le projet Behance « Nexify – Movie Streaming Platform UI Design ». On reprend sa structure et son ambiance, avec un accent **teal adouci** (pas de cyan néon).
+> v0.1–0.2 (« salle de cinéma privée », serif + laiton) sont abandonnées comme direction par défaut. Leurs palettes survivent sous forme de thèmes alternatifs.
 
 ---
 
 ## 1. Principes
 
-1. **Le contenu d'abord.** Les affiches, fonds et photos apportent la couleur. L'UI reste neutre, chaude, mate.
-2. **Retenue.** Aucun néon, aucun dégradé saturé, aucune lueur (glow), aucun glassmorphism criard. Une seule couleur d'accent, désaturée, utilisée avec parcimonie.
-3. **Espace généreux.** Grandes marges, rythme vertical lent. On n'entasse pas : on ne montre que ce qui sert.
-4. **Profondeur douce.** Hiérarchie portée par la valeur (clair/foncé) et des ombres diffuses, pas par des bordures dures.
-5. **Mouvement feutré.** Transitions lentes et courtes (fondus, légères translations). Jamais de rebond ni d'effet élastique.
-6. **Typographie éditoriale.** Un serif élégant pour les titres (l'affiche, le générique), un sans-serif sobre pour l'interface.
-7. **Accessible par défaut.** Contraste AA minimum, focus visible (et beau), navigation clavier et télécommande (10-foot UI plus tard).
+1. **Le contenu d'abord.** Les affiches, fonds et vignettes apportent la couleur ; l'UI est bleu nuit, neutre et mate.
+2. **Tableau de bord, pas vitrine.** L'accueil est une grille dense mais aérée : hero en carte, catégories, mosaïque « Reprendre », rangées.
+3. **Panneaux et tuiles.** Tout est posé sur des surfaces arrondies, avec une légère teinte teal au coin supérieur gauche (`--tint`). Pas de bordures dures.
+4. **Un seul accent, adouci.** Le teal sert à l'action principale, à la progression, à l'état actif et au focus. Jamais de lueur ni de bordure lumineuse.
+5. **Une seule famille typographique.** Nunito, arrondie et lisible, partout.
+6. **Mouvement court et fluide.** Fondus et légères translations, aucun rebond.
+7. **Accessible par défaut.** Contraste AA vérifié en CI, focus visible, navigation clavier.
 
 ### À proscrire
-Néons, cyan, magenta, violets électriques · bordures lumineuses · ombres colorées · noir pur `#000` en fond d'interface · blanc pur `#fff` en texte courant · emojis dans l'UI · badges multicolores · animations « fun ».
+Cyan ou magenta saturés · glow et bordures lumineuses · ombres colorées · noir pur `#000` en fond d'interface · emojis dans l'UI · badges multicolores.
 
 ---
 
 ## 2. Couleurs — tokens
 
-Les tokens sont **sémantiques**. Un thème ne redéfinit que ces variables.
+Les tokens sont **sémantiques** ; un thème ne redéfinit que ces variables. Source de vérité : `web/src/lib/styles/tokens.css`.
 
-| Token | Rôle |
-|---|---|
-| `--bg` | fond de l'application |
-| `--bg-sunken` | zones en retrait (lecteur, barres) |
-| `--surface` | cartes, panneaux |
-| `--surface-raised` | menus, modales, popovers |
-| `--line` | séparateurs très discrets |
-| `--text` | texte principal |
-| `--text-muted` | texte secondaire, métadonnées |
-| `--text-faint` | légendes, placeholders |
-| `--accent` | action principale, progression, focus |
-| `--accent-contrast` | texte sur l'accent |
-| `--danger` / `--success` | états (désaturés) |
-| `--accent-ink` | accent pour le **petit texte** (chips sélectionnées, liens) : variante plus contrastée de l'accent |
-| `--accent-soft` | fond teinté accent (chips sélectionnées, survols) |
-| `--scrim` / `--scrim-side` | voiles bas et latéral sur les images (lisibilité du texte) |
-| `--on-image` / `--on-image-muted` | texte posé sur une image : clair, identique dans tous les thèmes |
-| `--grain-opacity` | intensité du grain pellicule, par thème |
+### Thème par défaut — « Nuit »
+| Token | Valeur | Rôle |
+|---|---|---|
+| `--bg` | `#04121D` | fond de l'application |
+| `--bg-sunken` | `#030D16` | zones en retrait, champs |
+| `--surface` | `#071725` | panneaux, tuiles de navigation |
+| `--surface-raised` | `#0A1F2F` | menus, popovers |
+| `--surface-active` | `#0D2F3D` | élément actif (tuile de nav, sélection) |
+| `--line` / `--line-strong` | `rgba(246,255,255,.06)` / `.12` | séparateurs |
+| `--text` | `#F6FFFF` | texte principal |
+| `--text-muted` | `#8A9FA7` | secondaire (la référence `#778E97` échouait l'AA sur `surface-active`) |
+| `--text-faint` | `#5B7480` | légendes, placeholders |
+| `--accent` | `#5EC4C0` | teal adouci : action, progression, focus |
+| `--accent-ink` | `#6FCDC9` | accent pour petit texte |
+| `--accent-contrast` | `#04121D` | texte sur l'accent (9:1) |
+| `--accent-soft` | `rgba(94,196,192,.13)` | fonds teintés |
+| `--danger` / `--success` | `#E48A7A` / `#7CC79F` | états |
+| `--on-image` | `#F6FFFF` | texte posé sur une image |
+| `--tint` | radial teal 15 % → 0 au coin haut-gauche | matière des panneaux |
 
-### Thème par défaut — « Salle obscure » (sombre, chaud)
-```css
---bg:             #121010;  /* charbon chaud, pas noir pur */
---bg-sunken:      #0C0B0A;
---surface:        #1A1716;
---surface-raised: #221E1C;
---line:           rgba(237, 230, 218, 0.07);
---text:           #EDE6DA;  /* ivoire */
---text-muted:     #A89F92;
---text-faint:     #6E665C;
---accent:         #B89A6A;  /* laiton patiné */
---accent-contrast:#1A1510;
---danger:         #B4675A;  /* terre cuite */
---success:        #7F9474;  /* sauge */
---scrim:          linear-gradient(to top, rgba(18,16,16,.92) 0%, rgba(18,16,16,.55) 40%, rgba(18,16,16,0) 75%);
-```
+### Thèmes alternatifs
+| Thème | Ambiance | Accent | Texte sur accent |
+|---|---|---|---|
+| **Nuit** (défaut) | bleu nuit, teal | `#5EC4C0` | `#04121D` |
+| Salle obscure | charbon chaud | `#C9A673` ambre | `#1A1510` |
+| Velours | bordeaux sombre | `#CF8E80` rose cuivré | `#1A0F0E` |
+| Ardoise | gris minéral | `#93B6C7` bleu acier | `#0F1417` |
+| Noyer | bois sombre | `#C49C64` noyer | `#17120B` |
+| Lin (clair) | papier chaud | `#2C7B77` teal profond | `#FFFFFF` |
 
-### Thèmes additionnels (sobres)
-Valeurs complètes, implémentées dans `web/src/lib/styles/tokens.css` (source de vérité) :
-
-| Token | Velours | Ardoise | Noyer | Lin (clair) |
-|---|---|---|---|---|
-| ambiance | rideau bordeaux | minéral, nordique | bois sombre, bibliothèque | matinée, papier |
-| `--bg` | `#140F10` | `#101214` | `#13110E` | `#F3EFE8` |
-| `--bg-sunken` | `#0D0A0B` | `#0A0C0D` | `#0C0B09` | `#E9E4DB` |
-| `--surface` | `#1D1617` | `#181B1E` | `#1C1915` | `#FBF9F5` |
-| `--surface-raised` | `#261D1E` | `#1F2327` | `#24201B` | `#FDFCF9` |
-| `--text` | `#EFE5DF` | `#E4E6E8` | `#ECE4D4` | `#2A2622` |
-| `--text-muted` | `#AD9E98` | `#9AA1A7` | `#A99F8D` | `#6B635A` |
-| `--text-faint` | `#76665F` | `#646B71` | `#716857` | `#8C8378` |
-| `--accent` | `#A8786A` | `#8FA3AE` | `#A8875A` | `#8A6E45` |
-| `--accent-ink` | `#BD8F80` | `#8FA3AE` | `#B39268` | `#755B35` |
-| `--accent-contrast` | `#1A0F0E` | `#0F1417` | `#17120B` | `#FBF9F5` |
-| `--danger` | `#B8695C` | `#B06E64` | `#B16A57` | `#A35A4C` |
-| `--success` | `#82937A` | `#7D9182` | `#839272` | `#5F7556` |
-
-Pour Salle obscure, `--accent-ink` = `--accent`. Contrastes vérifiés par `npm run check:contrast` (CI) : texte ≥ 4.5:1 sur toutes les surfaces, `accent-ink` ≥ 4.5:1 y compris sur `accent-soft`, `text-faint` ≥ 3:1.
-
-**Choix assumé** : en thème Lin, le hero garde un voile sombre et un texte clair (il reste un « écran » dans une page claire).
-
-Option utilisateur : **« Teinte ambiante »**. L'arrière-plan de la page de détail reprend la couleur dominante de l'affiche, **désaturée à ≤ 20 %** et assombrie : une ambiance, jamais un aplat vif.
+Mode **Système** : Nuit ↔ Lin selon `prefers-color-scheme`. Chaque thème définit aussi `surface-active` et `tint` dans son accent. Contrastes vérifiés par `npm run check:contrast` (CI).
 
 ---
 
 ## 3. Typographie
 
-Les polices sont **auto-hébergées** dans le binaire (aucun appel à Google Fonts : self-hosted et vie privée). Toutes sous licence OFL.
+**Nunito** (variable, OFL), auto-hébergée dans le binaire. Aucun appel à Google Fonts.
 
-| Usage | Police | Notes |
-|---|---|---|
-| Display (titres de films, en-têtes de section) | **Cormorant Garamond** (500/600) | serif de générique, élégant ; tracking légèrement négatif sur les grandes tailles |
-| UI et texte courant | **Instrument Sans** (400/500/600) | sans-serif sobre et lisible ; chiffres tabulaires pour les durées |
-| Technique (codecs, débits) | Instrument Sans + `font-variant-numeric: tabular-nums` | pas de monospace visible |
+| Token | Taille / interligne | Graisse | Usage |
+|---|---|---|---|
+| `--fs-hero` | 30 → 40 px / 112 % | 800 | titre du hero |
+| `--fs-h1` | 40 px / 120 % | 700 | titre de page |
+| `--fs-h2` | 20 px / 135 % | 700 | en-têtes de section (« Reprendre ») |
+| `--fs-body` | 14 px / 150 % | 400 | texte courant, synopsis |
+| `--fs-small` | 13 px | 500 | métadonnées, durées |
+| `--fs-micro` | 12 px | 600 | tags, badges |
 
-### Échelle (ratio ~1.25, base 16 px)
-| Token | Taille / interligne | Usage |
-|---|---|---|
-| `--fs-hero` | clamp(2.75rem, 5vw, 4.5rem) / 1.05 | titre du hero, page de détail |
-| `--fs-h1` | 2.25rem / 1.15 | titre de page |
-| `--fs-h2` | 1.5rem / 1.25 | rangées (« Reprendre », « Récemment ajoutés ») |
-| `--fs-h3` | 1.125rem / 1.35 | titres de carte |
-| `--fs-body` | 1rem / 1.6 | synopsis, texte |
-| `--fs-small` | 0.875rem / 1.5 | métadonnées |
-| `--fs-micro` | 0.75rem / 1.4, +0.06em, MAJUSCULES | sur-titres (« FILM · 2019 · 2 h 12 ») |
-
-Règles : 60–72 caractères maximum par ligne pour les synopsis. Pas de gras dans le serif au-delà de 600. Italique serif autorisé pour les citations et taglines.
+Durées et temps : `font-variant-numeric: tabular-nums`.
 
 ---
 
-## 4. Espacement, grille, formes
+## 4. Espacement, formes
 
-- **Espacement (base 4)** : `--sp-1: 4px` · `2: 8` · `3: 12` · `4: 16` · `5: 24` · `6: 32` · `7: 48` · `8: 64` · `9: 96` · `10: 128`.
-- **Gouttières de page** : 16 px (mobile), 32 px (tablette), 56–80 px (desktop).
-- **Rangées** : 48–64 px entre deux rangées de la page d'accueil.
-- **Rayons** : `--r-sm: 4px` (chips) · `--r-md: 8px` (cartes, affiches) · `--r-lg: 14px` (modales) · `--r-full` (avatars, boutons ronds du lecteur). Pas de formes « pilule » partout.
-- **Ratios d'affiches** : poster 2:3 · backdrop / thumb 16:9 · album 1:1 · logo libre.
+- **Espacement (base 4)** : `--sp-1` 4 px → `--sp-10` 128 px. `--gap` entre blocs de la grille.
+- **Gouttières** : 16 px (mobile) · 24–32 px (desktop).
+- **Rayons** : `xs` 6 · `sm` 10 (tuiles de nav, catégories) · `md` 12 (vignettes) · `lg` 16 (panneaux) · `xl` 20 (hero) · `full` (boutons pilules, avatars).
+- **Ratios** : poster 2:3 · vignette 16:9 · catégorie ~16:7.
 
 ## 5. Élévation et matière
-```css
---shadow-1: 0 1px 2px rgba(0,0,0,.25), 0 2px 8px rgba(0,0,0,.18);
---shadow-2: 0 4px 12px rgba(0,0,0,.28), 0 12px 32px rgba(0,0,0,.22);
---shadow-3: 0 12px 24px rgba(0,0,0,.32), 0 32px 64px rgba(0,0,0,.30);
-```
-- Les ombres sont toujours **neutres** (jamais colorées), larges et diffuses.
-- **Grain** optionnel : bruit SVG à 2–3 % d'opacité sur `--bg`, pour une sensation pellicule et mate (désactivable).
-- Les images reçoivent un `--scrim` sous le texte, jamais un flou criard.
+- Ombres neutres, larges et diffuses (`--shadow-1..3`).
+- Panneaux : `--surface` + `--tint`.
+- Grain pellicule : optionnel, désactivé par défaut.
 
 ## 6. Mouvement
-| Token | Valeur | Usage |
-|---|---|---|
-| `--ease` | `cubic-bezier(.2, .7, .2, 1)` | standard (sortie douce) |
-| `--dur-fast` | 150 ms | survols, focus |
-| `--dur-base` | 260 ms | apparitions, menus |
-| `--dur-slow` | 480 ms | changement de hero, fondus d'images |
-
-- Les images apparaissent en fondu depuis leur **blurhash / couleur dominante** (jamais de saut).
-- Survol d'une carte : élévation `shadow-1 → shadow-2` et `scale(1.02)` au maximum.
-- `prefers-reduced-motion` : on garde uniquement les fondus d'opacité.
+`--dur-fast` 140 ms · `--dur-base` 220 ms · `--dur-slow` 420 ms, easing de sortie douce. Images en fondu depuis leur couleur dominante. `prefers-reduced-motion` : opacité seule.
 
 ## 7. Iconographie
-- Trait fin (1.5 px), coins arrondis, style **Lucide** (ISC) ou set maison équivalent. Taille 20/24 px.
-- Monochromes (`currentColor`). Pas d'icônes remplies sauf pour l'état actif (favori, lecture).
+Trait 1.5 px, style Lucide, `currentColor`, dessinées à la main dans `Icon.svelte`. Les boutons-icônes sont des **tuiles carrées arrondies** (`IconButton`).
 
 ---
 
-## 8. Composants (inventaire v1)
+## 8. Structure et composants
 
-| Composant | Notes de design |
-|---|---|
-| **App shell** | barre latérale fine et rétractable (desktop) ou barre basse (mobile) ; en-tête transparent qui s'opacifie au scroll |
-| **Hero** | backdrop plein cadre, scrim bas, logo ou titre serif, 1 action principale (Lecture) + 1 secondaire ; rotation lente (8 s, fondu) |
-| **Rangée (Row)** | titre H2 serif + lien « Tout voir » discret ; défilement horizontal avec flèches au survol ; snap |
-| **Carte poster** | 2:3, rayon `r-md`, `shadow-1` ; sous l'affiche : titre et année en `text-muted` ; barre de progression fine (2 px, accent) |
-| **Carte épisode / thumb** | 16:9, numéro + titre, durée restante |
-| **Page de détail** | backdrop atténué en fond, colonne poster + bloc infos ; métadonnées en micro-capitales séparées par « · » ; casting en rangée d'avatars ronds désaturés |
-| **Boutons** | Primaire : fond accent, texte `accent-contrast`. Secondaire : surface + texte. Tertiaire : texte seul. Hauteur 40/48 px |
-| **Champs** | fond `bg-sunken`, aucune bordure visible au repos ; ligne accent au focus |
-| **Chips / filtres** | `r-sm`, surface, sélection = texte accent + fond légèrement teinté |
-| **Lecteur** | plein écran noir chaud ; contrôles qui apparaissent en fondu, barre de progression fine qui s'épaissit au survol ; panneau latéral pour audio et sous-titres ; badge discret « Direct » / « Transcodage » |
-| **Toasts** | coin bas, surface-raised, sans icône colorée |
-| **Squelettes** | aplats `surface` avec une respiration d'opacité très lente (pas de shimmer brillant) |
-| **Focus** | anneau 2 px `accent` décalé de 2 px, partout |
+### App shell (desktop)
+- **Sidebar** (248 px, repliable en rail de 76 px, état mémorisé) : logo + « Aether », puis chaque entrée est une **tuile** arrondie. L'entrée active passe en `surface-active` avec l'icône en accent.
+  - Groupes : Accueil, Explorer, Favoris, Genres · Ma collection, Récemment ajoutés, Reprendre, Collections.
+  - Réglages épinglés en bas ; pied : lien système de design, version serveur, bouton replier.
+- **Top bar** (sticky, opaque) : recherche large à gauche (`/` pour focus) ; à droite, sélecteur de thème, notifications (tuile + pastille) et bloc utilisateur (avatar, nom, e-mail).
+
+### Mobile (< 768 px)
+Barre d'onglets en bas : Accueil, Explorer, Recherche, Favoris, Profil. Le hero passe en pleine largeur ; les catégories défilent horizontalement ; la mosaïque passe sur 2 colonnes, avec la tuile vedette en premier.
+
+### Accueil
+1. **Hero en carte** (~2/3) : tags en haut à gauche, badge « Tendance » en haut à droite, titre sur 2 lignes, métadonnées, synopsis. Boutons « Lecture » (pilule accent) et « Plus d'infos » (pilule sombre). Rotation 8 s, pausable.
+2. **Panneau Catégories** (~1/3) : grille 2×4 de tuiles (image + libellé centré) et un lien « Tout voir ».
+3. **Reprendre** : mosaïque avec 2 vignettes moyennes au-dessus de 3 petites, et une tuile vedette sur la hauteur des deux rangées. Chaque tuile affiche le temps écoulé, la durée totale et une fine barre teal.
+4. **Vous aimerez aussi** et **Récemment ajoutés** : rangées horizontales.
+
+### Inventaire
+`Logo`, `Button` (pilule : primaire, secondaire, tertiaire), `IconButton`, `Avatar`, `UserChip`, `Tag`, `Chip`, `Input`, `SearchField`, `SectionHeader`, `Hero`, `CategoryTile`, `CategoriesPanel`, `ContinueTile`, `ContinueBento`, `PosterCard`, `ThumbCard`, `Row`, `ProgressLine`, `Skeleton`, `Toaster`, `ThemeSwitcher`, ainsi que le shell (`Sidebar`, `AppHeader`, `TabBar`).
 
 ## 9. Écrans v1
-1. Connexion / premier lancement (assistant : admin → bibliothèques → métadonnées)
-2. Accueil : hero, Reprendre, À suivre, Récemment ajoutés (par bibliothèque), Collections
-3. Bibliothèque : grille + filtres (genre, année, note, vu / non vu, résolution) + tri
+1. Connexion / assistant de premier lancement
+2. Accueil (ci-dessus)
+3. Bibliothèque : grille + filtres + tri
 4. Détail film / série / saison / album
 5. Lecteur vidéo, mini-lecteur audio
-6. Recherche (instantanée, résultats groupés par type)
-7. Collections
-8. Profil et préférences (thème, langue audio et sous-titres)
-9. Administration : bibliothèques, utilisateurs, tâches, transcodage, journaux
+6. Recherche
+7. Collections, favoris
+8. Profil et préférences
+9. Administration
 
 ## 10. Implémentation
-- Tokens dans `web/src/lib/styles/tokens.css`, et thèmes via `[data-theme="velours"]` sur `<html>`.
-- Thème `system` : suit `prefers-color-scheme` (Salle obscure ↔ Lin).
-- Contrastes vérifiés automatiquement en CI (texte/fond ≥ 4.5:1, texte large ≥ 3:1).
-- Galerie vivante de tous les tokens et composants : route `/design`. Captures de référence dans `docs/screenshots/m1/`.
-- **Note de méthode** : le skill `frontend-design` n'est pas installé dans cette session. Les principes ci-dessus en reprennent l'esprit (direction affirmée, typographie distinctive, pas d'esthétique « IA générique »). Il sera utilisé pour les maquettes dès qu'il sera disponible.
+- Tokens : `web/src/lib/styles/tokens.css` ; thèmes via `[data-theme]` sur `<html>`, appliqués avant le premier rendu pour éviter le flash.
+- Galerie vivante : route `/design`. Captures de référence : `docs/screenshots/m1b/`.
+- Les images de la référence Behance ne sont **jamais** copiées dans le dépôt.

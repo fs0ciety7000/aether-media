@@ -6,7 +6,7 @@
 
 	interface Props {
 		title: string;
-		/** Over-title in micro caps, e.g. "Les Veilleurs · S2 · É4". */
+		/** Secondary line under the title, e.g. "Les Veilleurs · S2 · É4". */
 		eyebrow?: string;
 		/** Right-aligned detail, e.g. "Reste 34 min". */
 		detail?: string;
@@ -35,8 +35,8 @@
 	</div>
 	<div class="meta">
 		<div class="text">
-			{#if eyebrow}<span class="eyebrow micro">{eyebrow}</span>{/if}
 			<span class="title">{title}</span>
+			{#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
 		</div>
 		{#if detail}<span class="detail tabular">{detail}</span>{/if}
 	</div>
@@ -46,7 +46,7 @@
 	.thumb-card {
 		display: block;
 		width: 100%;
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		color: var(--text-muted);
 	}
 
@@ -56,9 +56,10 @@
 
 	.frame {
 		position: relative;
-		border-radius: var(--r-md);
+		border-radius: var(--r-lg);
 		overflow: hidden;
-		box-shadow: var(--shadow-1);
+		box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+		isolation: isolate;
 		transition:
 			box-shadow var(--dur-base) var(--ease),
 			transform var(--dur-base) var(--ease);
@@ -67,7 +68,7 @@
 	a.thumb-card:hover .frame,
 	.thumb-card[data-demo='hover'] .frame {
 		box-shadow: var(--shadow-2);
-		transform: scale(1.02);
+		transform: translateY(-3px);
 	}
 
 	.play {
@@ -81,9 +82,9 @@
 		margin: -24px 0 0 -24px;
 		padding-left: 2px;
 		border-radius: var(--r-full);
-		background: rgba(18, 16, 16, 0.6);
-		color: var(--on-image);
-		box-shadow: inset 0 0 0 1px rgba(239, 232, 220, 0.18);
+		background: var(--accent);
+		color: var(--accent-contrast);
+		box-shadow: var(--shadow-2);
 		opacity: 0;
 		transition: opacity var(--dur-base) var(--ease);
 	}
@@ -99,7 +100,7 @@
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: var(--sp-3);
-		padding: var(--sp-3) 2px 0;
+		padding: 10px 4px 0;
 	}
 
 	.text {
@@ -109,6 +110,7 @@
 	}
 
 	.eyebrow {
+		font-size: var(--fs-micro);
 		color: var(--text-muted);
 		overflow: hidden;
 		white-space: nowrap;
@@ -116,9 +118,9 @@
 	}
 
 	.title {
-		font-size: var(--fs-small);
+		font-size: var(--fs-body);
 		line-height: var(--lh-small);
-		font-weight: 500;
+		font-weight: var(--fw-bold);
 		color: var(--text);
 		overflow: hidden;
 		white-space: nowrap;
@@ -128,6 +130,7 @@
 	.detail {
 		flex: none;
 		font-size: var(--fs-micro);
+		font-weight: var(--fw-medium);
 		line-height: var(--lh-small);
 		color: var(--text-muted);
 	}

@@ -64,7 +64,7 @@
 	.label {
 		font-size: var(--fs-small);
 		color: var(--text-muted);
-		font-weight: 500;
+		font-weight: var(--fw-medium);
 	}
 
 	.control {
@@ -73,48 +73,30 @@
 		display: flex;
 		align-items: center;
 		height: var(--h);
-		background: var(--bg-sunken);
+		background: var(--surface);
 		border-radius: var(--r-md);
+		box-shadow: inset 0 0 0 1px var(--line);
 		color: var(--text-muted);
 		transition:
 			background-color var(--dur-fast) var(--ease),
+			box-shadow var(--dur-fast) var(--ease),
 			color var(--dur-fast) var(--ease);
 	}
 
 	.control.lg {
-		--h: 48px;
-	}
-
-	/* Accent line on focus — drawn inside, along the bottom edge. */
-	.control::after {
-		content: '';
-		position: absolute;
-		left: var(--sp-3);
-		right: var(--sp-3);
-		bottom: 0;
-		height: 1.5px;
-		border-radius: 1px;
-		background: var(--accent);
-		transform: scaleX(0);
-		opacity: 0;
-		transition:
-			transform var(--dur-base) var(--ease),
-			opacity var(--dur-base) var(--ease);
-	}
-
-	.control:focus-within::after,
-	.control.demo-focus::after {
-		transform: scaleX(1);
-		opacity: 1;
+		--h: 46px;
 	}
 
 	.control:hover:not(:focus-within) {
-		background: color-mix(in srgb, var(--bg-sunken) 88%, var(--text));
+		box-shadow: inset 0 0 0 1px var(--line-strong);
 	}
 
+	/* Focus: matte accent ring drawn inside the field. */
 	.control:focus-within,
 	.control.demo-focus {
 		color: var(--text);
+		background: var(--surface-raised);
+		box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
 	}
 
 	input {
@@ -125,10 +107,6 @@
 		background: transparent;
 		border: 0;
 		color: var(--text);
-		font-size: var(--fs-small);
-	}
-
-	.lg input {
 		font-size: var(--fs-body);
 	}
 
@@ -159,7 +137,11 @@
 
 	.leading {
 		display: flex;
-		padding-left: var(--sp-3);
+		padding-left: 14px;
+	}
+
+	.lg .leading {
+		padding-left: var(--sp-4);
 	}
 
 	.trailing {

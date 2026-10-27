@@ -16,7 +16,7 @@
 		size = 'md',
 		shortcut = false,
 		label = 'Rechercher',
-		placeholder = 'Films, séries, artistes…',
+		placeholder = 'Rechercher un film, un réalisateur, un acteur…',
 		...rest
 	}: Props = $props();
 
@@ -59,7 +59,7 @@
 		place-items: center;
 		width: 28px;
 		height: 28px;
-		border-radius: var(--r-sm);
+		border-radius: var(--r-xs);
 		color: var(--text-muted);
 		transition: color var(--dur-fast) var(--ease);
 	}
@@ -73,8 +73,8 @@
 		place-items: center;
 		min-width: 22px;
 		height: 22px;
-		margin-right: var(--sp-1);
-		border-radius: var(--r-sm);
+		margin-right: var(--sp-2);
+		border-radius: var(--r-xs);
 		font-family: var(--font-ui);
 		font-size: var(--fs-micro);
 		color: var(--text-muted);
