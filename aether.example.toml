@@ -1,0 +1,18 @@
+# Configuration Aether — copiez ce fichier dans <data>/aether.toml.
+# Chaque valeur peut aussi être fournie par variable d'environnement
+# (AETHER_HOST, AETHER_PORT, AETHER_DATA_DIR, AETHER_LOG_LEVEL…), qui a priorité.
+
+[server]
+host = "0.0.0.0"
+port = 8096
+
+[paths]
+# data      = "/var/lib/aether"          # base de données
+# cache     = "/var/lib/aether/cache"    # images, métadonnées
+# transcode = "/var/lib/aether/cache/transcode"
+ffmpeg  = "ffmpeg"
+ffprobe = "ffprobe"
+
+[log]
+level  = "info"   # debug | info | warn | error
+format = "text"   # text | json

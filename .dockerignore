@@ -1,0 +1,8 @@
+.git
+bin
+.dev
+**/node_modules
+web/.svelte-kit
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep
+docs

@@ -1,0 +1,8 @@
+/bin/
+/.dev/
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+node_modules/
+.DS_Store
+*.db
+*.db-*

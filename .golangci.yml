@@ -1,0 +1,26 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - misspell
+    - revive
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (*encoding/json.Encoder).Encode
+        - (*database/sql.DB).Close
+        - io.WriteString
+  exclusions:
+    generated: strict
+    rules:
+      - linters: [errcheck]
+        path: _test\.go
+      - linters: [revive]
+        text: "exported|package-comments"
+formatters:
+  enable:
+    - gofmt
+    - goimports
