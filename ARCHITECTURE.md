@@ -1,6 +1,6 @@
 # Aether — Architecture (draft v0.1)
 
-> Statut : **PROPOSITION — stack en attente de validation**.
+> Statut : **stack validée** (Go + SQLite + SvelteKit, 2026-10-27).
 > Ce document s'inspire de l'étude de Jellyfin (fork `fs0ciety7000/jellyfin`, commit `02c2951`). Aucun code n'est repris : on garde les idées et on les réécrit plus simplement.
 
 ---
@@ -43,7 +43,7 @@
 ### Détail
 | Couche | Choix proposé | Pourquoi |
 |---|---|---|
-| Langage | **Go 1.23+** | voir ci-dessus |
+| Langage | **Go 1.26** | voir ci-dessus |
 | HTTP | `net/http` (routeur 1.22+) ou **chi** | standard, léger, pas de framework lourd |
 | Base de données | **SQLite** (mode WAL) via `modernc.org/sqlite` (pur Go, pas de CGO) + **FTS5** pour la recherche | zéro dépendance externe pour l'utilisateur ; Postgres en option plus tard |
 | Accès aux données | **sqlc** (SQL typé et généré) + migrations `goose` | du SQL explicite, pas d'ORM magique |
@@ -199,7 +199,7 @@ GET  /api/v1/events  (SSE)
 - Les arguments FFmpeg sont construits en liste, jamais via un shell.
 
 ## 8. Décisions ouvertes
-- [ ] **Go vs Rust** (recommandation : Go)
-- [ ] **SvelteKit vs React** (recommandation : SvelteKit)
+- [x] **Go vs Rust** → Go (validé)
+- [x] **SvelteKit vs React** → SvelteKit (validé)
 - [ ] SSE vs WebSocket pour les événements (recommandation : SSE en v1, WebSocket si SyncPlay)
 - [ ] Postgres optionnel dès la v1 ? (recommandation : non)
