@@ -43,6 +43,7 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
     files:
+      - LICENSE
       - README.md
       - aether.example.toml
       - docs/INSTALL.md
@@ -56,6 +57,7 @@ nfpms:
     vendor: Aether
     homepage: https://github.com/fs0ciety7000/aether-media
     maintainer: fs0ciety7000 <https://github.com/fs0ciety7000>
+    license: AGPL-3.0-only
     description: |-
       Serveur multimédia self-hosted (films, séries, musique).
       Inclut le mode agent, qui partage les médias d'une machine avec un serveur Aether.
@@ -149,6 +151,7 @@ dockers_v2:
       org.opencontainers.image.title: Aether
       org.opencontainers.image.description: Serveur multimédia self-hosted
       org.opencontainers.image.source: https://github.com/fs0ciety7000/aether-media
+      org.opencontainers.image.licenses: AGPL-3.0-only
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .Date }}"

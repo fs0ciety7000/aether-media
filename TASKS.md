@@ -153,7 +153,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-081 Admin : bibliothèques, utilisateurs, tâches, journaux
 - [ ] T-082 PWA (manifest, service worker)
 - [x] T-083 Paquets : GoReleaser (linux amd64/arm64/armv7, darwin, windows ; tar.gz/zip ; .deb/.rpm avec compte `aether`, unités systemd, /var/lib/aether ; cask Homebrew ; images ghcr.io multi-arch via dockers_v2 ; SBOM ; checksums), workflow `release.yml` sur tag `v*`, docs/INSTALL.md
-- [ ] T-085 Première release : créer le dépôt `homebrew-tap` (puis `skip_upload: false` + secret `HOMEBREW_TAP_TOKEN`), choisir et ajouter la LICENSE (archives et paquets), vérifier le workflow sur un tag de test, signature/notarisation macOS et Windows
+- [ ] T-085 (LICENSE AGPL-3.0 ajoutée) Première release : créer le dépôt `homebrew-tap` (puis `skip_upload: false` + secret `HOMEBREW_TAP_TOKEN`), vérifier le workflow sur un tag de test, signature/notarisation macOS et Windows
 - [ ] T-084 Docs utilisateur + audit a11y / perfs → release v0.1.0
 
 ## M8 — Fédération (v1.1)

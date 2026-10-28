@@ -13,3 +13,7 @@ docker run -d -p 8096:8096 -v ./data:/data -v /srv/media:/media:ro ghcr.io/fs0ci
 > - [ARCHITECTURE.md](ARCHITECTURE.md) : stack proposée, modules, modèle de données
 > - [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) : direction artistique et tokens
 > - [TASKS.md](TASKS.md) : suivi des tâches
+
+## Licence
+
+Aether est distribué sous licence [GNU AGPL-3.0](LICENSE) (`AGPL-3.0-only`). Si vous hébergez une version modifiée accessible à d'autres, vous devez en publier le code source.
