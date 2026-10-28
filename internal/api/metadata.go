@@ -30,25 +30,25 @@ type personDTO struct {
 	Image string `json:"image,omitempty"` // remote URL for now
 }
 
-// imagesFor returns ready images grouped by type ("backdrop" may hold several).
-func (s *Server) imagesFor(r *http.Request, itemID int64) (map[string][]imageDTO, error) {
-	rows, err := s.store.ListItemImages(r.Context(), itemID)
-	if err != nil {
-		return nil, err
-	}
+// imageDTOs groups fetched images by type ("backdrop" may hold several).
+func imageDTOs(itemID int64, rows []db.Image) map[string][]imageDTO {
 	out := map[string][]imageDTO{}
 	for _, img := range rows {
 		if !img.Hash.Valid {
 			continue
 		}
-		u := "/api/v1/items/" + strconv.FormatInt(itemID, 10) + "/images/" + img.Type
-		q := "v=" + img.Hash.String[:12]
-		if img.Idx > 0 {
-			q = "idx=" + strconv.FormatInt(img.Idx, 10) + "&" + q
-		}
-		out[img.Type] = append(out[img.Type], imageDTO{URL: u + "?" + q, Width: img.Width, Height: img.Height, Blurhash: img.Blurhash, Dominant: img.Dominant})
+		out[img.Type] = append(out[img.Type], imageDTOFor(itemID, img))
 	}
-	return out, nil
+	return out
+}
+
+func imageDTOFor(itemID int64, img db.Image) imageDTO {
+	u := "/api/v1/items/" + strconv.FormatInt(itemID, 10) + "/images/" + img.Type
+	q := "v=" + img.Hash.String[:12]
+	if img.Idx > 0 {
+		q = "idx=" + strconv.FormatInt(img.Idx, 10) + "&" + q
+	}
+	return imageDTO{URL: u + "?" + q, Width: img.Width, Height: img.Height, Blurhash: img.Blurhash, Dominant: img.Dominant}
 }
 
 // itemImage: GET /api/v1/items/{id}/images/{type}?w=342&idx=0

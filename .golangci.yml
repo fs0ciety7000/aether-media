@@ -12,6 +12,7 @@ linters:
         - (net/http.ResponseWriter).Write
         - (*encoding/json.Encoder).Encode
         - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
         - io.WriteString
         - fmt.Fprint
         - fmt.Fprintf

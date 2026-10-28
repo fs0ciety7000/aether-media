@@ -25,6 +25,13 @@ type Deps struct {
 	// Refresher and Images are optional (nil disables the related routes).
 	Refresher *refresh.Refresher
 	Images    ImageServer
+	Features  Features
+}
+
+// Features reports optional capabilities to clients.
+type Features struct {
+	TMDB        bool `json:"tmdb"`
+	MusicBrainz bool `json:"musicbrainz"`
 }
 
 // ImageServer serves cached image renditions.
@@ -54,6 +61,10 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/libraries/{id}", s.deleteLibrary)
 	mux.HandleFunc("POST /api/v1/libraries/{id}/scan", s.scanLibrary)
 	mux.HandleFunc("GET /api/v1/items", s.listItems)
+	mux.HandleFunc("GET /api/v1/libraries/{id}/filters", s.libraryFilters)
+	mux.HandleFunc("GET /api/v1/home", s.home)
+	mux.HandleFunc("GET /api/v1/search", s.search)
+	mux.HandleFunc("GET /api/v1/items/{id}/similar", s.similar)
 	mux.HandleFunc("GET /api/v1/items/{id}", s.getItem)
 	mux.HandleFunc("PATCH /api/v1/items/{id}", s.patchItem)
 	mux.HandleFunc("POST /api/v1/items/{id}/refresh", s.refreshItem)
@@ -83,6 +94,7 @@ type systemInfo struct {
 	Commit        string    `json:"commit"`
 	StartedAt     time.Time `json:"startedAt"`
 	SetupRequired bool      `json:"setupRequired"`
+	Metadata      Features  `json:"metadata"`
 }
 
 func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +110,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		Commit:        version.Commit,
 		StartedAt:     s.startedAt,
 		SetupRequired: users == 0,
+		Metadata:      s.Features,
 	})
 }
 

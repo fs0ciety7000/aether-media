@@ -123,6 +123,7 @@ type services struct {
 	scanner   *library.Scanner
 	refresher *refresh.Refresher
 	images    *images.Cache
+	features  api.Features
 }
 
 func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
@@ -146,7 +147,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	if err != nil {
 		return nil, err
 	}
-	refresher := newRefresher(cfg, st, runner, hub, log, imgs)
+	refresher, features := newRefresher(cfg, st, runner, hub, log, imgs)
 	runner.Register(refresh.JobRefresh, 2, refresher.HandleRefresh)
 	runner.Register(refresh.JobImage, 4, refresher.HandleImage)
 	scanner.AfterScan = func(ctx context.Context, libID int64) {
@@ -154,7 +155,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 			log.Error("planification des métadonnées", "library", libID, "err", err)
 		}
 	}
-	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs}, nil
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features}, nil
 }
 
 func userAgent() string {
@@ -163,7 +164,7 @@ func userAgent() string {
 
 // newRefresher assembles metadata providers: local NFO/artwork first, then
 // TMDB (films, séries; needs an API key) and MusicBrainz (musique).
-func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache) *refresh.Refresher {
+func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache) (*refresh.Refresher, api.Features) {
 	httpCache := filepath.Join(cfg.Paths.Cache, "http")
 	var remote []metadata.RemoteProvider
 	tm := tmdb.New(tmdb.Config{APIKey: cfg.Metadata.TMDBAPIKey, Language: cfg.Metadata.Language},
@@ -189,8 +190,9 @@ func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *
 		}
 		return refresh.ImageInfo{Hash: s.Hash, Width: s.Width, Height: s.Height, Blurhash: s.Blurhash, Dominant: s.Dominant}, nil
 	}
+	features := api.Features{TMDB: tm.Enabled(), MusicBrainz: !cfg.Metadata.DisableMusicBrainz}
 	return refresh.New(st, runner, hub, log, refresh.Config{Language: cfg.Metadata.Language},
-		[]metadata.LocalProvider{nfo.New()}, remote, ingest)
+		[]metadata.LocalProvider{nfo.New()}, remote, ingest), features
 }
 
 func runServe(args []string) error {
@@ -223,7 +225,7 @@ func runServe(args []string) error {
 		Addr: cfg.Addr(),
 		Handler: api.New(api.Deps{
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
-			Refresher: svc.refresher, Images: svc.images,
+			Refresher: svc.refresher, Images: svc.images, Features: svc.features,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

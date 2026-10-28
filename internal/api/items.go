@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
 
@@ -44,6 +47,8 @@ type itemDTO struct {
 	IdentifyStatus    string                `json:"identifyStatus"`
 	LockedFields      []string              `json:"lockedFields"`
 	Images            map[string][]imageDTO `json:"images"`
+	ChildCount        *int64                `json:"childCount,omitempty"`
+	Video             *videoDTO             `json:"video,omitempty"`
 }
 
 func toItemDTO(it db.Item) itemDTO {
@@ -83,61 +88,148 @@ func ptr(v sql.NullInt64) *int64 {
 type itemPage struct {
 	Items      []itemDTO `json:"items"`
 	NextCursor string    `json:"nextCursor,omitempty"`
+	Total      int       `json:"total"`
 }
 
-// listItems: GET /api/v1/items?library=&kind=&parent=&limit=&cursor=
-// Items are ordered by sort title; the cursor is opaque.
+type videoDTO struct {
+	Resolution string `json:"resolution"`
+	HDR        string `json:"hdr,omitempty"`
+}
+
+var sortKeys = map[string]bool{"title": true, "dateAdded": true, "year": true, "rating": true,
+	"runtime": true, "premiereDate": true, "random": true}
+
+// listItems: GET /api/v1/items — see docs/API.md for parameters.
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	p := db.ListItemsParams{Lim: 50}
-	var err error
-	if p.LibraryID, err = optInt(q.Get("library")); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_library", "paramètre library invalide")
-		return
+	p := store.BrowseParams{Limit: 50, Genre: q.Get("genre"), Identify: q.Get("identify"),
+		Resolution: q.Get("resolution"), HDR: q.Get("hdr") == "true", Sort: q.Get("sort")}
+	ints := []struct {
+		name string
+		dst  *int64
+	}{{"library", &p.LibraryID}, {"parent", &p.ParentID}, {"person", &p.PersonID}}
+	for _, f := range ints {
+		if v := q.Get(f.name); v != "" {
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_"+f.name, "paramètre "+f.name+" invalide")
+				return
+			}
+			*f.dst = n
+		}
 	}
-	if p.ParentID, err = optInt(q.Get("parent")); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_parent", "paramètre parent invalide")
+	for _, f := range []struct {
+		name string
+		dst  *int
+	}{{"yearFrom", &p.YearFrom}, {"yearTo", &p.YearTo}, {"limit", &p.Limit}} {
+		if v := q.Get(f.name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_"+f.name, "paramètre "+f.name+" invalide")
+				return
+			}
+			*f.dst = n
+		}
+	}
+	if p.Limit < 1 || p.Limit > 200 {
+		writeError(w, http.StatusBadRequest, "invalid_limit", "limit doit être entre 1 et 200")
 		return
 	}
 	if k := q.Get("kind"); k != "" {
-		p.Kind = sql.NullString{String: k, Valid: true}
+		p.Kinds = strings.Split(k, ",")
 	}
-	if st := q.Get("identify"); st != "" {
-		p.IdentifyStatus = sql.NullString{String: st, Valid: true}
+	if p.Sort == "" {
+		p.Sort = "title"
 	}
-	if l := q.Get("limit"); l != "" {
-		n, err := strconv.Atoi(l)
-		if err != nil || n < 1 || n > 500 {
-			writeError(w, http.StatusBadRequest, "invalid_limit", "limit doit être entre 1 et 500")
-			return
-		}
-		p.Lim = int64(n)
+	if !sortKeys[p.Sort] {
+		writeError(w, http.StatusBadRequest, "invalid_sort", "tri inconnu")
+		return
+	}
+	if p.Resolution != "" && store.Resolution(map[string]int64{"4K": 3840, "1080p": 1920, "720p": 1280, "SD": 720}[p.Resolution], 0) != p.Resolution {
+		writeError(w, http.StatusBadRequest, "invalid_resolution", "résolution attendue : 4K, 1080p, 720p ou SD")
+		return
+	}
+	switch q.Get("order") {
+	case "asc":
+	case "desc":
+		p.Desc = true
+	case "":
+		p.Desc = p.Sort != "title"
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_order", "order attendu : asc ou desc")
+		return
 	}
 	if c := q.Get("cursor"); c != "" {
-		if p.AfterSortTitle, p.AfterID, err = decodeCursor(c); err != nil {
+		off, seed, err := decodeCursor(c)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_cursor", "curseur invalide")
 			return
 		}
+		p.Offset, p.Seed = off, seed
+	} else if p.Sort == "random" {
+		p.Seed = rand.Int64N(1 << 31)
 	}
-	items, err := s.store.ListItems(r.Context(), p)
+
+	rows, total, err := s.store.Browse(r.Context(), p)
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	page := itemPage{Items: make([]itemDTO, 0, len(items))}
-	for _, it := range items {
-		dto := toItemDTO(it)
-		if dto.Images, err = s.imagesFor(r, it.ID); err != nil {
-			s.internalError(w, err)
-			return
-		}
-		page.Items = append(page.Items, dto)
+	items, err := s.itemDTOs(r, rows)
+	if err != nil {
+		s.internalError(w, err)
+		return
 	}
-	if int64(len(items)) == p.Lim {
-		last := items[len(items)-1]
-		page.NextCursor = encodeCursor(last.SortTitle, last.ID)
+	page := itemPage{Items: items, Total: total}
+	if next := p.Offset + len(rows); len(rows) == p.Limit && next < total {
+		page.NextCursor = encodeCursor(next, p.Seed)
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+// itemDTOs converts browse rows, loading their images in one query.
+func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, error) {
+	ids := make([]int64, len(rows))
+	for i, row := range rows {
+		ids[i] = row.ID
+	}
+	imgs, err := s.store.ImagesFor(r.Context(), ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]itemDTO, 0, len(rows))
+	for _, row := range rows {
+		dto := toItemDTO(row.Item)
+		dto.Images = imageDTOs(row.ID, imgs[row.ID])
+		cc := row.ChildCount
+		dto.ChildCount = &cc
+		if res := store.Resolution(row.VideoWidth, row.VideoHeight); res != "" {
+			dto.Video = &videoDTO{Resolution: res, HDR: row.HDR}
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+// browseIDs loads items by id, preserving the given order.
+func (s *Server) browseIDs(r *http.Request, ids []int64) ([]itemDTO, error) {
+	if len(ids) == 0 {
+		return []itemDTO{}, nil
+	}
+	rows, _, err := s.store.Browse(r.Context(), store.BrowseParams{IDs: ids, Limit: len(ids)})
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.itemDTOs(r, rows)
+	if err != nil {
+		return nil, err
+	}
+	pos := make(map[int64]int, len(ids))
+	for i, id := range ids {
+		pos[id] = i
+	}
+	sort.SliceStable(items, func(a, b int) bool { return pos[items[a].ID] < pos[items[b].ID] })
+	return items, nil
 }
 
 type mediaStreamDTO struct {
@@ -172,9 +264,15 @@ type mediaFileDTO struct {
 	Streams    []mediaStreamDTO `json:"streams"`
 }
 
+type ancestorDTO struct {
+	ID    int64  `json:"id"`
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+}
+
 type itemDetail struct {
 	itemDTO
-	ChildCount int64          `json:"childCount"`
+	Ancestors  []ancestorDTO  `json:"ancestors"`
 	Genres     []string       `json:"genres"`
 	Studios    []string       `json:"studios"`
 	People     []personDTO    `json:"people"`
@@ -197,10 +295,27 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	out := itemDetail{itemDTO: toItemDTO(it), MediaFiles: []mediaFileDTO{}, Genres: []string{}, Studios: []string{}, People: []personDTO{}}
-	if out.Images, err = s.imagesFor(r, id); err != nil {
+	rows, _, err := s.store.Browse(ctx, store.BrowseParams{IDs: []int64{id}, Limit: 1})
+	if err == nil && len(rows) == 0 {
+		err = fmt.Errorf("browse item %d: no row", id)
+	}
+	if err != nil {
 		s.internalError(w, err)
 		return
+	}
+	dtos, err := s.itemDTOs(r, rows)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	out := itemDetail{itemDTO: dtos[0], Ancestors: []ancestorDTO{}, MediaFiles: []mediaFileDTO{}, Genres: []string{}, Studios: []string{}, People: []personDTO{}}
+	for pid := it.ParentID; pid.Valid; {
+		parent, err := s.store.GetItem(ctx, pid.Int64)
+		if err != nil {
+			break
+		}
+		out.Ancestors = append([]ancestorDTO{{ID: parent.ID, Kind: parent.Kind, Title: parent.Title}}, out.Ancestors...)
+		pid = parent.ParentID
 	}
 	if g, err := s.store.ListItemGenres(ctx, id); err == nil && g != nil {
 		out.Genres = g
@@ -215,10 +330,6 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, p := range people {
 		out.People = append(out.People, personDTO{ID: p.ID, Name: p.Name, Kind: p.Kind, Role: p.Role, Image: p.ImageUrl})
-	}
-	if out.ChildCount, err = s.store.CountChildren(ctx, sql.NullInt64{Int64: id, Valid: true}); err != nil {
-		s.internalError(w, err)
-		return
 	}
 	files, err := s.store.ListItemMediaFiles(ctx, id)
 	if err != nil {
@@ -263,27 +374,19 @@ func (s *Server) jobStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func optInt(v string) (sql.NullInt64, error) {
-	if v == "" {
-		return sql.NullInt64{}, nil
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	return sql.NullInt64{Int64: n, Valid: err == nil}, err
+func encodeCursor(offset int, seed int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("o:%d:%d", offset, seed)))
 }
 
-func encodeCursor(sortTitle string, id int64) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%d:%s", id, sortTitle)))
-}
-
-func decodeCursor(c string) (string, int64, error) {
+func decodeCursor(c string) (int, int64, error) {
 	b, err := base64.RawURLEncoding.DecodeString(c)
 	if err != nil {
-		return "", 0, err
+		return 0, 0, err
 	}
-	idStr, title, ok := strings.Cut(string(b), ":")
-	if !ok {
-		return "", 0, errors.New("malformed cursor")
+	var off int
+	var seed int64
+	if _, err := fmt.Sscanf(string(b), "o:%d:%d", &off, &seed); err != nil || off < 0 {
+		return 0, 0, errors.New("malformed cursor")
 	}
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	return title, id, err
+	return off, seed, nil
 }
