@@ -1,0 +1,89 @@
+{
+  "adult": false,
+  "backdrop_path": "/x7ajSAWoS2y9vSMNHVQvvVeKaxq.jpg",
+  "belongs_to_collection": null,
+  "budget": 10000000,
+  "genres": [
+    {"id": 35, "name": "Comédie"},
+    {"id": 10749, "name": "Romance"}
+  ],
+  "homepage": "",
+  "id": 194,
+  "imdb_id": "tt0211915",
+  "origin_country": ["FR"],
+  "original_language": "fr",
+  "original_title": "Le Fabuleux Destin d'Amélie Poulain",
+  "overview": "Amélie, une jeune serveuse dans un bar de Montmartre, passe son temps à observer les gens et à laisser son imagination divaguer.",
+  "popularity": 25.31,
+  "poster_path": "/vZ9NhNbQQ3yhtiC5sbhpy5KTXns.jpg",
+  "production_companies": [
+    {"id": 6706, "logo_path": null, "name": "Claudie Ossard Productions", "origin_country": "FR"},
+    {"id": 591, "logo_path": "/q5I5RDwMEiqoNmfaJgd2LraEOJY.png", "name": "France 3 Cinéma", "origin_country": "FR"},
+    {"id": 6705, "logo_path": null, "name": "UGC", "origin_country": "FR"}
+  ],
+  "production_countries": [{"iso_3166_1": "FR", "name": "France"}],
+  "release_date": "2001-04-25",
+  "revenue": 173921954,
+  "runtime": 122,
+  "spoken_languages": [{"english_name": "French", "iso_639_1": "fr", "name": "Français"}],
+  "status": "Released",
+  "tagline": "Elle va changer votre vie.",
+  "title": "Le Fabuleux Destin d'Amélie Poulain",
+  "video": false,
+  "vote_average": 7.9,
+  "vote_count": 11320,
+  "credits": {
+    "cast": [
+      {"adult": false, "gender": 1, "id": 1013, "known_for_department": "Acting", "name": "Audrey Tautou", "original_name": "Audrey Tautou", "popularity": 12.1, "profile_path": "/4F7OGwZlqFAtLBq7ySAJsWufd8S.jpg", "cast_id": 1, "character": "Amélie Poulain", "credit_id": "52fe4223c3a36847f8008c4f", "order": 0},
+      {"adult": false, "gender": 2, "id": 2405, "known_for_department": "Acting", "name": "Mathieu Kassovitz", "original_name": "Mathieu Kassovitz", "popularity": 6.3, "profile_path": "/8AvnUuXJqRKcRWoXvJmqBhGMn1A.jpg", "cast_id": 2, "character": "Nino Quincampoix", "credit_id": "52fe4223c3a36847f8008c53", "order": 1},
+      {"adult": false, "gender": 2, "id": 2406, "known_for_department": "Acting", "name": "Rufus", "original_name": "Rufus", "popularity": 3.2, "profile_path": null, "cast_id": 3, "character": "Raphaël Poulain", "credit_id": "52fe4223c3a36847f8008c57", "order": 3},
+      {"adult": false, "gender": 1, "id": 2407, "known_for_department": "Acting", "name": "Lorella Cravotta", "original_name": "Lorella Cravotta", "popularity": 1.9, "profile_path": "/vC4R3cHTu0p6xBJLpPQEY0V5hYj.jpg", "cast_id": 4, "character": "Amandine Fouet", "credit_id": "52fe4223c3a36847f8008c5b", "order": 2}
+    ],
+    "crew": [
+      {"adult": false, "gender": 2, "id": 2419, "known_for_department": "Directing", "name": "Jean-Pierre Jeunet", "original_name": "Jean-Pierre Jeunet", "popularity": 4.4, "profile_path": "/7oUZlWa38yEAAJZXQ1nn6WS1Br5.jpg", "credit_id": "52fe4223c3a36847f8008c65", "department": "Directing", "job": "Director"},
+      {"adult": false, "gender": 2, "id": 2419, "known_for_department": "Directing", "name": "Jean-Pierre Jeunet", "original_name": "Jean-Pierre Jeunet", "popularity": 4.4, "profile_path": "/7oUZlWa38yEAAJZXQ1nn6WS1Br5.jpg", "credit_id": "52fe4223c3a36847f8008c6b", "department": "Writing", "job": "Screenplay"},
+      {"adult": false, "gender": 2, "id": 2420, "known_for_department": "Writing", "name": "Guillaume Laurant", "original_name": "Guillaume Laurant", "popularity": 1.5, "profile_path": null, "credit_id": "52fe4223c3a36847f8008c71", "department": "Writing", "job": "Screenplay"},
+      {"adult": false, "gender": 2, "id": 2421, "known_for_department": "Sound", "name": "Yann Tiersen", "original_name": "Yann Tiersen", "popularity": 2.8, "profile_path": "/1zkm8k1tC2V3H4V8sV3T1rTW2EF.jpg", "credit_id": "52fe4223c3a36847f8008c77", "department": "Sound", "job": "Original Music Composer"},
+      {"adult": false, "gender": 1, "id": 2422, "known_for_department": "Production", "name": "Claudie Ossard", "original_name": "Claudie Ossard", "popularity": 0.9, "profile_path": null, "credit_id": "52fe4223c3a36847f8008c7d", "department": "Production", "job": "Producer"},
+      {"adult": false, "gender": 2, "id": 2423, "known_for_department": "Camera", "name": "Bruno Delbonnel", "original_name": "Bruno Delbonnel", "popularity": 1.1, "profile_path": null, "credit_id": "52fe4223c3a36847f8008c83", "department": "Camera", "job": "Director of Photography"}
+    ]
+  },
+  "images": {
+    "backdrops": [
+      {"aspect_ratio": 1.778, "height": 1080, "iso_639_1": "fr", "file_path": "/frBackdrop.jpg", "vote_average": 5.3, "vote_count": 2, "width": 1920},
+      {"aspect_ratio": 1.778, "height": 2160, "iso_639_1": null, "file_path": "/x7ajSAWoS2y9vSMNHVQvvVeKaxq.jpg", "vote_average": 5.6, "vote_count": 9, "width": 3840}
+    ],
+    "logos": [
+      {"aspect_ratio": 3.2, "height": 400, "iso_639_1": "en", "file_path": "/enLogo.png", "vote_average": 5.2, "vote_count": 1, "width": 1280},
+      {"aspect_ratio": 3.0, "height": 500, "iso_639_1": "fr", "file_path": "/frLogo.png", "vote_average": 5.0, "vote_count": 1, "width": 1500}
+    ],
+    "posters": [
+      {"aspect_ratio": 0.667, "height": 3000, "iso_639_1": "en", "file_path": "/enPoster.jpg", "vote_average": 5.8, "vote_count": 12, "width": 2000},
+      {"aspect_ratio": 0.667, "height": 1500, "iso_639_1": null, "file_path": "/nullPoster.jpg", "vote_average": 5.4, "vote_count": 3, "width": 1000},
+      {"aspect_ratio": 0.667, "height": 2400, "iso_639_1": "fr", "file_path": "/frPosterB.jpg", "vote_average": 5.2, "vote_count": 4, "width": 1600},
+      {"aspect_ratio": 0.667, "height": 3000, "iso_639_1": "fr", "file_path": "/vZ9NhNbQQ3yhtiC5sbhpy5KTXns.jpg", "vote_average": 5.6, "vote_count": 8, "width": 2000}
+    ]
+  },
+  "release_dates": {
+    "results": [
+      {"iso_3166_1": "US", "release_dates": [
+        {"certification": "R", "descriptors": [], "iso_639_1": "", "note": "", "release_date": "2001-11-02T00:00:00.000Z", "type": 3}
+      ]},
+      {"iso_3166_1": "FR", "release_dates": [
+        {"certification": "", "descriptors": [], "iso_639_1": "", "note": "Cannes", "release_date": "2001-04-13T00:00:00.000Z", "type": 1},
+        {"certification": "TP", "descriptors": [], "iso_639_1": "", "note": "DVD", "release_date": "2001-10-02T00:00:00.000Z", "type": 5},
+        {"certification": "U", "descriptors": [], "iso_639_1": "", "note": "", "release_date": "2001-04-25T00:00:00.000Z", "type": 3}
+      ]},
+      {"iso_3166_1": "DE", "release_dates": [
+        {"certification": "6", "descriptors": [], "iso_639_1": "", "note": "", "release_date": "2001-08-16T00:00:00.000Z", "type": 3}
+      ]}
+    ]
+  },
+  "external_ids": {
+    "imdb_id": "tt0211915",
+    "wikidata_id": "Q484048",
+    "facebook_id": null,
+    "instagram_id": null,
+    "twitter_id": null
+  }
+}

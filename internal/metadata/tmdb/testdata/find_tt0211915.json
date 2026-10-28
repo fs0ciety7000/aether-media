@@ -1,0 +1,25 @@
+{
+  "movie_results": [
+    {
+      "adult": false,
+      "backdrop_path": "/x7ajSAWoS2y9vSMNHVQvvVeKaxq.jpg",
+      "id": 194,
+      "title": "Le Fabuleux Destin d'Amélie Poulain",
+      "original_language": "fr",
+      "original_title": "Le Fabuleux Destin d'Amélie Poulain",
+      "overview": "Amélie, une jeune serveuse dans un bar de Montmartre, passe son temps à observer les gens et à laisser son imagination divaguer.",
+      "poster_path": "/vZ9NhNbQQ3yhtiC5sbhpy5KTXns.jpg",
+      "media_type": "movie",
+      "genre_ids": [35, 10749],
+      "popularity": 25.31,
+      "release_date": "2001-04-25",
+      "video": false,
+      "vote_average": 7.9,
+      "vote_count": 11320
+    }
+  ],
+  "person_results": [],
+  "tv_results": [],
+  "tv_episode_results": [],
+  "tv_season_results": []
+}

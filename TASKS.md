@@ -51,13 +51,19 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-03B Sous-titres externes (.srt/.ass à côté de la vidéo) → media_streams is_external
 - [ ] T-03C API : restreindre chemins disque et endpoints d'admin quand l'auth arrive (M6)
 
-## M3 — Métadonnées
-- [ ] T-040 Interface Provider + orchestrateur (ordre, fusion, verrous)
-- [ ] T-041 Provider NFO (Kodi) + images locales
-- [ ] T-042 Provider TMDB (films, séries, casting, collections)
-- [ ] T-043 Provider MusicBrainz + Cover Art Archive
-- [ ] T-044 Cache d'images, redimensionnement, blurhash, couleur dominante
-- [ ] T-045 Flux « à identifier » + correction manuelle
+## M3 — Métadonnées ✅
+- [x] T-040 Interface Provider + orchestrateur (ordre, fusion, verrous)
+- [x] T-041 Provider NFO (Kodi) + images locales
+- [x] T-042 Provider TMDB (films, séries, casting, collections)
+- [x] T-043 Provider MusicBrainz + Cover Art Archive
+- [x] T-044 Cache d'images, redimensionnement, blurhash, couleur dominante
+- [x] T-045 Flux « à identifier » + correction manuelle (API ; écran en M4)
+- [ ] T-046 Validation TMDB en conditions réelles avec une clé API (testé uniquement sur faux serveur)
+- [ ] T-047 Images des personnes (photos acteurs) servies via le cache, pas en URL distante
+- [ ] T-048 Rafraîchissement périodique des séries en cours (nouveaux épisodes)
+- [ ] T-049 Garde SSRF du téléchargeur d'images (bloquer IP privées/loopback pour les URL issues des NFO)
+- [ ] T-04A fanart.tv (logos, fonds d'artistes) — optionnel
+- [ ] T-04B API système : indiquer si TMDB est actif (pour l'UI « à identifier »)
 
 ## M4 — Parcourir & rechercher
 - [ ] T-050 API items (filtres, tri, curseur), home, détail

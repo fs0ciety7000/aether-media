@@ -160,6 +160,8 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 6. Événements SSE (`library.progress`, `item.added`) : l'UI se met à jour en direct.
 
 ### 5.2 Métadonnées
+> Implémenté en M3 : `internal/metadata` (contrat), `nfo` (local), `tmdb`, `musicbrainz`, `httpx` (client limité en débit + cache disque), `refresh` (orchestration), `internal/images` (cache adressé par contenu, variantes, blurhash). Statuts d'identification : `pending`, `matched`, `unmatched`, `manual`, `local`. Acceptation automatique : score ≥ 0,75 et avance ≥ 0,03 sur le 2ᵉ candidat. Sur une saison/un épisode, `providerIds.tmdb` est l'id TMDB de la saison/de l'épisode, pas de la série.
+
 - Ordre par défaut : **NFO local / images locales** → TMDB (films, séries) → TVDB (séries, en option) → MusicBrainz + Cover Art Archive (musique) → fanart.tv (logos et fonds, en option).
 - Identification : ids présents dans le nom ou le NFO ; sinon recherche par titre + année, avec un score de confiance. En dessous du seuil, l'item est marqué **« à identifier »** (correction manuelle dans l'UI).
 - Fusion champ par champ, en respectant les **champs verrouillés**. Rafraîchissement périodique pour les séries en cours.

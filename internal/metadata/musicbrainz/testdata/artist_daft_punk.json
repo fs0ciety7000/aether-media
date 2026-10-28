@@ -1,0 +1,287 @@
+{
+ "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+ "genres": [
+  {
+   "disambiguation": "",
+   "count": 2,
+   "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+   "name": "club"
+  },
+  {
+   "disambiguation": "",
+   "count": 6,
+   "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+   "name": "dance"
+  },
+  {
+   "name": "disco",
+   "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+   "disambiguation": "",
+   "count": 4
+  },
+  {
+   "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+   "count": 1,
+   "disambiguation": "",
+   "name": "edm"
+  },
+  {
+   "name": "electro",
+   "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+   "disambiguation": "",
+   "count": 3
+  },
+  {
+   "name": "electro house",
+   "count": 2,
+   "disambiguation": "",
+   "id": "05247982-e44f-4c58-96f8-a5453be69f5f"
+  },
+  {
+   "name": "electroclash",
+   "count": 1,
+   "disambiguation": "",
+   "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d"
+  },
+  {
+   "name": "electronic",
+   "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+   "count": 42,
+   "disambiguation": ""
+  },
+  {
+   "id": "c4a69842-f891-4569-9506-1882aa5db433",
+   "count": 2,
+   "disambiguation": "",
+   "name": "electronic rock"
+  },
+  {
+   "name": "electronica",
+   "disambiguation": "",
+   "count": 3,
+   "id": "53a3cea3-17af-4421-a07a-5824b540aeb5"
+  },
+  {
+   "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+   "count": 2,
+   "disambiguation": "",
+   "name": "french electro"
+  },
+  {
+   "name": "french house",
+   "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+   "count": 20,
+   "disambiguation": ""
+  },
+  {
+   "disambiguation": "",
+   "count": 2,
+   "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+   "name": "funk"
+  },
+  {
+   "name": "house",
+   "count": 22,
+   "disambiguation": "",
+   "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3"
+  },
+  {
+   "disambiguation": "",
+   "count": 1,
+   "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+   "name": "jackin house"
+  },
+  {
+   "count": 2,
+   "disambiguation": "",
+   "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+   "name": "nu disco"
+  },
+  {
+   "name": "organic house",
+   "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+   "disambiguation": "",
+   "count": 1
+  },
+  {
+   "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+   "disambiguation": "",
+   "count": 1,
+   "name": "pop"
+  },
+  {
+   "name": "r&b",
+   "disambiguation": "",
+   "count": 1,
+   "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3"
+  },
+  {
+   "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+   "disambiguation": "",
+   "count": 2,
+   "name": "synth-pop"
+  },
+  {
+   "name": "techno",
+   "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+   "count": 2,
+   "disambiguation": ""
+  },
+  {
+   "name": "trap",
+   "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+   "count": 1,
+   "disambiguation": ""
+  }
+ ],
+ "end-area": null,
+ "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+ "life-span": {
+  "begin": "1993",
+  "ended": true,
+  "end": "2021-02-22"
+ },
+ "country": "FR",
+ "type": "Group",
+ "gender-id": null,
+ "tags": [
+  {
+   "name": "club",
+   "count": 2
+  },
+  {
+   "name": "dance",
+   "count": 6
+  },
+  {
+   "name": "dance and electronica",
+   "count": 1
+  },
+  {
+   "count": 2,
+   "name": "dance music"
+  },
+  {
+   "name": "disco",
+   "count": 4
+  },
+  {
+   "name": "dj tools / acapellas",
+   "count": 1
+  },
+  {
+   "name": "edm",
+   "count": 1
+  },
+  {
+   "count": 3,
+   "name": "electro"
+  }
+ ],
+ "area": {
+  "type": null,
+  "disambiguation": "",
+  "id": "08310658-51eb-3801-80de-5a0739207115",
+  "type-id": null,
+  "iso-3166-1-codes": [
+   "FR"
+  ],
+  "sort-name": "France",
+  "name": "France"
+ },
+ "gender": null,
+ "begin-area": {
+  "type-id": null,
+  "iso-3166-2-codes": [
+   "FR-75"
+  ],
+  "disambiguation": "",
+  "type": null,
+  "id": "dc10c22b-e510-4006-8b7f-fecb4f36436e",
+  "name": "Paris",
+  "sort-name": "Paris"
+ },
+ "isnis": [
+  "0000000123531208"
+ ],
+ "disambiguation": "French electronic duo",
+ "ipis": [
+  "00711797335"
+ ],
+ "sort-name": "Daft Punk",
+ "name": "Daft Punk",
+ "relations": [
+  {
+   "url": {
+    "resource": "https://www.allmusic.com/artist/mn0000667669",
+    "id": "95b51286-5245-4830-a437-98e91915926d"
+   },
+   "direction": "forward",
+   "attribute-values": {},
+   "target-credit": "",
+   "end": null,
+   "ended": false,
+   "type": "allmusic",
+   "attributes": [],
+   "type-id": "6b3e3c85-0002-4f34-aca6-80ace0d7e846",
+   "begin": null,
+   "attribute-ids": {},
+   "source-credit": "",
+   "target-type": "url"
+  },
+  {
+   "ended": false,
+   "end": null,
+   "url": {
+    "id": "d984967f-34bc-402f-b6b5-9e3b1f37bd2c",
+    "resource": "https://www.bandsintown.com/a/263"
+   },
+   "target-credit": "",
+   "attribute-values": {},
+   "direction": "forward",
+   "attributes": [],
+   "type-id": "ea45ed3d-2d5e-456e-8c32-94b6f51426e2",
+   "type": "bandsintown",
+   "attribute-ids": {},
+   "begin": null,
+   "target-type": "url",
+   "source-credit": ""
+  },
+  {
+   "source-credit": "",
+   "target-type": "url",
+   "begin": null,
+   "attribute-ids": {},
+   "type": "BBC Music page",
+   "type-id": "d028a975-000c-4525-9333-d3c8425e4b54",
+   "attributes": [],
+   "attribute-values": {},
+   "target-credit": "",
+   "direction": "forward",
+   "url": {
+    "resource": "https://www.bbc.co.uk/music/artists/056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+    "id": "e4b6210e-cbcf-4dc9-977d-53cf33b555ac"
+   },
+   "ended": true,
+   "end": "2020-11-19"
+  },
+  {
+   "attribute-ids": {},
+   "begin": null,
+   "target-type": "url",
+   "source-credit": "",
+   "end": "2013-10-23",
+   "ended": true,
+   "direction": "forward",
+   "target-credit": "",
+   "attribute-values": {},
+   "url": {
+    "resource": "http://emimusic.jp/daftpunk",
+    "id": "12c720d8-04cf-4be1-b17b-fc92b10c73c4"
+   },
+   "type-id": "4fb0eeec-a6eb-4ae3-ad52-b55765b94e8f",
+   "attributes": [],
+   "type": "discography page"
+  }
+ ]
+}

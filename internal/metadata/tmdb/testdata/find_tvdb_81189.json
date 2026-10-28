@@ -1,0 +1,25 @@
+{
+  "movie_results": [],
+  "person_results": [],
+  "tv_results": [
+    {
+      "adult": false,
+      "backdrop_path": "/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg",
+      "id": 1396,
+      "name": "Breaking Bad",
+      "original_language": "en",
+      "original_name": "Breaking Bad",
+      "overview": "Walter White, 50 ans, est professeur de chimie dans un lycée du Nouveau-Mexique.",
+      "poster_path": "/eSzpy96DwBujGFj0xMbXBcGcfxX.jpg",
+      "media_type": "tv",
+      "genre_ids": [18, 80],
+      "popularity": 412.6,
+      "first_air_date": "2008-01-20",
+      "vote_average": 8.9,
+      "vote_count": 14882,
+      "origin_country": ["US"]
+    }
+  ],
+  "tv_episode_results": [],
+  "tv_season_results": []
+}

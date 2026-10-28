@@ -1,0 +1,1421 @@
+{
+ "primary-type-id": "f529b476-6e62-324f-b0aa-1f3e33d313fc",
+ "primary-type": "Album",
+ "releases": [
+  {
+   "date": "2001-02-26",
+   "title": "Discovery",
+   "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+   "release-events": [
+    {
+     "date": "2001-02-26",
+     "area": {
+      "iso-3166-1-codes": [
+       "AU"
+      ],
+      "type-id": null,
+      "id": "106e0bec-b638-3b37-b731-f53d507dc00e",
+      "name": "Australia",
+      "disambiguation": "",
+      "type": null,
+      "sort-name": "Australia"
+     }
+    }
+   ],
+   "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+   "text-representation": {
+    "script": "Latn",
+    "language": null
+   },
+   "quality": "normal",
+   "artist-credit": [
+    {
+     "joinphrase": "",
+     "artist": {
+      "genres": [
+       {
+        "name": "club",
+        "disambiguation": "",
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+        "count": 2
+       },
+       {
+        "disambiguation": "",
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "count": 6,
+        "name": "dance"
+       },
+       {
+        "disambiguation": "",
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "count": 4,
+        "name": "disco"
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "name": "edm"
+       },
+       {
+        "name": "electro",
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+        "count": 3,
+        "disambiguation": ""
+       },
+       {
+        "count": 2,
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "disambiguation": "",
+        "name": "electro house"
+       },
+       {
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+        "count": 1,
+        "disambiguation": "",
+        "name": "electroclash"
+       },
+       {
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+        "count": 42,
+        "disambiguation": "",
+        "name": "electronic"
+       },
+       {
+        "name": "electronic rock",
+        "disambiguation": "",
+        "count": 2,
+        "id": "c4a69842-f891-4569-9506-1882aa5db433"
+       },
+       {
+        "name": "electronica",
+        "disambiguation": "",
+        "count": 3,
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5"
+       },
+       {
+        "name": "french electro",
+        "disambiguation": "",
+        "count": 2,
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1"
+       },
+       {
+        "name": "french house",
+        "disambiguation": "",
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "count": 20
+       },
+       {
+        "name": "funk",
+        "disambiguation": "",
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+        "count": 2
+       },
+       {
+        "name": "house",
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22,
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "name": "jackin house"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+        "name": "nu disco"
+       },
+       {
+        "name": "organic house",
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "count": 1,
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "count": 1,
+        "name": "pop"
+       },
+       {
+        "name": "r&b",
+        "count": 1,
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "disambiguation": ""
+       },
+       {
+        "name": "synth-pop",
+        "disambiguation": "",
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "count": 2
+       },
+       {
+        "name": "techno",
+        "disambiguation": "",
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912"
+       },
+       {
+        "name": "trap",
+        "disambiguation": "",
+        "count": 1,
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f"
+       }
+      ],
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "name": "Daft Punk",
+      "disambiguation": "French electronic duo",
+      "country": "FR",
+      "sort-name": "Daft Punk",
+      "type": "Group"
+     },
+     "name": "Daft Punk"
+    }
+   ],
+   "barcode": "934065017098",
+   "genres": [],
+   "packaging": "Jewel Case",
+   "status": "Official",
+   "disambiguation": "",
+   "country": "AU",
+   "id": "bd3bb36e-16c8-438f-850e-dfbf4d1478f0"
+  },
+  {
+   "packaging": "Jewel Case",
+   "status": "Official",
+   "disambiguation": "",
+   "country": "FR",
+   "id": "d073287b-d1bd-4f11-a933-a4386f8cf701",
+   "title": "Discovery",
+   "date": "2001-02-26",
+   "text-representation": {
+    "language": "eng",
+    "script": "Latn"
+   },
+   "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+   "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+   "release-events": [
+    {
+     "area": {
+      "type": null,
+      "sort-name": "France",
+      "disambiguation": "",
+      "name": "France",
+      "type-id": null,
+      "id": "08310658-51eb-3801-80de-5a0739207115",
+      "iso-3166-1-codes": [
+       "FR"
+      ]
+     },
+     "date": "2001-02-26"
+    },
+    {
+     "area": {
+      "iso-3166-1-codes": [
+       "XE"
+      ],
+      "type-id": null,
+      "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+      "name": "Europe",
+      "disambiguation": "",
+      "type": null,
+      "sort-name": "Europe"
+     },
+     "date": "2001-03-12"
+    }
+   ],
+   "barcode": "724384960629",
+   "genres": [
+    {
+     "name": "electronic",
+     "count": 1,
+     "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+     "disambiguation": ""
+    },
+    {
+     "disambiguation": "",
+     "count": 1,
+     "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+     "name": "house"
+    }
+   ],
+   "quality": "normal",
+   "artist-credit": [
+    {
+     "name": "Daft Punk",
+     "artist": {
+      "genres": [
+       {
+        "name": "club",
+        "count": 2,
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+        "disambiguation": ""
+       },
+       {
+        "name": "dance",
+        "count": 6,
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "disambiguation": ""
+       },
+       {
+        "count": 4,
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "disambiguation": "",
+        "name": "disco"
+       },
+       {
+        "name": "edm",
+        "disambiguation": "",
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "count": 1
+       },
+       {
+        "count": 3,
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+        "disambiguation": "",
+        "name": "electro"
+       },
+       {
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "count": 2,
+        "disambiguation": "",
+        "name": "electro house"
+       },
+       {
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+        "count": 1,
+        "disambiguation": "",
+        "name": "electroclash"
+       },
+       {
+        "name": "electronic",
+        "disambiguation": "",
+        "count": 42,
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4"
+       },
+       {
+        "id": "c4a69842-f891-4569-9506-1882aa5db433",
+        "count": 2,
+        "disambiguation": "",
+        "name": "electronic rock"
+       },
+       {
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+        "count": 3,
+        "disambiguation": "",
+        "name": "electronica"
+       },
+       {
+        "name": "french electro",
+        "count": 2,
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 20,
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "name": "french house"
+       },
+       {
+        "name": "funk",
+        "disambiguation": "",
+        "count": 2,
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514"
+       },
+       {
+        "disambiguation": "",
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22,
+        "name": "house"
+       },
+       {
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "count": 1,
+        "disambiguation": "",
+        "name": "jackin house"
+       },
+       {
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+        "count": 2,
+        "disambiguation": "",
+        "name": "nu disco"
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "name": "organic house"
+       },
+       {
+        "name": "pop",
+        "disambiguation": "",
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "count": 1
+       },
+       {
+        "name": "r&b",
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "count": 1,
+        "disambiguation": ""
+       },
+       {
+        "name": "synth-pop",
+        "count": 2,
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "disambiguation": ""
+       },
+       {
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+        "disambiguation": "",
+        "name": "techno"
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+        "name": "trap"
+       }
+      ],
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "disambiguation": "French electronic duo",
+      "country": "FR",
+      "sort-name": "Daft Punk",
+      "type": "Group",
+      "name": "Daft Punk"
+     },
+     "joinphrase": ""
+    }
+   ]
+  },
+  {
+   "packaging": "Jewel Case",
+   "status": "Official",
+   "disambiguation": "1st pressing",
+   "country": "JP",
+   "id": "ab5ca495-8983-41b9-86b4-46a981d173be",
+   "date": "2001-03-10",
+   "title": "Discovery",
+   "release-events": [
+    {
+     "area": {
+      "iso-3166-1-codes": [
+       "JP"
+      ],
+      "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+      "type-id": null,
+      "disambiguation": "",
+      "sort-name": "Japan",
+      "type": null,
+      "name": "Japan"
+     },
+     "date": "2001-03-10"
+    }
+   ],
+   "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+   "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+   "text-representation": {
+    "script": null,
+    "language": null
+   },
+   "artist-credit": [
+    {
+     "name": "Daft Punk",
+     "joinphrase": "",
+     "artist": {
+      "name": "Daft Punk",
+      "disambiguation": "French electronic duo",
+      "country": "FR",
+      "type": "Group",
+      "sort-name": "Daft Punk",
+      "genres": [
+       {
+        "name": "club",
+        "disambiguation": "",
+        "count": 2,
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b"
+       },
+       {
+        "disambiguation": "",
+        "count": 6,
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "name": "dance"
+       },
+       {
+        "disambiguation": "",
+        "count": 4,
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "name": "disco"
+       },
+       {
+        "name": "edm",
+        "count": 1,
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 3,
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+        "name": "electro"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "name": "electro house"
+       },
+       {
+        "name": "electroclash",
+        "count": 1,
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 42,
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+        "name": "electronic"
+       },
+       {
+        "name": "electronic rock",
+        "disambiguation": "",
+        "count": 2,
+        "id": "c4a69842-f891-4569-9506-1882aa5db433"
+       },
+       {
+        "name": "electronica",
+        "disambiguation": "",
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+        "count": 3
+       },
+       {
+        "count": 2,
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+        "disambiguation": "",
+        "name": "french electro"
+       },
+       {
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "count": 20,
+        "disambiguation": "",
+        "name": "french house"
+       },
+       {
+        "name": "funk",
+        "disambiguation": "",
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+        "count": 2
+       },
+       {
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22,
+        "disambiguation": "",
+        "name": "house"
+       },
+       {
+        "count": 1,
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "disambiguation": "",
+        "name": "jackin house"
+       },
+       {
+        "name": "nu disco",
+        "disambiguation": "",
+        "count": 2,
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0"
+       },
+       {
+        "name": "organic house",
+        "count": 1,
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "disambiguation": ""
+       },
+       {
+        "name": "pop",
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "count": 1,
+        "disambiguation": ""
+       },
+       {
+        "name": "r&b",
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "count": 1,
+        "disambiguation": ""
+       },
+       {
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "count": 2,
+        "disambiguation": "",
+        "name": "synth-pop"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+        "name": "techno"
+       },
+       {
+        "disambiguation": "",
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+        "count": 1,
+        "name": "trap"
+       }
+      ],
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56"
+     }
+    }
+   ],
+   "quality": "normal",
+   "genres": [],
+   "barcode": "4988006788367"
+  },
+  {
+   "packaging": null,
+   "status": "Official",
+   "country": "JP",
+   "disambiguation": "",
+   "id": "51467269-3122-3d7e-92b2-0f0a694d30c1",
+   "title": "Discovery",
+   "date": "2001-03-10",
+   "text-representation": {
+    "language": "eng",
+    "script": "Latn"
+   },
+   "packaging-id": null,
+   "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+   "release-events": [
+    {
+     "area": {
+      "type-id": null,
+      "id": "2db42837-c832-3c27-b4a3-08198f75693c",
+      "iso-3166-1-codes": [
+       "JP"
+      ],
+      "name": "Japan",
+      "type": null,
+      "sort-name": "Japan",
+      "disambiguation": ""
+     },
+     "date": "2001-03-10"
+    }
+   ],
+   "barcode": "4988006788367",
+   "genres": [],
+   "quality": "normal",
+   "artist-credit": [
+    {
+     "artist": {
+      "type": "Group",
+      "sort-name": "Daft Punk",
+      "country": "FR",
+      "disambiguation": "French electronic duo",
+      "name": "Daft Punk",
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+      "genres": [
+       {
+        "count": 2,
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+        "disambiguation": "",
+        "name": "club"
+       },
+       {
+        "disambiguation": "",
+        "count": 6,
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "name": "dance"
+       },
+       {
+        "disambiguation": "",
+        "count": 4,
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "name": "disco"
+       },
+       {
+        "name": "edm",
+        "count": 1,
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "disambiguation": ""
+       },
+       {
+        "name": "electro",
+        "count": 3,
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "name": "electro house"
+       },
+       {
+        "name": "electroclash",
+        "disambiguation": "",
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+        "count": 1
+       },
+       {
+        "name": "electronic",
+        "disambiguation": "",
+        "count": 42,
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "c4a69842-f891-4569-9506-1882aa5db433",
+        "name": "electronic rock"
+       },
+       {
+        "name": "electronica",
+        "disambiguation": "",
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+        "count": 3
+       },
+       {
+        "disambiguation": "",
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+        "count": 2,
+        "name": "french electro"
+       },
+       {
+        "name": "french house",
+        "count": 20,
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+        "name": "funk"
+       },
+       {
+        "name": "house",
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22,
+        "disambiguation": ""
+       },
+       {
+        "name": "jackin house",
+        "count": 1,
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "disambiguation": ""
+       },
+       {
+        "count": 2,
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+        "disambiguation": "",
+        "name": "nu disco"
+       },
+       {
+        "count": 1,
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "disambiguation": "",
+        "name": "organic house"
+       },
+       {
+        "name": "pop",
+        "count": 1,
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "disambiguation": ""
+       },
+       {
+        "name": "r&b",
+        "disambiguation": "",
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "count": 1
+       },
+       {
+        "disambiguation": "",
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "count": 2,
+        "name": "synth-pop"
+       },
+       {
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+        "disambiguation": "",
+        "name": "techno"
+       },
+       {
+        "name": "trap",
+        "count": 1,
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+        "disambiguation": ""
+       }
+      ]
+     },
+     "joinphrase": "",
+     "name": "Daft Punk"
+    }
+   ]
+  },
+  {
+   "id": "098060d4-ba3c-469d-88b0-08642261c7ab",
+   "disambiguation": "",
+   "country": "XE",
+   "packaging": "Jewel Case",
+   "status": "Official",
+   "barcode": "724354278228",
+   "genres": [
+    {
+     "disambiguation": "",
+     "count": 1,
+     "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+     "name": "electro"
+    },
+    {
+     "disambiguation": "",
+     "count": 1,
+     "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+     "name": "electronic"
+    },
+    {
+     "name": "electronic rock",
+     "disambiguation": "",
+     "count": 1,
+     "id": "c4a69842-f891-4569-9506-1882aa5db433"
+    },
+    {
+     "name": "house",
+     "count": 1,
+     "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+     "disambiguation": ""
+    }
+   ],
+   "quality": "normal",
+   "artist-credit": [
+    {
+     "artist": {
+      "genres": [
+       {
+        "name": "club",
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+        "count": 2,
+        "disambiguation": ""
+       },
+       {
+        "count": 6,
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "disambiguation": "",
+        "name": "dance"
+       },
+       {
+        "name": "disco",
+        "count": 4,
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "disambiguation": ""
+       },
+       {
+        "name": "edm",
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "count": 1,
+        "disambiguation": ""
+       },
+       {
+        "name": "electro",
+        "disambiguation": "",
+        "count": 3,
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "name": "electro house"
+       },
+       {
+        "name": "electroclash",
+        "disambiguation": "",
+        "count": 1,
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d"
+       },
+       {
+        "count": 42,
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+        "disambiguation": "",
+        "name": "electronic"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "c4a69842-f891-4569-9506-1882aa5db433",
+        "name": "electronic rock"
+       },
+       {
+        "name": "electronica",
+        "disambiguation": "",
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+        "count": 3
+       },
+       {
+        "name": "french electro",
+        "count": 2,
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+        "disambiguation": ""
+       },
+       {
+        "name": "french house",
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "count": 20,
+        "disambiguation": ""
+       },
+       {
+        "name": "funk",
+        "disambiguation": "",
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+        "count": 2
+       },
+       {
+        "disambiguation": "",
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22,
+        "name": "house"
+       },
+       {
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "count": 1,
+        "disambiguation": "",
+        "name": "jackin house"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+        "name": "nu disco"
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "name": "organic house"
+       },
+       {
+        "count": 1,
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "disambiguation": "",
+        "name": "pop"
+       },
+       {
+        "disambiguation": "",
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "count": 1,
+        "name": "r&b"
+       },
+       {
+        "disambiguation": "",
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "count": 2,
+        "name": "synth-pop"
+       },
+       {
+        "name": "techno",
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+        "disambiguation": ""
+       },
+       {
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+        "count": 1,
+        "disambiguation": "",
+        "name": "trap"
+       }
+      ],
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "country": "FR",
+      "disambiguation": "French electronic duo",
+      "sort-name": "Daft Punk",
+      "type": "Group",
+      "name": "Daft Punk"
+     },
+     "joinphrase": "",
+     "name": "Daft Punk"
+    }
+   ],
+   "text-representation": {
+    "language": "eng",
+    "script": "Latn"
+   },
+   "packaging-id": "ec27701a-4a22-37f4-bfac-6616e0f9750a",
+   "release-events": [
+    {
+     "date": "2001-03-12",
+     "area": {
+      "sort-name": "Europe",
+      "type": null,
+      "disambiguation": "",
+      "name": "Europe",
+      "id": "89a675c2-3e37-3518-b83c-418bad59a85a",
+      "type-id": null,
+      "iso-3166-1-codes": [
+       "XE"
+      ]
+     }
+    }
+   ],
+   "status-id": "4e304316-386d-3409-af2e-78857eec5cfe",
+   "title": "Discovery",
+   "date": "2001-03-12"
+  },
+  {
+   "date": "2001-03-12",
+   "title": "Discovery",
+   "status-id": null,
+   "release-events": [
+    {
+     "date": "2001-03-12",
+     "area": {
+      "name": "Europe",
+      "disambiguation": "",
+      "type": null,
+      "sort-name": "Europe",
+      "iso-3166-1-codes": [
+       "XE"
+      ],
+      "type-id": null,
+      "id": "89a675c2-3e37-3518-b83c-418bad59a85a"
+     }
+    }
+   ],
+   "packaging-id": null,
+   "text-representation": {
+    "language": null,
+    "script": null
+   },
+   "artist-credit": [
+    {
+     "name": "Daft Punk",
+     "joinphrase": "",
+     "artist": {
+      "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+      "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+      "genres": [
+       {
+        "count": 2,
+        "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+        "disambiguation": "",
+        "name": "club"
+       },
+       {
+        "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+        "count": 6,
+        "disambiguation": "",
+        "name": "dance"
+       },
+       {
+        "name": "disco",
+        "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+        "count": 4,
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+        "count": 1,
+        "name": "edm"
+       },
+       {
+        "name": "electro",
+        "count": 3,
+        "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+        "disambiguation": ""
+       },
+       {
+        "name": "electro house",
+        "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+        "count": 2,
+        "disambiguation": ""
+       },
+       {
+        "disambiguation": "",
+        "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+        "count": 1,
+        "name": "electroclash"
+       },
+       {
+        "disambiguation": "",
+        "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+        "count": 42,
+        "name": "electronic"
+       },
+       {
+        "id": "c4a69842-f891-4569-9506-1882aa5db433",
+        "count": 2,
+        "disambiguation": "",
+        "name": "electronic rock"
+       },
+       {
+        "disambiguation": "",
+        "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+        "count": 3,
+        "name": "electronica"
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "bb55e7aa-ec06-4605-b867-ee66938713e1",
+        "name": "french electro"
+       },
+       {
+        "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+        "count": 20,
+        "disambiguation": "",
+        "name": "french house"
+       },
+       {
+        "disambiguation": "",
+        "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+        "count": 2,
+        "name": "funk"
+       },
+       {
+        "name": "house",
+        "disambiguation": "",
+        "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+        "count": 22
+       },
+       {
+        "count": 1,
+        "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+        "disambiguation": "",
+        "name": "jackin house"
+       },
+       {
+        "name": "nu disco",
+        "disambiguation": "",
+        "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+        "count": 2
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+        "name": "organic house"
+       },
+       {
+        "disambiguation": "",
+        "count": 1,
+        "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+        "name": "pop"
+       },
+       {
+        "count": 1,
+        "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+        "disambiguation": "",
+        "name": "r&b"
+       },
+       {
+        "name": "synth-pop",
+        "disambiguation": "",
+        "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+        "count": 2
+       },
+       {
+        "disambiguation": "",
+        "count": 2,
+        "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+        "name": "techno"
+       },
+       {
+        "disambiguation": "",
+        "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+        "count": 1,
+        "name": "trap"
+       }
+      ],
+      "sort-name": "Daft Punk",
+      "type": "Group",
+      "country": "FR",
+      "disambiguation": "French electronic duo",
+      "name": "Daft Punk"
+     }
+    }
+   ],
+   "quality": "normal",
+   "genres": [],
+   "barcode": "724384960629",
+   "packaging": null,
+   "status": null,
+   "disambiguation": "",
+   "country": "XE",
+   "id": "4375a6b0-cd50-4f59-be32-13161c0fc448"
+  }
+ ],
+ "disambiguation": "",
+ "title": "Discovery",
+ "id": "48117b90-a16e-34ca-a514-19c702df1158",
+ "artist-credit": [
+  {
+   "name": "Daft Punk",
+   "joinphrase": "",
+   "artist": {
+    "sort-name": "Daft Punk",
+    "type": "Group",
+    "country": "FR",
+    "disambiguation": "French electronic duo",
+    "name": "Daft Punk",
+    "id": "056e4f3e-d505-4dad-8ec1-d04f521cbb56",
+    "type-id": "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+    "genres": [
+     {
+      "name": "club",
+      "count": 2,
+      "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+      "disambiguation": ""
+     },
+     {
+      "name": "dance",
+      "count": 6,
+      "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+      "disambiguation": ""
+     },
+     {
+      "name": "disco",
+      "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+      "count": 4,
+      "disambiguation": ""
+     },
+     {
+      "count": 1,
+      "id": "3976e9ba-16d0-461d-b732-99408a0374ba",
+      "disambiguation": "",
+      "name": "edm"
+     },
+     {
+      "name": "electro",
+      "disambiguation": "",
+      "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+      "count": 3
+     },
+     {
+      "name": "electro house",
+      "disambiguation": "",
+      "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+      "count": 2
+     },
+     {
+      "disambiguation": "",
+      "id": "cae57e98-c939-4b0e-ae49-8e0cb1bdc91d",
+      "count": 1,
+      "name": "electroclash"
+     },
+     {
+      "name": "electronic",
+      "count": 42,
+      "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+      "disambiguation": ""
+     },
+     {
+      "disambiguation": "",
+      "id": "c4a69842-f891-4569-9506-1882aa5db433",
+      "count": 2,
+      "name": "electronic rock"
+     },
+     {
+      "name": "electronica",
+      "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+      "count": 3,
+      "disambiguation": ""
+     },
+     {
+      "name": "french electro",
+      "disambiguation": "",
+      "count": 2,
+      "id": "bb55e7aa-ec06-4605-b867-ee66938713e1"
+     },
+     {
+      "count": 20,
+      "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+      "disambiguation": "",
+      "name": "french house"
+     },
+     {
+      "name": "funk",
+      "count": 2,
+      "id": "fe4ba6a1-9873-4fd0-a12b-a70c81818514",
+      "disambiguation": ""
+     },
+     {
+      "count": 22,
+      "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3",
+      "disambiguation": "",
+      "name": "house"
+     },
+     {
+      "id": "d5c8b95a-fcf6-4c1d-b98c-a7cb4efb494f",
+      "count": 1,
+      "disambiguation": "",
+      "name": "jackin house"
+     },
+     {
+      "disambiguation": "",
+      "count": 2,
+      "id": "351424dd-91a3-4cf2-9edb-5df647743ec0",
+      "name": "nu disco"
+     },
+     {
+      "disambiguation": "",
+      "id": "640fb6e1-c2b9-40be-bbd0-4da3c4d4832c",
+      "count": 1,
+      "name": "organic house"
+     },
+     {
+      "disambiguation": "",
+      "count": 1,
+      "id": "911c7bbb-172d-4df8-9478-dbff4296e791",
+      "name": "pop"
+     },
+     {
+      "name": "r&b",
+      "disambiguation": "",
+      "id": "31be54b2-4d0c-42df-aa44-c496c7b4c3c3",
+      "count": 1
+     },
+     {
+      "count": 2,
+      "id": "988e91a3-3341-416d-b7f8-7dbef6848dac",
+      "disambiguation": "",
+      "name": "synth-pop"
+     },
+     {
+      "id": "41fe3260-fcc1-450b-bd5a-803886c56912",
+      "count": 2,
+      "disambiguation": "",
+      "name": "techno"
+     },
+     {
+      "disambiguation": "",
+      "count": 1,
+      "id": "9a339aa8-a0e5-450c-95a7-b11517bb508f",
+      "name": "trap"
+     }
+    ]
+   }
+  }
+ ],
+ "genres": [
+  {
+   "disambiguation": "",
+   "id": "10fd28e3-51aa-4110-a3dd-032d8a141f99",
+   "count": 1,
+   "name": "boogie"
+  },
+  {
+   "count": 1,
+   "id": "bab69b07-8bb9-4415-b666-c37609cef80b",
+   "disambiguation": "",
+   "name": "club"
+  },
+  {
+   "count": 3,
+   "id": "e5bba957-8c91-496a-a675-c6d0c6b51c33",
+   "disambiguation": "",
+   "name": "dance"
+  },
+  {
+   "disambiguation": "",
+   "id": "b739a895-85ed-4ad3-8717-4e9ef5387dd8",
+   "count": 2,
+   "name": "dance-pop"
+  },
+  {
+   "count": 1,
+   "id": "a04d680b-b5c5-4f6a-87a3-f9f1ff98e3ea",
+   "disambiguation": "",
+   "name": "disco"
+  },
+  {
+   "name": "downtempo",
+   "disambiguation": "",
+   "id": "cc38aba3-48ed-439a-83b9-f81a34a66598",
+   "count": 1
+  },
+  {
+   "name": "electro",
+   "disambiguation": "",
+   "id": "60f00d05-df4d-496e-8f5a-c45c03a56ad4",
+   "count": 3
+  },
+  {
+   "disambiguation": "",
+   "id": "05247982-e44f-4c58-96f8-a5453be69f5f",
+   "count": 1,
+   "name": "electro house"
+  },
+  {
+   "count": 1,
+   "id": "f6cd97fb-7c7c-483e-9f98-e5c0abe1b1b2",
+   "disambiguation": "",
+   "name": "electro-disco"
+  },
+  {
+   "name": "electronic",
+   "count": 14,
+   "id": "89255676-1f14-4dd8-bbad-fca839d6aff4",
+   "disambiguation": ""
+  },
+  {
+   "disambiguation": "",
+   "count": 2,
+   "id": "53a3cea3-17af-4421-a07a-5824b540aeb5",
+   "name": "electronica"
+  },
+  {
+   "name": "euro house",
+   "disambiguation": "",
+   "count": 2,
+   "id": "8f8cbcde-3948-4be5-8bf0-8073f13e4b60"
+  },
+  {
+   "disambiguation": "",
+   "id": "5acda04e-995d-4f79-9a66-5fe6a977ce15",
+   "count": 8,
+   "name": "french house"
+  },
+  {
+   "count": 2,
+   "id": "62e4c7cb-a2b3-462b-8d96-1b0d66ee6cf3",
+   "disambiguation": "",
+   "name": "funky house"
+  },
+  {
+   "name": "house",
+   "disambiguation": "",
+   "count": 20,
+   "id": "a2782cb6-1cd0-477c-a61d-b3f8b42dd1b3"
+  },
+  {
+   "name": "progressive house",
+   "count": 4,
+   "id": "70adb285-e1f7-458a-823f-5cbda5e291c4",
+   "disambiguation": ""
+  },
+  {
+   "disambiguation": "",
+   "id": "4dcf868a-cbcb-4969-beff-d75c91d0bd47",
+   "count": 2,
+   "name": "synth funk"
+  },
+  {
+   "name": "tech house",
+   "disambiguation": "",
+   "count": 1,
+   "id": "1f9c4b4a-c43d-40bd-b806-357153641fd0"
+  }
+ ],
+ "first-release-date": "2001-02-26",
+ "secondary-types": [],
+ "secondary-type-ids": []
+}

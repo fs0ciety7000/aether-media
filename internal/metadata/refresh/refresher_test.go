@@ -26,7 +26,7 @@ type fakeRemote struct {
 	fetches int
 }
 
-func (f *fakeRemote) Name() string { return "fake" }
+func (f *fakeRemote) Name() string  { return "fake" }
 func (f *fakeRemote) Enabled() bool { return f.enabled }
 func (f *fakeRemote) Supports(kind string) bool {
 	return kind != metadata.KindArtist && kind != metadata.KindAlbum
@@ -48,8 +48,8 @@ func (f *fakeRemote) Fetch(_ context.Context, q metadata.Query) (*metadata.Resul
 
 type fakeLocal struct{ byTitle map[string]*metadata.Result }
 
-func (fakeLocal) Name() string           { return "local" }
-func (fakeLocal) Supports(k string) bool { return true }
+func (fakeLocal) Name() string         { return "local" }
+func (fakeLocal) Supports(string) bool { return true }
 func (f fakeLocal) Local(_ context.Context, q metadata.Query) (*metadata.Result, error) {
 	return f.byTitle[q.Title], nil
 }

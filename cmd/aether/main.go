@@ -18,9 +18,16 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/api"
 	"github.com/fs0ciety7000/aether-media/internal/config"
 	"github.com/fs0ciety7000/aether-media/internal/events"
+	"github.com/fs0ciety7000/aether-media/internal/images"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/library"
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
+	"github.com/fs0ciety7000/aether-media/internal/metadata"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/httpx"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/musicbrainz"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/nfo"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/tmdb"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/version"
@@ -110,10 +117,12 @@ func runMigrate(args []string) error {
 
 // services are the long-lived components shared by serve and scan.
 type services struct {
-	store   *store.Store
-	hub     *events.Hub
-	runner  *jobs.Runner
-	scanner *library.Scanner
+	store     *store.Store
+	hub       *events.Hub
+	runner    *jobs.Runner
+	scanner   *library.Scanner
+	refresher *refresh.Refresher
+	images    *images.Cache
 }
 
 func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
@@ -132,7 +141,56 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	}
 	runner.Register(library.JobScan, 1, scanner.HandleScanJob)
 	runner.Register(library.JobProbe, cfg.Library.ProbeWorkers, scanner.ProbeHandler(prober))
-	return &services{store: st, hub: hub, runner: runner, scanner: scanner}, nil
+
+	imgs, err := images.New(images.Options{Dir: filepath.Join(cfg.Paths.Cache, "images"), UserAgent: userAgent()})
+	if err != nil {
+		return nil, err
+	}
+	refresher := newRefresher(cfg, st, runner, hub, log, imgs)
+	runner.Register(refresh.JobRefresh, 2, refresher.HandleRefresh)
+	runner.Register(refresh.JobImage, 4, refresher.HandleImage)
+	scanner.AfterScan = func(ctx context.Context, libID int64) {
+		if err := refresher.EnqueueLibrary(ctx, libID); err != nil {
+			log.Error("planification des métadonnées", "library", libID, "err", err)
+		}
+	}
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs}, nil
+}
+
+func userAgent() string {
+	return "Aether/" + version.Version + " ( https://github.com/fs0ciety7000/aether-media )"
+}
+
+// newRefresher assembles metadata providers: local NFO/artwork first, then
+// TMDB (films, séries; needs an API key) and MusicBrainz (musique).
+func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache) *refresh.Refresher {
+	httpCache := filepath.Join(cfg.Paths.Cache, "http")
+	var remote []metadata.RemoteProvider
+	tm := tmdb.New(tmdb.Config{APIKey: cfg.Metadata.TMDBAPIKey, Language: cfg.Metadata.Language},
+		httpx.New(httpx.Options{UserAgent: userAgent(), RatePerSec: 20, CacheDir: filepath.Join(httpCache, "tmdb")}))
+	if tm.Enabled() {
+		log.Info("TMDB activé", "language", cfg.Metadata.Language)
+	} else {
+		log.Warn("TMDB désactivé : aucune clé API (metadata.tmdb_api_key / AETHER_TMDB_API_KEY)")
+	}
+	remote = append(remote, tm)
+	if !cfg.Metadata.DisableMusicBrainz {
+		remote = append(remote, musicbrainz.New(musicbrainz.Config{},
+			httpx.New(httpx.Options{UserAgent: userAgent(), RatePerSec: 1, CacheDir: filepath.Join(httpCache, "musicbrainz")})))
+	}
+	ingest := func(ctx context.Context, src string) (refresh.ImageInfo, error) {
+		s, err := imgs.Ingest(ctx, src)
+		if errors.Is(err, images.ErrNotFound) || errors.Is(err, images.ErrNotImage) ||
+			errors.Is(err, images.ErrTooLarge) || errors.Is(err, images.ErrBadSource) {
+			return refresh.ImageInfo{}, fmt.Errorf("%w: %w", jobs.ErrPermanent, err)
+		}
+		if err != nil {
+			return refresh.ImageInfo{}, err
+		}
+		return refresh.ImageInfo{Hash: s.Hash, Width: s.Width, Height: s.Height, Blurhash: s.Blurhash, Dominant: s.Dominant}, nil
+	}
+	return refresh.New(st, runner, hub, log, refresh.Config{Language: cfg.Metadata.Language},
+		[]metadata.LocalProvider{nfo.New()}, remote, ingest)
 }
 
 func runServe(args []string) error {
@@ -165,6 +223,7 @@ func runServe(args []string) error {
 		Addr: cfg.Addr(),
 		Handler: api.New(api.Deps{
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
+			Refresher: svc.refresher, Images: svc.images,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -237,14 +296,14 @@ func runScan(args []string) error {
 		}
 		pending := int64(0)
 		for _, st := range stats {
-			if st.Kind == library.JobProbe && st.Status != "failed" {
+			if st.Kind != library.JobScan && st.Status != "failed" {
 				pending += st.N
 			}
 		}
 		if pending == 0 {
 			break
 		}
-		log.Info("analyse des médias", "restants", pending)
+		log.Info("analyse et métadonnées en cours", "jobs restants", pending)
 		select {
 		case <-ctx.Done():
 		case <-time.After(2 * time.Second):
