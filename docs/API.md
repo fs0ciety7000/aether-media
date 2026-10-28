@@ -277,7 +277,7 @@ type SyncConnection = {
         | "connected"
         | "reauth_required"     // jeton refusé ou expiré : reconnecter (connect → poll)
   account?: { username: string }
-  supported: SyncFeature[]      // trakt : les 5 ; simkl : scrobble (ajout à l'historique en fin de lecture), history, watchlist, ratings
+  supported: SyncFeature[]      // trakt : les 5 ; simkl : scrobble (/scrobble/start|pause|stop, vu à ≥ 80 %), history, watchlist, ratings
   features: Record<SyncFeature, boolean>   // options activées (défaut : toutes celles supportées)
   syncing: boolean              // une synchronisation est en file ou en cours
   connectedAt?: string; lastSyncAt?: string
@@ -328,7 +328,7 @@ Liste « à voir » par utilisateur (films et séries), synchronisée avec la wa
 - `PUT /items/{id}/userdata` : `rating: null` efface la note (synchronisé aussi).
 
 ### Comportement
-- **Scrobbling** (option `scrobble`) : `POST /playback/{id}` → *start* ; ping avec `paused` qui change → *pause* / *start* ; fin de lecture (règle « vu » ci-dessus) → *stop* (Trakt le compte comme vu) ; `DELETE` de session avant la fin → *pause* (Trakt garde la progression). Simkl : ajout à l'historique à la fin. Asynchrone (file de tâches) : la lecture n'attend jamais le service.
+- **Scrobbling** (option `scrobble`) : `POST /playback/{id}` → *start* ; ping avec `paused` qui change → *pause* / *start* ; fin de lecture (règle « vu » ci-dessus) → *stop* (Trakt et Simkl le comptent comme vu à partir de 80 %) ; `DELETE` de session avant la fin → *pause* (le service garde la progression). Simkl : mêmes événements via ses propres `/scrobble/*` ; ses points de reprise ne sont pas encore synchronisés. Asynchrone (file de tâches) : la lecture n'attend jamais le service.
 - **Synchronisation** (options `history`, `progress`, `watchlist`, `ratings`) : import complet à la connexion, puis toutes les 30 minutes et ~1 minute après chaque changement local (vu/non vu, note, watchlist, progression). Comparaison à trois points (état local, état distant, dernier état synchronisé) : un changement d'un seul côté est recopié de l'autre ; s'il a changé des deux côtés, **la date la plus récente gagne** et un `SyncEvent` `conflict` est journalisé.
 - Correspondance par identifiants (`providerIds` tmdb / imdb / tvdb) : films et séries directement, épisodes par la série + numéros de saison et d'épisode. Les éléments absents de la bibliothèque (ou non visibles par l'utilisateur) sont ignorés.
 - Notes : Aether 0–10 (décimales) ↔ entiers 1–10 (arrondi, minimum 1).

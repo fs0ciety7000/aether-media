@@ -443,12 +443,11 @@ func TestWatchlistAndProgress(t *testing.T) {
 
 func TestSimklPinAndHistory(t *testing.T) {
 	e := newEnv(t)
-	e.fs.json("GET", "/oauth/pin", 200, `{"result":"OK","device_code":"DEVICE","user_code":"7K3Q9","verification_url":"https://simkl.com/pin","expires_in":900,"interval":5}`)
+	simklEmpty(e.fs)
+	e.fs.json("GET", "/oauth/pin", 200, `{"result":"OK","device_code":"DEVICE_CODE","user_code":"7K3Q9","verification_uri":"https://simkl.com/pin",
+		"verification_url":"https://simkl.com/pin","expires_in":900,"interval":5}`)
 	polls := 0
-	e.fs.on("GET", "/oauth/pin/7K3Q9", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("client_id") != "cid-simkl" {
-			t.Errorf("client id missing: %s", r.URL.RawQuery)
-		}
+	e.fs.on("GET", "/oauth/pin/7K3Q9", func(w http.ResponseWriter, _ *http.Request) {
 		polls++
 		if polls == 1 {
 			_, _ = w.Write([]byte(`{"result":"KO","message":"Authorization pending"}`))
@@ -456,16 +455,36 @@ func TestSimklPinAndHistory(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`{"result":"OK","access_token":"simkl-token"}`))
 	})
-	e.fs.json("POST", "/users/settings", 200, `{"user":{"name":"alice_s"},"account":{"id":42}}`)
-	e.fs.json("POST", "/sync/activities", 200, `{"all":"2026-10-20T00:00:00Z"}`)
 	movie := e.movie("Heat", `{"imdb":"tt0113277"}`)
-	e.fs.json("GET", "/sync/all-items/movies/", 200, `{"movies":[{"status":"completed","last_watched_at":"2026-10-20T00:00:00Z",
-		"user_rating":8,"user_rated_at":"2026-10-20T00:00:00Z","movie":{"title":"Heat","ids":{"simkl":5,"imdb":"tt0113277","tmdb":"949"}}}]}`)
-	e.fs.json("GET", "/sync/all-items/shows/", 200, `{}`)
-	e.fs.json("GET", "/sync/all-items/anime/", 200, `{"anime":null}`)
+	old := e.movie("Alien", `{"imdb":"tt0078748"}`)
+	series := e.item("series", "Breaking Bad", `{"tvdb":"81189"}`, 0, 0, 0)
+	ep := e.episode(series, 5, 16)
+	anime := e.item("series", "Attack on Titan", `{"tvdb":"267440"}`, 0, 0, 0)
+	aep := e.episode(anime, 2, 4)
+	e.fs.json("GET", "/sync/all-items/movies", 200, `{"movies":[{"status":"completed","last_watched_at":"2026-10-20T00:00:00Z",
+		"user_rating":8,"user_rated_at":"2026-10-20T00:00:00Z","movie":{"title":"Heat","ids":{"simkl":5,"imdb":"tt0113277","tmdb":"949"}}},
+		{"status":"completed","last_watched_at":"1970-01-01T00:00:01Z","user_rating":null,"movie":{"title":"Alien","ids":{"simkl":6,"imdb":"tt0078748"}}}]}`)
+	// A completed show only carries its episodes with include_all_episodes.
+	e.fs.on("GET", "/sync/all-items/shows", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("include_all_episodes") != "yes" {
+			_, _ = w.Write([]byte(`{"shows":[{"status":"completed","show":{"ids":{"simkl":11,"tvdb":"81189"}}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"shows":[{"status":"completed","last_watched_at":"2026-10-21T00:00:00Z","show":{"ids":{"simkl":11,"tvdb":"81189"}},
+			"seasons":[{"number":5,"episodes":[{"number":16,"watched_at":"2026-10-21T00:00:00Z"}]}]}]}`))
+	})
+	// Anime: per-cour numbering (S2 is its own title, episode 4 of season 1),
+	// mapped to TVDB numbering with extended=full_anime_seasons.
+	e.fs.json("GET", "/sync/all-items/anime", 200, `{"anime":[{"status":"watching","show":{"ids":{"simkl":39687,"tvdb":"267440","mal":"20958"}},
+		"anime_type":"tv","mapped_tvdb_seasons":[2],"seasons":[{"number":1,"episodes":[{"number":4,"watched_at":"2026-10-22T00:00:00Z",
+		"tvdb":{"season":2,"episode":4}}]}]}]}`)
 
-	if _, err := e.svc.Connect(e.ctx, e.user, "simkl"); err != nil {
+	pend, err := e.svc.Connect(e.ctx, e.user, "simkl")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if pend.UserCode != "7K3Q9" || pend.VerificationURL != "https://simkl.com/pin" {
+		t.Fatalf("pending: %+v", pend)
 	}
 	if res, _ := e.svc.Poll(e.ctx, e.user, "simkl"); res.Status != "pending" {
 		t.Fatalf("poll 1: %+v", res)
@@ -482,15 +501,115 @@ func TestSimklPinAndHistory(t *testing.T) {
 	if d.Played != 1 || !d.Rating.Valid || d.Rating.Float64 != 8 {
 		t.Errorf("imported: %+v", d)
 	}
-	if got := e.fs.find("GET", "/sync/all-items/movies/"); len(got) != 1 || got[0].auth != "Bearer simkl-token" {
+	if d := e.userData(old); d.Played != 1 {
+		t.Errorf("watched with unknown date: %+v", d)
+	}
+	if d := e.userData(ep); d.Played != 1 {
+		t.Errorf("episode of a completed show: %+v", d)
+	}
+	if d := e.userData(aep); d.Played != 1 {
+		t.Errorf("anime episode (TVDB S02E04): %+v", d)
+	}
+	if got := e.fs.find("GET", "/sync/all-items/movies"); len(got) != 1 || got[0].auth != "Bearer simkl-token" {
 		t.Errorf("auth: %+v", got)
 	}
+	if got := e.fs.find("GET", "/sync/all-items/anime"); len(got) != 1 || !strings.Contains(got[0].query, "extended=full_anime_seasons") {
+		t.Errorf("anime query: %+v", got)
+	}
+	// Every call identifies the application in its query string.
+	e.fs.mu.Lock()
+	for _, c := range e.fs.calls {
+		if !strings.Contains(c.query, "client_id=cid-simkl") || !strings.Contains(c.query, "app-name=aether") || !strings.Contains(c.query, "app-version=") {
+			t.Errorf("%s %s: missing app parameters (%s)", c.method, c.path, c.query)
+		}
+	}
+	e.fs.mu.Unlock()
+
+	// Live scrobbling with Simkl's own endpoints.
+	e.svc.Scrobble(e.ctx, e.user, movie, ActStart, 12.345)
+	e.svc.Scrobble(e.ctx, e.user, ep, ActStop, 95)
+	if errs := e.drain(JobScrobble); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	if st := e.fs.find("POST", "/scrobble/start"); len(st) != 1 || !strings.Contains(st[0].body, `"imdb":"tt0113277"`) ||
+		!strings.Contains(st[0].body, `"progress":12.35`) {
+		t.Errorf("scrobble start: %+v", st)
+	}
+	if st := e.fs.find("POST", "/scrobble/stop"); len(st) != 1 || !strings.Contains(st[0].body, `"tvdb":81189`) ||
+		!strings.Contains(st[0].body, `"episode":{"number":16,"season":5}`) {
+		t.Errorf("scrobble stop: %+v", st)
+	}
+	if n := e.fs.count("POST", "/sync/history"); n != 0 {
+		t.Errorf("scrobble also pushed to history (%d)", n)
+	}
+	// A second stop within the hour (409) is not an error.
+	e.fs.json("POST", "/scrobble/stop", 409, `{"error":"already_watched","watched_at":"2026-10-28T10:00:00Z","expires_at":"2026-10-28T11:00:00Z"}`)
+	e.svc.Scrobble(e.ctx, e.user, ep, ActStop, 96)
+	if errs := e.drain(JobScrobble); len(errs) > 0 {
+		t.Errorf("409: %v", errs)
+	}
+
 	// Disconnect: no revocation endpoint, the link is simply forgotten.
 	if err := e.svc.Disconnect(e.ctx, e.user, "simkl"); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := e.svc.Connection(e.ctx, e.user, "simkl"); v.Status != "disconnected" {
 		t.Errorf("after disconnect: %+v", v)
+	}
+}
+
+func TestSimklPinGone(t *testing.T) {
+	e := newEnv(t)
+	e.fs.json("GET", "/oauth/pin", 200, `{"result":"OK","device_code":"DEVICE_CODE","user_code":"AAAAA","verification_uri":"https://simkl.com/pin","expires_in":900,"interval":5}`)
+	// An unknown or collected code is answered with a fresh code.
+	e.fs.json("GET", "/oauth/pin/AAAAA", 200, `{"result":"OK","device_code":"DEVICE_CODE","user_code":"BBBBB","verification_uri":"https://simkl.com/pin","expires_in":900,"interval":5}`)
+	if _, err := e.svc.Connect(e.ctx, e.user, "simkl"); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ := e.svc.Poll(e.ctx, e.user, "simkl"); res.Status != "expired" {
+		t.Fatalf("gone code: %+v", res)
+	}
+	// An AUTH V2 client_id is refused by the PIN flow with a clear message.
+	e.fs.json("GET", "/oauth/pin", 400, `{"error":"unauthorized_client","code":400,"message":"This client_id is an OAuth 2.0 app: use POST /oauth2/device instead of /oauth/pin"}`)
+	if _, err := e.svc.Connect(e.ctx, e.user, "simkl"); err == nil || !strings.Contains(err.Error(), "AUTH V2") {
+		t.Errorf("V2 client id: %v", err)
+	}
+}
+
+func TestTraktPagination(t *testing.T) {
+	e := newEnv(t)
+	traktEmpty(e.ft)
+	m1 := e.movie("Heat", `{"tmdb":"949"}`)
+	m2 := e.movie("Alien", `{"tmdb":"348"}`)
+	e.ft.on("GET", "/sync/ratings/movies", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("limit") == "" {
+			// Without pagination parameters Trakt may return a small first page.
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		w.Header().Set("X-Pagination-Page", q.Get("page"))
+		w.Header().Set("X-Pagination-Page-Count", "2")
+		w.Header().Set("X-Pagination-Limit", "1")
+		w.Header().Set("X-Pagination-Item-Count", "2")
+		if q.Get("page") == "1" {
+			_, _ = w.Write([]byte(`[{"rated_at":"2026-10-01T00:00:00.000Z","rating":7,"type":"movie","movie":{"ids":{"tmdb":949}}}]`))
+			return
+		}
+		_, _ = w.Write([]byte(`[{"rated_at":"2026-10-02T00:00:00.000Z","rating":9,"type":"movie","movie":{"ids":{"tmdb":348}}}]`))
+	})
+	e.connect(e.trakt, Token{Access: "a1"})
+	if errs := e.drain(JobRun); len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	if d := e.userData(m1); !d.Rating.Valid || d.Rating.Float64 != 7 {
+		t.Errorf("page 1: %+v", d)
+	}
+	if d := e.userData(m2); !d.Rating.Valid || d.Rating.Float64 != 9 {
+		t.Errorf("page 2: %+v", d)
+	}
+	if n := e.ft.count("GET", "/sync/ratings/movies"); n != 2 {
+		t.Errorf("ratings pages fetched: %d", n)
 	}
 }
 

@@ -19,6 +19,7 @@ const (
 	maxBody          = 32 << 20
 	defaultRetryWait = 60 * time.Second
 	maxRetryWait     = time.Hour
+	simklLockWait    = 20 * time.Second
 )
 
 // client is a small JSON HTTP client: spaced requests (separate budgets for
@@ -51,6 +52,7 @@ func newClient(base, ua string, readsPerSec, writesPerSec float64, tr http.Round
 // response is a raw answer, for callers that interpret statuses themselves.
 type response struct {
 	status int
+	header http.Header
 	body   []byte
 }
 
@@ -91,9 +93,8 @@ func (c *client) doReq(ctx context.Context, method, path string, h http.Header, 
 	for k, v := range h {
 		req.Header[k] = v
 	}
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	// Trakt requires the JSON content type on every call (412 otherwise).
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if c.ua != "" {
 		req.Header.Set("User-Agent", c.ua)
@@ -113,14 +114,18 @@ func (c *client) doReq(ctx context.Context, method, path string, h http.Header, 
 	c.observeQuota(res.Header.Get("X-Ratelimit"))
 	if res.StatusCode == http.StatusTooManyRequests && !own429 {
 		d, ok := httpx.ParseRetryAfter(res.Header.Get("Retry-After"), c.now())
-		if !ok {
+		switch {
+		case ok:
+		case bytes.Contains(b, []byte(`"rate_limit"`)):
+			d = time.Second // Simkl's per-second limit: clears almost at once
+		default:
 			d = defaultRetryWait
 		}
 		d = min(max(d, time.Second), maxRetryWait)
 		c.pause(d)
 		return response{}, &RateLimitError{RetryAfter: d}
 	}
-	return response{status: res.StatusCode, body: b}, nil
+	return response{status: res.StatusCode, header: res.Header, body: b}, nil
 }
 
 // call sends a request and maps statuses: 2xx decodes into out (when non
@@ -130,6 +135,11 @@ func (c *client) call(ctx context.Context, method, path string, h http.Header, i
 	if err != nil {
 		return err
 	}
+	return res.decode(method, path, out)
+}
+
+// decode maps a response as call does.
+func (res response) decode(method, path string, out any) error {
 	switch {
 	case res.status >= 200 && res.status < 300:
 		if out != nil && len(bytes.TrimSpace(res.body)) > 0 {
@@ -144,6 +154,16 @@ func (c *client) call(ctx context.Context, method, path string, h http.Header, i
 		return fmt.Errorf("%w: %s", ErrNotFound, describe(method, path))
 	case res.status == http.StatusForbidden:
 		return &RemoteError{Status: res.status, Msg: describe(method, path) + " : identifiants d'application refusés ou compte non autorisé"}
+	case res.status == http.StatusPreconditionFailed:
+		// Simkl: client_id wrong, suspended or temporarily throttled.
+		return &RemoteError{Status: res.status, Msg: describe(method, path) + " : client_id refusé ou bloqué temporairement"}
+	case res.status == 420:
+		// Trakt: account limit exceeded (e.g. watchlist size for non-VIP).
+		return &RemoteError{Status: res.status, Msg: describe(method, path) + " : limite du compte distant atteinte"}
+	case res.status == http.StatusBadRequest && bytes.Contains(res.body, []byte(`"RATE_LIMIT"`)):
+		// Simkl's per-user write lock (~20 s): retry shortly, without pausing
+		// the whole client.
+		return &RateLimitError{RetryAfter: simklLockWait}
 	}
 	return &RemoteError{Status: res.status, Msg: describe(method, path)}
 }

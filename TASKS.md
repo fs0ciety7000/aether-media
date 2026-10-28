@@ -128,13 +128,15 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 
 ## M6b — Synchronisation Trakt / Simkl
 - [x] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement, révocation ; identifiants d'application par config/env ou API admin (chiffrés)
-- [x] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur ; Simkl : ajout à l'historique en fin de lecture)
+- [x] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur, `/scrobble/*` chez Trakt comme chez Simkl)
 - [x] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle (fusion à trois points, la date la plus récente gagne)
 - [x] T-0C3 Progression de reprise (Trakt playback) bidirectionnelle
 - [x] T-0C4 Watchlist (nouvelle, locale par utilisateur, API + `inWatchlist`) et notes
 - [ ] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits, watchlist, identifiants d'application (admin)
-- [ ] T-0C6 Valider contre les vrais api.trakt.tv / api.simkl.com avec de vrais identifiants (formes des réponses vérifiées seulement d'après la documentation, faux serveurs en test)
-- [ ] T-0C7 Simkl : progression de reprise (`/sync/playback`, scrobble start/pause) et notes d'épisodes — non pris en charge aujourd'hui
+- [ ] T-0C6 Valider contre les vrais api.trakt.tv / api.simkl.com avec de vrais identifiants — vérification faite le 2026-10-28 contre la documentation officielle (developer.trakt.tv + son openapi.json, api.simkl.org + son openapi.json) et faux serveurs alignés ; reste l'essai réel avec de vrais identifiants (aucun appel authentifié fait)
+- [ ] T-0C7 Simkl : synchronisation des points de reprise (`GET /sync/playback`, `DELETE /sync/playback/{id}`) — non prise en charge aujourd'hui (Simkl ne note pas les épisodes)
+- [ ] T-0CC Simkl : passer à AUTH V2 (`/oauth2/device`, jetons de 7 jours + refresh, `/oauth2/revoke`) avant le retrait d'AUTH V1 annoncé vers avril 2027 ; un client_id V2 est refusé par le flux PIN
+- [ ] T-0CD Simkl : synchronisation incrémentale `date_from` (la doc menace de suspendre les client_id qui relisent toute la bibliothèque ; aujourd'hui : lecture complète quand `/sync/activities` a bougé)
 - [ ] T-0C8 Budget de débit par utilisateur (aujourd'hui un seul budget par service pour tout le serveur : Trakt 1 écriture/s)
 - [ ] T-0C9 Import ciblé des éléments nouvellement ajoutés à la bibliothèque (aujourd'hui : récupération complète toutes les 24 h ou « synchroniser maintenant » avec `full`)
 - [ ] T-0CA Historique Trakt : visionnages multiples (plays, dates) — seuls vu / non vu et la dernière date sont synchronisés

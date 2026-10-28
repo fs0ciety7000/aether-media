@@ -96,7 +96,26 @@ func traktEmpty(f *fakeAPI) {
 		"/sync/ratings", "/sync/ratings/remove", "/scrobble/start", "/scrobble/pause", "/scrobble/stop"} {
 		f.json("POST", p, 201, `{}`)
 	}
-	f.json("GET", "/users/settings", 200, `{"user":{"username":"alice_t","ids":{"slug":"alice-t"}}}`)
+	f.json("GET", "/users/settings", 200, `{"user":{"username":"alice_t","ids":{"slug":"alice-t","uuid":"b6589fc6ab0dc82cf12099d1c2d40ab994e8410c"}}}`)
+}
+
+// simklEmpty registers the Simkl endpoints Aether uses, with the methods
+// and shapes of the documentation (api.simkl.org): GET for activities and
+// settings, all-items per type, scrobble start/pause/stop.
+func simklEmpty(f *fakeAPI) {
+	f.json("GET", "/sync/activities", 200, `{"all":"2026-10-20T00:00:00Z","settings":{"all":null},
+		"tv_shows":{"all":null},"anime":{"all":null},"movies":{"all":"2026-10-20T00:00:00Z"},"custom_lists":{}}`)
+	f.json("GET", "/users/settings", 200, `{"user":{"name":"alice_s","joined_at":"2018-06-12T14:23:08Z"},
+		"account":{"id":42,"timezone":"Europe/Paris","type":"free"}}`)
+	for _, p := range []string{"/sync/all-items/movies", "/sync/all-items/shows", "/sync/all-items/anime"} {
+		f.json("GET", p, 200, `{}`)
+	}
+	for _, p := range []string{"/sync/history", "/sync/history/remove", "/sync/add-to-list", "/sync/ratings", "/sync/ratings/remove"} {
+		f.json("POST", p, 201, `{"added":{},"not_found":{"movies":[],"shows":[]}}`)
+	}
+	for _, a := range []string{"start", "pause", "stop"} {
+		f.json("POST", "/scrobble/"+a, 201, `{"id":1,"action":"`+a+`","progress":0}`)
+	}
 }
 
 // ---- test environment ----

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -16,13 +18,14 @@ const TraktURL = "https://api.trakt.tv"
 // Trakt implements Provider for trakt.tv (API v2).
 type Trakt struct{ c *client }
 
-// NewTrakt builds a client for base (TraktURL in production). Writes are
-// spaced by one second (Trakt's limit for authenticated POST/PUT/DELETE).
+// NewTrakt builds a client for base (TraktURL in production). Requests
+// follow Trakt's limits for authenticated users: 1 POST/PUT/DELETE per
+// second, 500 GET every 5 minutes.
 func NewTrakt(base, userAgent string, tr http.RoundTripper) *Trakt {
 	if base == "" {
 		base = TraktURL
 	}
-	return &Trakt{c: newClient(base, userAgent, 3, 1, tr)}
+	return &Trakt{c: newClient(base, userAgent, 1.5, 1, tr)}
 }
 
 func (*Trakt) Service() string       { return "trakt" }
@@ -140,13 +143,19 @@ func (t *Trakt) Account(ctx context.Context, c Creds, access string) (Account, e
 			Username string `json:"username"`
 			IDs      struct {
 				Slug string `json:"slug"`
+				UUID string `json:"uuid"`
 			} `json:"ids"`
 		} `json:"user"`
 	}
 	if err := t.c.call(ctx, http.MethodGet, "/users/settings", t.header(c, access), nil, &out); err != nil {
 		return Account{}, err
 	}
-	return Account{Username: out.User.Username, ID: out.User.IDs.Slug}, nil
+	// The uuid is stable; the slug follows username changes.
+	id := out.User.IDs.UUID
+	if id == "" {
+		id = out.User.IDs.Slug
+	}
+	return Account{Username: out.User.Username, ID: id}, nil
 }
 
 // ---- data ----
@@ -219,6 +228,27 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 	out := map[Feature][]Entry{}
 	h := t.header(c, access)
 	get := func(path string, v any) error { return t.c.call(ctx, http.MethodGet, path, h, nil, v) }
+	// paged loads every page of an endpoint with optional pagination: the
+	// documentation recommends always paginating, as defaults can be small.
+	paged := func(path string, add func([]byte) error) error {
+		for page := 1; ; page++ {
+			p := fmt.Sprintf("%s?page=%d&limit=%d", path, page, pageLimit)
+			res, err := t.c.send(ctx, http.MethodGet, p, h, nil)
+			if err != nil {
+				return err
+			}
+			if res.status < 200 || res.status >= 300 {
+				return res.decode(http.MethodGet, path, nil)
+			}
+			if err := add(res.body); err != nil {
+				return &RemoteError{Status: res.status, Msg: describe(http.MethodGet, path) + ": réponse illisible"}
+			}
+			count, err := strconv.Atoi(res.header.Get("X-Pagination-Page-Count"))
+			if err != nil || page >= count || page >= maxPages {
+				return nil
+			}
+		}
+	}
 	for _, f := range features {
 		var entries []Entry
 		switch f {
@@ -256,7 +286,7 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 			}
 		case FeatProgress:
 			for _, path := range []string{"/sync/playback/movies", "/sync/playback/episodes"} {
-				var rows []struct {
+				type playbackRow struct {
 					ID       flexID     `json:"id"`
 					Progress float64    `json:"progress"`
 					PausedAt string     `json:"paused_at"`
@@ -265,7 +295,16 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 					Episode  traktMedia `json:"episode"`
 					Show     traktMedia `json:"show"`
 				}
-				if err := get(path, &rows); err != nil {
+				var rows []playbackRow
+				err := paged(path, func(b []byte) error {
+					var page []playbackRow
+					if err := json.Unmarshal(b, &page); err != nil {
+						return err
+					}
+					rows = append(rows, page...)
+					return nil
+				})
+				if err != nil {
 					return nil, err
 				}
 				for _, r := range rows {
@@ -280,13 +319,22 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 			}
 		case FeatWatchlist:
 			for _, path := range []string{"/sync/watchlist/movies", "/sync/watchlist/shows"} {
-				var rows []struct {
+				type watchRow struct {
 					ListedAt string     `json:"listed_at"`
 					Type     string     `json:"type"`
 					Movie    traktMedia `json:"movie"`
 					Show     traktMedia `json:"show"`
 				}
-				if err := get(path, &rows); err != nil {
+				var rows []watchRow
+				err := paged(path, func(b []byte) error {
+					var page []watchRow
+					if err := json.Unmarshal(b, &page); err != nil {
+						return err
+					}
+					rows = append(rows, page...)
+					return nil
+				})
+				if err != nil {
 					return nil, err
 				}
 				for _, r := range rows {
@@ -300,7 +348,7 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 			}
 		case FeatRatings:
 			for _, path := range []string{"/sync/ratings/movies", "/sync/ratings/shows", "/sync/ratings/episodes"} {
-				var rows []struct {
+				type ratingRow struct {
 					RatedAt string     `json:"rated_at"`
 					Rating  float64    `json:"rating"`
 					Type    string     `json:"type"`
@@ -308,7 +356,16 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 					Show    traktMedia `json:"show"`
 					Episode traktMedia `json:"episode"`
 				}
-				if err := get(path, &rows); err != nil {
+				var rows []ratingRow
+				err := paged(path, func(b []byte) error {
+					var page []ratingRow
+					if err := json.Unmarshal(b, &page); err != nil {
+						return err
+					}
+					rows = append(rows, page...)
+					return nil
+				})
+				if err != nil {
 					return nil, err
 				}
 				for _, r := range rows {
@@ -332,7 +389,11 @@ func (t *Trakt) Fetch(ctx context.Context, c Creds, access string, features []Fe
 	return out, nil
 }
 
-const pushChunk = 100
+const (
+	pushChunk = 100
+	pageLimit = 250 // Trakt's usual maximum page size
+	maxPages  = 400 // safety stop (100 000 items)
+)
 
 func (t *Trakt) Push(ctx context.Context, c Creds, access string, f Feature, add, remove []Entry) error {
 	h := t.header(c, access)
@@ -352,7 +413,8 @@ func (t *Trakt) Push(ctx context.Context, c Creds, access string, f Feature, add
 		}
 		return post("/sync/history/remove", remove, "", "")
 	case FeatWatchlist:
-		if err := post("/sync/watchlist", add, "listed_at", ""); err != nil {
+		// POST /sync/watchlist takes no date: Trakt stamps listed_at itself.
+		if err := post("/sync/watchlist", add, "", ""); err != nil {
 			return err
 		}
 		return post("/sync/watchlist/remove", remove, "", "")
@@ -390,7 +452,7 @@ func groupBody(entries []Entry, outIDs func(IDs) map[string]any, timeKey, valueK
 			m[timeKey] = e.At.UTC().Format(time.RFC3339)
 		}
 		if valueKey != "" {
-			m[valueKey] = int(e.Value)
+			m[valueKey] = int(math.Round(e.Value)) // integer 1-10 on both services
 		}
 		return m
 	}
@@ -457,6 +519,8 @@ func (t *Trakt) Scrobble(ctx context.Context, c Creds, access string, a Action, 
 		return nil
 	case res.status == http.StatusConflict:
 		return nil // already scrobbled a moment ago
+	case res.status == http.StatusUnprocessableEntity:
+		return nil // progress under 1 %: Trakt ignores the scrobble
 	case res.status == http.StatusUnauthorized:
 		return ErrUnauthorized
 	case res.status == http.StatusNotFound:

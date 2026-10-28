@@ -3,6 +3,8 @@ package syncsvc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,9 +14,10 @@ import (
 // SimklURL is the production API.
 const SimklURL = "https://api.simkl.com"
 
-// Simkl implements Provider for simkl.com. Simkl has no playback progress
-// API we rely on: "scrobbling" adds the item to the history when it ends.
-// Its tokens do not expire and cannot be revoked through the API.
+// Simkl implements Provider for simkl.com with AUTH V1 (PIN flow; an AUTH V2
+// client_id is refused by /oauth/pin). V1 tokens last about five years, have
+// no refresh grant and cannot be revoked through the API. Resume points
+// (/sync/playback) are not synchronised yet.
 type Simkl struct {
 	c       *client
 	version string
@@ -70,12 +73,23 @@ func (s *Simkl) StartAuth(ctx context.Context, c Creds) (DeviceAuth, error) {
 	var out struct {
 		Result          string `json:"result"`
 		UserCode        string `json:"user_code"`
-		VerificationURL string `json:"verification_url"`
+		VerificationURI string `json:"verification_uri"`
+		VerificationURL string `json:"verification_url"` // legacy alias
 		ExpiresIn       int    `json:"expires_in"`
 		Interval        int    `json:"interval"`
 	}
-	if err := s.c.call(ctx, http.MethodGet, s.path(c, "/oauth/pin", url.Values{"redirect": {""}}), s.header(c, ""), nil, &out); err != nil {
+	res, err := s.c.send(ctx, http.MethodGet, s.path(c, "/oauth/pin", nil), s.header(c, ""), nil)
+	if err != nil {
 		return DeviceAuth{}, err
+	}
+	if res.status == http.StatusBadRequest && strings.Contains(string(res.body), "unauthorized_client") {
+		return DeviceAuth{}, errAuthV2
+	}
+	if err := res.decode(http.MethodGet, "/oauth/pin", &out); err != nil {
+		return DeviceAuth{}, err
+	}
+	if out.VerificationURI == "" {
+		out.VerificationURI = out.VerificationURL
 	}
 	if out.UserCode == "" {
 		return DeviceAuth{}, &RemoteError{Status: 200, Msg: "code PIN absent"}
@@ -85,7 +99,7 @@ func (s *Simkl) StartAuth(ctx context.Context, c Creds) (DeviceAuth, error) {
 		exp = 15 * time.Minute
 	}
 	// Simkl polls by user code: it doubles as the device code.
-	return DeviceAuth{DeviceCode: out.UserCode, UserCode: out.UserCode, VerificationURL: out.VerificationURL,
+	return DeviceAuth{DeviceCode: out.UserCode, UserCode: out.UserCode, VerificationURL: out.VerificationURI,
 		ExpiresIn: exp, Interval: time.Duration(max(out.Interval, 1)) * time.Second}, nil
 }
 
@@ -100,6 +114,11 @@ func (s *Simkl) PollAuth(ctx context.Context, c Creds, deviceCode string) (Token
 		return Token{}, ErrSlowDown
 	case http.StatusNotFound, http.StatusGone:
 		return Token{}, ErrAuthExpired
+	case http.StatusBadRequest:
+		if strings.Contains(string(res.body), "unauthorized_client") {
+			return Token{}, errAuthV2
+		}
+		fallthrough
 	default:
 		return Token{}, &RemoteError{Status: res.status, Msg: "GET /oauth/pin"}
 	}
@@ -107,12 +126,19 @@ func (s *Simkl) PollAuth(ctx context.Context, c Creds, deviceCode string) (Token
 		Result      string `json:"result"`
 		Message     string `json:"message"`
 		AccessToken string `json:"access_token"`
+		DeviceCode  string `json:"device_code"`
+		UserCode    string `json:"user_code"`
 	}
 	if json.Unmarshal(res.body, &out) != nil {
 		return Token{}, &RemoteError{Status: res.status, Msg: "réponse illisible"}
 	}
 	if out.Result == "OK" && out.AccessToken != "" {
 		return Token{Access: out.AccessToken}, nil
+	}
+	// An unknown or expired code is answered with a brand-new code (the
+	// /oauth/pin shape): the one being polled is gone.
+	if out.DeviceCode != "" || out.UserCode != "" {
+		return Token{}, ErrAuthExpired
 	}
 	msg := strings.ToLower(out.Message)
 	switch {
@@ -142,7 +168,7 @@ func (s *Simkl) Account(ctx context.Context, c Creds, access string) (Account, e
 			ID flexID `json:"id"`
 		} `json:"account"`
 	}
-	if err := s.c.call(ctx, http.MethodPost, s.path(c, "/users/settings", nil), s.header(c, access), map[string]any{}, &out); err != nil {
+	if err := s.c.call(ctx, http.MethodGet, s.path(c, "/users/settings", nil), s.header(c, access), nil, &out); err != nil {
 		return Account{}, err
 	}
 	return Account{Username: out.User.Name, ID: string(out.Account.ID)}, nil
@@ -152,7 +178,7 @@ func (s *Simkl) Activities(ctx context.Context, c Creds, access string) (map[Fea
 	var out struct {
 		All string `json:"all"`
 	}
-	if err := s.c.call(ctx, http.MethodPost, s.path(c, "/sync/activities", nil), s.header(c, access), map[string]any{}, &out); err != nil {
+	if err := s.c.call(ctx, http.MethodGet, s.path(c, "/sync/activities", nil), s.header(c, access), nil, &out); err != nil {
 		return nil, err
 	}
 	// Simkl reports per-list dates; the global one is enough to skip
@@ -162,14 +188,29 @@ func (s *Simkl) Activities(ctx context.Context, c Creds, access string) (map[Fea
 }
 
 type simklIDs struct {
-	Simkl flexID `json:"simkl"`
-	Tmdb  flexID `json:"tmdb"`
-	Imdb  flexID `json:"imdb"`
-	Tvdb  flexID `json:"tvdb"`
+	Simkl   flexID `json:"simkl"`
+	SimklID flexID `json:"simkl_id"` // same id, under another key on some endpoints
+	Tmdb    flexID `json:"tmdb"`
+	Imdb    flexID `json:"imdb"`
+	Tvdb    flexID `json:"tvdb"`
 }
 
 func (i simklIDs) ids() IDs {
-	return IDs{Simkl: string(i.Simkl), Tmdb: string(i.Tmdb), Imdb: string(i.Imdb), Tvdb: string(i.Tvdb)}
+	id := i.Simkl
+	if id == "" {
+		id = i.SimklID
+	}
+	return IDs{Simkl: string(id), Tmdb: string(i.Tmdb), Imdb: string(i.Imdb), Tvdb: string(i.Tvdb)}
+}
+
+// simklTime parses a Simkl date; dates before 2000 are its "watched a long
+// time ago, date unknown" placeholder (1970-01-01T00:00:01Z).
+func simklTime(v string) time.Time {
+	t := parseTime(v)
+	if t.Year() < 2000 {
+		return time.Time{}
+	}
+	return t
 }
 
 func simklOutIDs(i IDs) map[string]any {
@@ -197,6 +238,12 @@ type simklItem struct {
 		Episodes []struct {
 			Number    int    `json:"number"`
 			WatchedAt string `json:"watched_at"`
+			// Anime only (extended=full_anime_seasons): the TVDB numbering
+			// of this per-cour (AniDB) episode.
+			Tvdb *struct {
+				Season  int `json:"season"`
+				Episode int `json:"episode"`
+			} `json:"tvdb"`
 		} `json:"episodes"`
 	} `json:"seasons"`
 }
@@ -226,11 +273,19 @@ func (s *Simkl) Fetch(ctx context.Context, c Creds, access string, features []Fe
 	}
 	for _, typ := range []string{"movies", "shows", "anime"} {
 		q := url.Values{"extended": {"full"}}
-		if typ != "movies" {
+		switch typ {
+		case "anime":
+			// Per-cour numbering plus its TVDB mapping, which is what the
+			// library uses.
+			q.Set("extended", "full_anime_seasons")
+			fallthrough
+		case "shows":
 			q.Set("episode_watched_at", "yes")
+			// Without it, completed and dropped shows carry no episodes.
+			q.Set("include_all_episodes", "yes")
 		}
 		var res map[string][]simklItem
-		if err := s.c.call(ctx, http.MethodGet, s.path(c, "/sync/all-items/"+typ+"/", q), s.header(c, access), nil, &res); err != nil {
+		if err := s.c.call(ctx, http.MethodGet, s.path(c, "/sync/all-items/"+typ, q), s.header(c, access), nil, &res); err != nil {
 			return nil, err
 		}
 		for _, it := range res[typ] {
@@ -245,17 +300,24 @@ func (s *Simkl) Fetch(ctx context.Context, c Creds, access string, features []Fe
 			}
 			if want[FeatHistory] {
 				if ref.Kind == "movie" && it.Status == "completed" {
-					out[FeatHistory] = append(out[FeatHistory], Entry{Ref: ref, At: parseTime(it.LastWatchedAt)})
+					out[FeatHistory] = append(out[FeatHistory], Entry{Ref: ref, At: simklTime(it.LastWatchedAt)})
 				}
 				for _, se := range it.Seasons {
 					for _, e := range se.Episodes {
+						season, number := se.Number, e.Number
+						if typ == "anime" {
+							if e.Tvdb == nil {
+								continue // no TVDB mapping: cannot be placed in the library
+							}
+							season, number = e.Tvdb.Season, e.Tvdb.Episode
+						}
 						out[FeatHistory] = append(out[FeatHistory], Entry{
-							Ref: Ref{Kind: "episode", IDs: ref.IDs, Season: se.Number, Episode: e.Number}, At: parseTime(e.WatchedAt)})
+							Ref: Ref{Kind: "episode", IDs: ref.IDs, Season: season, Episode: number}, At: simklTime(e.WatchedAt)})
 					}
 				}
 			}
 			if want[FeatWatchlist] && it.Status == "plantowatch" {
-				out[FeatWatchlist] = append(out[FeatWatchlist], Entry{Ref: ref, At: parseTime(it.AddedToList)})
+				out[FeatWatchlist] = append(out[FeatWatchlist], Entry{Ref: ref, At: simklTime(it.AddedToList)})
 			}
 			if want[FeatRatings] && it.UserRating > 0 {
 				out[FeatRatings] = append(out[FeatRatings], Entry{Ref: ref, At: parseTime(it.UserRatedAt), Value: it.UserRating})
@@ -292,7 +354,7 @@ func (s *Simkl) Push(ctx context.Context, c Creds, access string, f Feature, add
 		}
 		return post("/sync/history/remove", remove, "", "", nil)
 	case FeatWatchlist:
-		if err := post("/sync/add-to-list", add, "", "", map[string]any{"to": "plantowatch"}); err != nil {
+		if err := post("/sync/add-to-list", add, "added_at", "", map[string]any{"to": "plantowatch"}); err != nil {
 			return err
 		}
 		// Removing from a list goes through history/remove; only items in
@@ -307,11 +369,34 @@ func (s *Simkl) Push(ctx context.Context, c Creds, access string, f Feature, add
 	return ErrNotSupported
 }
 
-// Scrobble records the item as watched once playback ends; Simkl gets no
-// live start/pause events.
+// Scrobble sends a live playback event (/scrobble/start|pause|stop, same
+// body as Trakt's). A stop at 80 % or more marks the item watched.
 func (s *Simkl) Scrobble(ctx context.Context, c Creds, access string, a Action, r Ref, progress float64) error {
-	if a != ActStop || progress < 80 {
-		return nil
+	body := map[string]any{"progress": math.Round(min(max(progress, 0), 100)*100) / 100}
+	switch r.Kind {
+	case "movie":
+		body["movie"] = map[string]any{"ids": simklOutIDs(r.IDs)}
+	case "episode":
+		body["show"] = map[string]any{"ids": simklOutIDs(r.IDs)}
+		body["episode"] = map[string]any{"season": r.Season, "number": r.Episode}
+	default:
+		return ErrNotSupported
 	}
-	return s.Push(ctx, c, access, FeatHistory, []Entry{{Ref: r, At: s.c.now()}}, nil)
+	p := "/scrobble/" + string(a)
+	res, err := s.c.send(ctx, http.MethodPost, s.path(c, p, nil), s.header(c, access), body)
+	if err != nil {
+		return err
+	}
+	if res.status == http.StatusConflict {
+		return nil // stopped again within the hour: already recorded
+	}
+	if res.status == http.StatusNotFound {
+		return fmt.Errorf("%w: élément inconnu de Simkl", ErrNotFound)
+	}
+	return res.decode(http.MethodPost, p, nil)
 }
+
+// errAuthV2 explains a client_id registered for Simkl AUTH V2, which the PIN
+// flow (AUTH V1) refuses.
+var errAuthV2 = &RemoteError{Status: http.StatusBadRequest,
+	Msg: "ce client_id Simkl est une application AUTH V2 : Aether utilise le flux PIN (AUTH V1), créez une application V1"}
