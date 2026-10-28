@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,7 +45,14 @@ func agentProbe(ctx context.Context, cfg AgentConfig, sec Secrets, rel string) (
 	case res.StatusCode == http.StatusUnprocessableEntity:
 		return nil, fmt.Errorf("%w: %s", probe.ErrNotMedia, strings.TrimSpace(string(body)))
 	case res.StatusCode != http.StatusOK:
-		return nil, fmt.Errorf("agent probe: HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
+		ae := &AgentError{Status: res.StatusCode}
+		var e struct{ Error, Message string }
+		if json.Unmarshal(body, &e) == nil {
+			ae.Code, ae.Msg = e.Error, e.Message
+		} else {
+			ae.Msg = strings.TrimSpace(string(body))
+		}
+		return nil, fmt.Errorf("agent probe: %w", ae)
 	}
 	return body, nil
 }

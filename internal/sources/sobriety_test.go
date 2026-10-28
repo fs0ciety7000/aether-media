@@ -156,7 +156,7 @@ func scanAndProbe(t *testing.T, m *Manager, src db.LibrarySource) int {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			loc := Location(src, f)
-			if _, err := m.Probe(ctx, p, loc); err != nil && !errors.Is(err, probe.ErrNotMedia) {
+			if _, err := m.Probe(ctx, p, loc); !probeReached(err) {
 				errs <- fmt.Errorf("probe %s: %w", f, err)
 				return
 			}
@@ -253,7 +253,7 @@ func TestAgentCircuitBreaker(t *testing.T) {
 	ctx := context.Background()
 	p := probe.New("ffprobe")
 	loc := Location(src, "f00.mkv")
-	if _, err := m.Probe(ctx, p, loc); err != nil && !errors.Is(err, probe.ErrNotMedia) {
+	if _, err := m.Probe(ctx, p, loc); !probeReached(err) {
 		t.Fatal(err)
 	}
 
@@ -317,7 +317,7 @@ func TestAgentCircuitBreaker(t *testing.T) {
 	if row.Status != "online" || srow.Status != "online" {
 		t.Fatalf("status after recovery: agent %q source %q", row.Status, srow.Status)
 	}
-	if _, err := m.Probe(ctx, p, loc); err != nil && !errors.Is(err, probe.ErrNotMedia) {
+	if _, err := m.Probe(ctx, p, loc); !probeReached(err) {
 		t.Fatalf("probe after recovery: %v", err)
 	}
 }
@@ -351,4 +351,15 @@ func TestAgentConcurrencyLimit(t *testing.T) {
 	for _, r := range rel {
 		r()
 	}
+}
+
+// probeReached: the probe request made the round trip to the agent. These
+// tests count connections, not probe results, so an agent without ffprobe
+// (CI runners) is fine.
+func probeReached(err error) bool {
+	if err == nil || errors.Is(err, probe.ErrNotMedia) {
+		return true
+	}
+	ae, ok := errors.AsType[*AgentError](err)
+	return ok && ae.Code == "ffprobe_unavailable"
 }
