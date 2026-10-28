@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ func (s *Server) target(w http.ResponseWriter, r *http.Request) (sh *share, rel 
 		writeError(w, http.StatusBadRequest, "invalid_share", "paramètre share manquant")
 		return nil, "", false
 	}
-	sh = s.shares[name]
+	sh = s.lookupShare(name)
 	if sh == nil {
 		writeError(w, http.StatusNotFound, "not_found", "partage inconnu")
 		return nil, "", false
@@ -32,7 +33,24 @@ func (s *Server) target(w http.ResponseWriter, r *http.Request) (sh *share, rel 
 		writeError(w, http.StatusBadRequest, "invalid_path", "chemin invalide")
 		return nil, "", false
 	}
+	if hiddenPath(rel) {
+		writeError(w, http.StatusNotFound, "not_found", "fichier introuvable")
+		return nil, "", false
+	}
 	return sh, rel, true
+}
+
+// hiddenPath reports whether a path goes through a hidden file or folder.
+// Hidden entries (".ssh", ".config"...) are never media: they are neither
+// listed nor served, even when a broad folder such as a home directory is
+// shared.
+func hiddenPath(rel string) bool {
+	for _, seg := range strings.Split(rel, "/") {
+		if strings.HasPrefix(seg, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 // rootName converts a cleaned relative path ("" = root) to an os.Root name.
@@ -52,6 +70,8 @@ func isEscape(err error) bool {
 // reported as not found so as not to reveal anything outside the share.
 func (s *Server) fsError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, os.ErrClosed):
+		writeError(w, http.StatusNotFound, "not_found", "partage supprimé")
 	case errors.Is(err, fs.ErrNotExist), isEscape(err):
 		writeError(w, http.StatusNotFound, "not_found", "introuvable")
 	case errors.Is(err, fs.ErrPermission):
@@ -138,6 +158,9 @@ func (s *Server) handleReadDir(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]vfs.Entry, 0, len(des))
 	for _, d := range des {
+		if strings.HasPrefix(d.Name(), ".") {
+			continue
+		}
 		if e, ok := dirEntry(sh, joinRel(rel, d.Name()), d); ok {
 			out = append(out, e)
 		}
@@ -197,6 +220,9 @@ func (s *Server) handleWalk(w http.ResponseWriter, r *http.Request) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if strings.HasPrefix(d.Name(), ".") {
+				continue // hidden: never exposed (see hiddenPath)
+			}
 			child := joinRel(dir, d.Name())
 			e, ok := dirEntry(sh, child, d)
 			if !ok {
@@ -230,6 +256,11 @@ func (s *Server) handleWalk(w http.ResponseWriter, r *http.Request) {
 	if ctx.Err() != nil {
 		return // client gone: nothing more to say
 	}
+	if err == nil && sh.removed.Load() {
+		// Unreadable directories were skipped because the share went away:
+		// the listing is incomplete and must not be taken as complete.
+		err = errShareRemoved
+	}
 	if err != nil {
 		_ = enc.Encode(walkEnd{Error: err.Error()})
 	} else {
@@ -238,6 +269,8 @@ func (s *Server) handleWalk(w http.ResponseWriter, r *http.Request) {
 	_ = flush()
 	s.log.Debug("parcours terminé", "share", sh.name, "path", rel, "entries", n, "duration", time.Since(start))
 }
+
+var errShareRemoved = errors.New("partage supprimé")
 
 // ---- /file ----
 

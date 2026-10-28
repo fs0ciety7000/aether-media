@@ -53,7 +53,8 @@ Usage :
   aether scan [-library id] [-full]       scanne (toutes les bibliothèques par défaut)
                                           et analyse les fichiers avec ffprobe
   aether agent [-config agent.toml]       mode agent : partage les médias de cette machine
-                                          avec un serveur Aether distant
+                                          avec un serveur Aether (sans configuration : appairez-le
+                                          depuis l'interface avec le code affiché)
   aether healthcheck [-addr url]          vérifie qu'un serveur répond (Docker)
   aether version                          affiche la version
 `

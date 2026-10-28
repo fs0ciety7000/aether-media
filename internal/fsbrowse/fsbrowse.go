@@ -56,7 +56,7 @@ func Allowed(roots []string, p string) (string, bool) {
 	if !filepath.IsAbs(p) {
 		return "", false
 	}
-	real, err := filepath.EvalSymlinks(filepath.Clean(p))
+	resolved, err := filepath.EvalSymlinks(filepath.Clean(p))
 	if err != nil {
 		return "", false
 	}
@@ -65,8 +65,8 @@ func Allowed(roots []string, p string) (string, bool) {
 		if err != nil {
 			continue
 		}
-		if real == rr || strings.HasPrefix(real, strings.TrimSuffix(rr, string(filepath.Separator))+string(filepath.Separator)) {
-			return real, true
+		if resolved == rr || strings.HasPrefix(resolved, strings.TrimSuffix(rr, string(filepath.Separator))+string(filepath.Separator)) {
+			return resolved, true
 		}
 	}
 	return "", false
@@ -82,11 +82,11 @@ func List(roots []string, p string) ([]Dir, error) {
 		}
 		return out, nil
 	}
-	real, ok := Allowed(roots, p)
+	resolved, ok := Allowed(roots, p)
 	if !ok {
 		return nil, ErrDenied
 	}
-	entries, err := os.ReadDir(real)
+	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func List(roots []string, p string) ([]Dir, error) {
 			strings.EqualFold(name, "System Volume Information") || name == "lost+found" {
 			continue
 		}
-		full := filepath.Join(real, name)
+		full := filepath.Join(resolved, name)
 		isDir := e.IsDir()
 		if e.Type()&os.ModeSymlink != 0 {
 			if st, err := os.Stat(full); err == nil {

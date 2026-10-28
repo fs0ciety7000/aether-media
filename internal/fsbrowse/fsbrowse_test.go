@@ -1,6 +1,7 @@
 package fsbrowse
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,13 +28,13 @@ func TestList(t *testing.T) {
 		t.Fatalf("names = %v", names)
 	}
 	// Following the symlink leaves the roots: denied.
-	if _, err := List([]string{root}, filepath.Join(root, "escape")); err != ErrDenied {
+	if _, err := List([]string{root}, filepath.Join(root, "escape")); !errors.Is(err, ErrDenied) {
 		t.Errorf("escape → %v", err)
 	}
-	if _, err := List([]string{root}, "relative"); err != ErrDenied {
+	if _, err := List([]string{root}, "relative"); !errors.Is(err, ErrDenied) {
 		t.Errorf("relative → %v", err)
 	}
-	if _, err := List([]string{root}, filepath.Join(root, "..")); err != ErrDenied {
+	if _, err := List([]string{root}, filepath.Join(root, "..")); !errors.Is(err, ErrDenied) {
 		t.Errorf("parent → %v", err)
 	}
 	if r, _ := List([]string{root}, ""); len(r) != 1 || r[0].Path != root {

@@ -142,13 +142,23 @@ func (s *Server) watch(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = w.Close() }()
-	for _, sh := range s.shareOrder {
+	// Publish the watcher before taking the snapshot: a share added
+	// concurrently is then either in the snapshot or added by watchShare.
+	s.watchMu.Lock()
+	s.watcher = w
+	s.watchMu.Unlock()
+	defer func() {
+		s.watchMu.Lock()
+		s.watcher = nil
+		s.watchMu.Unlock()
+	}()
+	for _, sh := range s.activeShares() {
 		s.addRecursive(w, sh.path)
 	}
 
 	debounce := s.debounce
 	maxWait := 6 * debounce // keep long copies from starving notifications
-	flushc := make(chan string, len(s.shareOrder)*2)
+	flushc := make(chan string, 16)
 	pend := make(map[string]*pending)
 	defer func() {
 		for _, p := range pend {
@@ -195,16 +205,19 @@ func (s *Server) watch(ctx context.Context) error {
 			if ev.Op == fsnotify.Chmod {
 				continue
 			}
-			sh, rel := s.shareFor(ev.Name)
-			if sh == nil {
+			matches := s.sharesFor(ev.Name)
+			if len(matches) == 0 {
 				continue
 			}
 			if ev.Has(fsnotify.Create) {
-				if fi, err := sh.root.Lstat(rootName(rel)); err == nil && fi.IsDir() {
+				m := matches[0]
+				if fi, err := m.sh.root.Lstat(rootName(m.rel)); err == nil && fi.IsDir() {
 					s.addRecursive(w, ev.Name)
 				}
 			}
-			record(sh, rel)
+			for _, m := range matches {
+				record(m.sh, m.rel)
+			}
 		case name := <-flushc:
 			p := pend[name]
 			if p == nil {
@@ -215,7 +228,9 @@ func (s *Server) watch(ctx context.Context) error {
 				continue
 			}
 			delete(pend, name)
-			s.emit(name, p.paths)
+			if s.lookupShare(name) != nil { // not removed meanwhile
+				s.emit(name, p.paths)
+			}
 		}
 	}
 }
@@ -268,17 +283,64 @@ func reducePaths(paths []string, limit int) []string {
 	}
 }
 
-// shareFor maps an absolute watched path to its share and relative path.
-func (s *Server) shareFor(abs string) (*share, string) {
-	for _, sh := range s.shareOrder {
+type shareMatch struct {
+	sh  *share
+	rel string
+}
+
+// sharesFor maps an absolute watched path to the shares containing it
+// (several when shares overlap) and the path relative to each.
+func (s *Server) sharesFor(abs string) []shareMatch {
+	var out []shareMatch
+	for _, sh := range s.activeShares() {
 		if abs == sh.path {
-			return sh, ""
-		}
-		if strings.HasPrefix(abs, sh.path+string(filepath.Separator)) {
-			return sh, filepath.ToSlash(abs[len(sh.path)+1:])
+			out = append(out, shareMatch{sh, ""})
+		} else if within(abs, sh.path) {
+			out = append(out, shareMatch{sh, filepath.ToSlash(abs[len(sh.path)+1:])})
 		}
 	}
-	return nil, ""
+	return out
+}
+
+// within reports whether p lies strictly below dir.
+func within(p, dir string) bool {
+	return strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
+}
+
+// watchShare starts watching a newly added share (no-op when the watcher
+// is not running; it picks the share up when it starts).
+func (s *Server) watchShare(sh *share) {
+	s.watchMu.Lock()
+	defer s.watchMu.Unlock()
+	if s.watcher != nil {
+		s.addRecursive(s.watcher, sh.path)
+	}
+}
+
+// unwatchShare stops watching the directories of a removed share that no
+// remaining share covers.
+func (s *Server) unwatchShare(sh *share) {
+	s.watchMu.Lock()
+	defer s.watchMu.Unlock()
+	if s.watcher == nil {
+		return
+	}
+	remaining := s.activeShares()
+	for _, p := range s.watcher.WatchList() {
+		if p != sh.path && !within(p, sh.path) {
+			continue
+		}
+		covered := false
+		for _, o := range remaining {
+			if p == o.path || within(p, o.path) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			_ = s.watcher.Remove(p)
+		}
+	}
 }
 
 // addRecursive watches dir and all directories below it (symlinks are not

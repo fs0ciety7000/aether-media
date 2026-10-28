@@ -847,7 +847,6 @@ func TestNewValidation(t *testing.T) {
 	file := filepath.Join(dir, "f")
 	writeFile(t, file, "")
 	cases := map[string][]Share{
-		"none":      nil,
 		"upper":     {{Name: "Films", Path: dir}},
 		"space":     {{Name: "my films", Path: dir}},
 		"long":      {{Name: strings.Repeat("a", 41), Path: dir}},
@@ -924,7 +923,7 @@ path = "/srv/media/series"
 }
 
 func TestRun(t *testing.T) {
-	cfg := Config{Listen: "127.0.0.1:0", Shares: []Share{{Name: "a", Path: t.TempDir()}}, DataDir: t.TempDir(), Logger: quietLogger()}
+	cfg := Config{Listen: "127.0.0.1:0", Shares: []Share{{Name: "a", Path: t.TempDir()}}, DataDir: t.TempDir(), DiscoveryPort: -1, Logger: quietLogger()}
 	s, err := New(cfg, "v")
 	if err != nil {
 		t.Fatal(err)
@@ -943,7 +942,7 @@ func TestRun(t *testing.T) {
 		t.Fatal("Run did not stop")
 	}
 
-	busy := Config{Listen: "256.0.0.1:1", Shares: cfg.Shares, DataDir: cfg.DataDir, Logger: quietLogger()}
+	busy := Config{Listen: "256.0.0.1:1", Shares: cfg.Shares, DataDir: cfg.DataDir, DiscoveryPort: -1, Logger: quietLogger()}
 	s2, err := New(busy, "v")
 	if err != nil {
 		t.Fatal(err)

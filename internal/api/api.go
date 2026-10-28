@@ -29,6 +29,8 @@ type Deps struct {
 	Features  Features
 	Playback  *Playback
 	Sources   *sources.Manager
+	// BrowseRoots limits the server-side folder picker (nil = OS defaults).
+	BrowseRoots []string
 }
 
 // Features reports optional capabilities to clients.
@@ -83,6 +85,14 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/libraries/{id}/sources/{sid}", s.admin(s.deleteSource))
 	mux.HandleFunc("POST /api/v1/libraries/{id}/sources/{sid}/test", s.admin(s.testStoredSource))
 	mux.HandleFunc("POST /api/v1/sources/test", s.admin(s.testSource))
+	mux.HandleFunc("GET /api/v1/fs/browse", s.admin(s.browseLocal))
+	mux.HandleFunc("GET /api/v1/agents", s.admin(s.listAgents))
+	mux.HandleFunc("POST /api/v1/agents/discover", s.admin(s.discoverAgents))
+	mux.HandleFunc("POST /api/v1/agents/pair", s.admin(s.pairAgent))
+	mux.HandleFunc("DELETE /api/v1/agents/{aid}", s.admin(s.deleteAgent))
+	mux.HandleFunc("GET /api/v1/agents/{aid}/browse", s.admin(s.agentBrowse))
+	mux.HandleFunc("GET /api/v1/agents/{aid}/shares", s.admin(s.agentShares))
+	mux.HandleFunc("POST /api/v1/agents/{aid}/shares", s.admin(s.agentShares))
 	mux.HandleFunc("GET /api/v1/libraries/{id}/filters", s.libraryFilters)
 	mux.HandleFunc("GET /internal/vfs/{id}/{exp}/{sig}/{path...}", s.vfsProxy)
 	// Browsing.

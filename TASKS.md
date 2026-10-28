@@ -105,6 +105,16 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0BB Agent : HTTPS par défaut (certificat auto-signé + empreinte épinglée)
 - [ ] T-0BC Proxy interne : supporter un serveur lié à une IP non-loopback
 
+## M5c — Appairage simplifié des agents
+- [x] T-0E0 Agent sans configuration : état persistant, partages gérés à chaud
+- [x] T-0E1 Code d'appairage (rotation, usage unique, limitation), page d'état locale
+- [x] T-0E2 Découverte UDP sur le réseau local
+- [x] T-0E3 Serveur : agents appairés, appairage, navigation, création de partages, désappairage
+- [x] T-0E4 Sélecteur de dossiers pour les sources locales du serveur
+- [x] T-0E5 Fichiers cachés jamais exposés par l'agent (ex. ~/.ssh si un dossier personnel est partagé)
+- [ ] T-0E6 UI : parcours guidé (agents connus, découverte, code, choix des dossiers)
+- [ ] T-0E7 Installation de l'agent en service (systemd, launchd, service Windows)
+
 ## M6 — Utilisateurs & progression
 - [ ] T-070 Comptes, argon2id, sessions, rôles
 - [ ] T-071 Accès par bibliothèque + contrôle parental

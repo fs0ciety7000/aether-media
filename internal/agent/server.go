@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,9 +14,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/fsbrowse"
+	"github.com/fsnotify/fsnotify"
 )
 
 const (
@@ -25,29 +29,37 @@ const (
 	tokenFileName = "agent.token"
 )
 
-type share struct {
-	name string
-	path string // absolute, symlinks resolved
-	root *os.Root
-}
-
 // Server is an Aether agent. Create it with New.
 type Server struct {
 	cfg      Config
 	version  string
 	hostname string
+	uid      string
+	name     string
 	log      *slog.Logger
 	token    string
 	tokenSum [sha256.Size]byte
 
+	// mu guards shares, shareOrder, state and serverSums.
+	mu         sync.RWMutex
 	shares     map[string]*share
 	shareOrder []*share
+	state      agentState
+	serverSums []serverSum
+
+	browseRoots []string
 
 	ffprobePath string // "" when unavailable
 	probeSem    chan struct{}
 
-	limiter *failLimiter
-	hub     *hub
+	limiter     *failLimiter // bad tokens
+	pairLimiter *failLimiter // bad pairing codes
+	pairing     *pairing
+	hub         *hub
+	httpPort    atomic.Int32 // actual listening port once Run started
+
+	watchMu sync.Mutex
+	watcher *fsnotify.Watcher // nil while the watcher is not running
 
 	// test hooks
 	debounce   time.Duration
@@ -59,8 +71,10 @@ type Server struct {
 	closed  bool
 }
 
-// New validates cfg, opens every share with os.Root, loads or creates the
-// pairing token in cfg.DataDir and detects ffprobe.
+// New validates cfg, loads agent-state.json, opens every share (agent.toml
+// and managed ones) with os.Root, loads or creates the legacy token in
+// cfg.DataDir and detects ffprobe. An empty configuration is valid: the
+// agent then waits to be paired and configured from the server's UI.
 func New(cfg Config, version string) (*Server, error) {
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
@@ -78,26 +92,31 @@ func New(cfg Config, version string) (*Server, error) {
 		cfg.DataDir = filepath.Join(dir, "aether-agent")
 	}
 	s := &Server{
-		cfg:        cfg,
-		version:    version,
-		log:        log,
-		shares:     make(map[string]*share, len(cfg.Shares)),
-		probeSem:   make(chan struct{}, 2),
-		limiter:    newFailLimiter(5, time.Minute),
-		hub:        newHub(),
-		debounce:   10 * time.Second,
-		pingEvery:  25 * time.Second,
-		walkFlushN: 500,
+		cfg:         cfg,
+		version:     version,
+		log:         log,
+		shares:      make(map[string]*share, len(cfg.Shares)),
+		probeSem:    make(chan struct{}, 2),
+		limiter:     newFailLimiter(5, time.Minute),
+		pairLimiter: newFailLimiter(pairMaxFails, pairFailSpan),
+		pairing:     newPairing(log),
+		hub:         newHub(),
+		debounce:    10 * time.Second,
+		pingEvery:   25 * time.Second,
+		walkFlushN:  500,
 	}
 	s.hostname, _ = os.Hostname()
+	s.browseRoots = cfg.BrowseRoots
+	if len(s.browseRoots) == 0 {
+		s.browseRoots = fsbrowse.DefaultRoots()
+	}
 	for _, sc := range cfg.Shares {
 		sh, err := openShare(sc)
 		if err != nil {
 			s.Close()
 			return nil, err
 		}
-		s.shares[sh.name] = sh
-		s.shareOrder = append(s.shareOrder, sh)
+		s.activateLocked(sh)
 	}
 	tok, err := loadOrCreateToken(cfg.DataDir)
 	if err != nil {
@@ -106,6 +125,10 @@ func New(cfg Config, version string) (*Server, error) {
 	}
 	s.token = tok
 	s.tokenSum = sha256.Sum256([]byte(tok))
+	if err := s.loadState(); err != nil {
+		s.Close()
+		return nil, err
+	}
 	s.ffprobePath = detectFFprobe(cfg.FFprobe)
 	if s.ffprobePath == "" {
 		log.Warn("ffprobe introuvable : /probe sera indisponible", "ffprobe", cfg.FFprobe)
@@ -114,27 +137,75 @@ func New(cfg Config, version string) (*Server, error) {
 	return s, nil
 }
 
-func openShare(sc Share) (*share, error) {
-	abs, err := filepath.Abs(sc.Path)
+// loadState reads agent-state.json, opens the managed shares and saves the
+// state back when it was created or cleaned up.
+func (s *Server) loadState() error {
+	st, dirty, err := loadState(s.cfg.DataDir)
 	if err != nil {
-		return nil, fmt.Errorf("agent: partage %q : %w", sc.Name, err)
+		return err
 	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		return nil, fmt.Errorf("agent: partage %q : %w", sc.Name, err)
+	if st.Name == "" {
+		st.Name = s.hostname
+		dirty = true
 	}
-	fi, err := os.Stat(resolved)
-	if err != nil {
-		return nil, fmt.Errorf("agent: partage %q : %w", sc.Name, err)
+	if st.Name == "" {
+		st.Name = "Agent Aether"
 	}
-	if !fi.IsDir() {
-		return nil, fmt.Errorf("agent: partage %q : %s n'est pas un dossier", sc.Name, resolved)
+	s.state = st
+	s.uid = st.UID
+	s.name = cleanDisplayName(st.Name, maxNameLen)
+	if s.cfg.Name != "" {
+		s.name = cleanDisplayName(s.cfg.Name, maxNameLen)
 	}
-	root, err := os.OpenRoot(resolved)
-	if err != nil {
-		return nil, fmt.Errorf("agent: partage %q : %w", sc.Name, err)
+	kept := make([]Share, 0, len(st.Shares))
+	for _, sc := range st.Shares {
+		if !validShareName(sc.Name) || sc.Path == "" {
+			s.log.Warn("partage géré invalide ignoré", "share", sc.Name)
+			dirty = true
+			continue
+		}
+		if dup := s.nameOrPathUsed(sc, kept); dup != "" {
+			s.log.Warn("partage géré ignoré : "+dup, "share", sc.Name, "path", sc.Path)
+			dirty = true
+			continue
+		}
+		kept = append(kept, sc)
+		sh, err := openShare(sc)
+		if err != nil {
+			// Unmounted disk…: keep it in the state, it comes back on restart.
+			s.log.Warn("partage indisponible", "share", sc.Name, "err", err)
+			continue
+		}
+		sh.managed = true
+		s.activateLocked(sh)
 	}
-	return &share{name: sc.Name, path: resolved, root: root}, nil
+	s.state.Shares = kept
+	s.rebuildSumsLocked()
+	if dirty {
+		if err := s.saveLocked(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// nameOrPathUsed reports why sc collides with an agent.toml share or an
+// earlier managed one ("" when it does not).
+func (s *Server) nameOrPathUsed(sc Share, kept []Share) string {
+	for _, o := range kept {
+		if o.Name == sc.Name {
+			return "nom en double"
+		}
+	}
+	for _, sh := range s.shareOrder {
+		if sh.name == sc.Name {
+			return "nom déjà utilisé par agent.toml"
+		}
+		if sh.path == sc.Path {
+			return "dossier déjà partagé par agent.toml"
+		}
+	}
+	return ""
 }
 
 func loadOrCreateToken(dir string) (string, error) {
@@ -183,6 +254,12 @@ func (s *Server) Token() string { return s.token }
 // Handler returns the HTTP handler serving the agent protocol.
 func (s *Server) Handler() http.Handler { return s.handler }
 
+// UID returns the agent's stable identifier.
+func (s *Server) UID() string { return s.uid }
+
+// Name returns the agent's display name.
+func (s *Server) Name() string { return s.name }
+
 // Close releases the shares' os.Root handles. Run calls it on return.
 func (s *Server) Close() {
 	s.closeMu.Lock()
@@ -191,7 +268,7 @@ func (s *Server) Close() {
 		return
 	}
 	s.closed = true
-	for _, sh := range s.shareOrder {
+	for _, sh := range s.activeShares() {
 		_ = sh.root.Close()
 	}
 }
@@ -204,8 +281,24 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("agent: écoute sur %s : %w", s.cfg.Listen, err)
 	}
+	if ta, ok := ln.Addr().(*net.TCPAddr); ok {
+		s.httpPort.Store(int32(ta.Port))
+	}
+	var bg sync.WaitGroup
+	defer bg.Wait() // runs after cancel below
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	bg.Go(func() { s.pairing.rotateLoop(ctx) })
+	if s.cfg.DiscoveryPort > 0 {
+		pc, err := net.ListenPacket("udp", s.discoveryAddr())
+		if err != nil {
+			s.log.Warn("découverte réseau indisponible", "port", s.cfg.DiscoveryPort, "err", err)
+		} else {
+			s.log.Info("découverte réseau active", "udp", pc.LocalAddr().String())
+			bg.Go(func() { s.serveDiscovery(ctx, pc) })
+		}
+	}
 
 	watchDone := make(chan struct{})
 	go func() {
@@ -227,12 +320,17 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.cfg.TLSCert != "" {
 		scheme = "https"
 	}
-	names := make([]string, len(s.shareOrder))
-	for i, sh := range s.shareOrder {
+	shares := s.activeShares()
+	names := make([]string, len(shares))
+	for i, sh := range shares {
 		names[i] = sh.name
 	}
-	s.log.Info("agent Aether démarré", "adresse", scheme+"://"+ln.Addr().String(), "partages", strings.Join(names, ","), "ffprobe", s.ffprobePath != "")
-	s.log.Info("Jeton d'appairage : " + s.token)
+	s.log.Info("agent Aether démarré", "nom", s.name, "adresse", scheme+"://"+ln.Addr().String(), "partages", strings.Join(names, ","), "ffprobe", s.ffprobePath != "")
+	if urls := s.listenURLs(); len(urls) > 0 {
+		s.log.Info("page locale : " + scheme + "://localhost:" + strconv.Itoa(int(s.httpPort.Load())) + "/ · adresses : " + strings.Join(urls, " "))
+	}
+	s.log.Info("Jeton d'appairage manuel (agent.token) : " + s.token)
+	s.pairing.current() // logs the pairing code
 
 	errc := make(chan error, 1)
 	go func() {
@@ -269,6 +367,11 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+apiPrefix+"/info", s.handleInfo)
+	mux.HandleFunc("DELETE "+apiPrefix+"/pair", s.handleUnpair)
+	mux.HandleFunc("GET "+apiPrefix+"/browse", s.handleBrowse)
+	mux.HandleFunc("GET "+apiPrefix+"/shares", s.handleListShares)
+	mux.HandleFunc("POST "+apiPrefix+"/shares", s.handleAddShare)
+	mux.HandleFunc("DELETE "+apiPrefix+"/shares/{name}", s.handleDeleteShare)
 	mux.HandleFunc("GET "+apiPrefix+"/walk", s.handleWalk)
 	mux.HandleFunc("GET "+apiPrefix+"/stat", s.handleStat)
 	mux.HandleFunc("GET "+apiPrefix+"/readdir", s.handleReadDir)
@@ -278,7 +381,15 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "point d'accès inconnu")
 	})
-	return s.authenticate(mux)
+
+	// Unauthenticated routes: pairing, and the local status page/JSON
+	// (loopback clients only). Everything else requires a token.
+	public := http.NewServeMux()
+	public.HandleFunc("POST "+apiPrefix+"/pair", s.handlePair)
+	public.HandleFunc("GET /{$}", localOnly(s.handleLocalPage))
+	public.HandleFunc("GET "+apiPrefix+"/local/status", localOnly(s.handleLocalStatus))
+	public.Handle("/", s.authenticate(mux))
+	return public
 }
 
 func clientIP(r *http.Request) string {
@@ -315,7 +426,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			tok = r.URL.Query().Get("t")
 		}
 		sum := sha256.Sum256([]byte(tok))
-		if tok == "" || subtle.ConstantTimeCompare(sum[:], s.tokenSum[:]) != 1 {
+		c, ok := s.matchToken(sum)
+		if tok == "" || !ok {
 			if s.limiter.fail(ip) {
 				s.log.Warn("authentification refusée, adresse temporairement bloquée", "ip", ip)
 			}
@@ -323,7 +435,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "jeton manquant ou invalide")
 			return
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callerKey{}, c)))
 	})
 }
 
@@ -356,6 +468,8 @@ type infoShare struct {
 }
 
 type infoResponse struct {
+	UID      string      `json:"uid"`
+	Name     string      `json:"name"`
 	Version  string      `json:"version"`
 	Hostname string      `json:"hostname"`
 	Shares   []infoShare `json:"shares"`
@@ -363,13 +477,16 @@ type infoResponse struct {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
+	shares := s.activeShares()
 	resp := infoResponse{
+		UID:      s.uid,
+		Name:     s.name,
 		Version:  s.version,
 		Hostname: s.hostname,
-		Shares:   make([]infoShare, 0, len(s.shareOrder)),
+		Shares:   make([]infoShare, 0, len(shares)),
 		FFprobe:  s.ffprobePath != "",
 	}
-	for _, sh := range s.shareOrder {
+	for _, sh := range shares {
 		is := infoShare{Name: sh.name}
 		if s.cfg.ExposePaths {
 			is.Path = sh.path
