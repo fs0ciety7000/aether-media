@@ -59,13 +59,26 @@ func newEnv(t *testing.T, mut func(*Config)) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(s.Handler())
+	ts := startTestServer(s)
 	t.Cleanup(func() {
 		ts.Close()
 		s.Close()
 	})
 	resolved, _ := filepath.EvalSymlinks(share)
 	return &env{t: t, s: s, ts: ts, share: resolved, data: data}
+}
+
+// startTestServer serves the agent's handler like Run does: HTTPS with the
+// agent's own certificate (trusted by ts.Client()), or HTTP with tls = false.
+func startTestServer(s *Server) *httptest.Server {
+	ts := httptest.NewUnstartedServer(s.Handler())
+	if cfg := s.TLSConfig(); cfg != nil {
+		ts.TLS = cfg
+		ts.StartTLS()
+	} else {
+		ts.Start()
+	}
+	return ts
 }
 
 func (e *env) url(endpoint string, q url.Values) string {

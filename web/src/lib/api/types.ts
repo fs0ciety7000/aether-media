@@ -136,7 +136,8 @@ export interface Library {
 // ——— Sources (M5b) ———
 
 export type SourceKind = 'local' | 'agent' | 'sftp';
-export type SourceStatus = 'online' | 'offline' | 'unknown';
+/** `cert_mismatch` (agents only, M5d): the agent presents another certificate than the pinned one. */
+export type SourceStatus = 'online' | 'offline' | 'unknown' | 'cert_mismatch';
 export type SftpAuth = 'password' | 'key';
 
 export interface Source {
@@ -150,7 +151,7 @@ export interface Source {
 	lastError?: string;
 	lastSeen?: string;
 	/** M5c: `agentId` is set for sources of a paired agent (the URL then comes from the agent). */
-	agent?: { agentId?: number; url: string; share: string; hostname?: string; version?: string };
+	agent?: { agentId?: number; url: string; share: string; hostname?: string; version?: string; fingerprint?: string };
 	/** hostKey: "SHA256:…" fingerprint. */
 	sftp?: { host: string; port: number; user: string; auth: SftpAuth; hostKey: string };
 	/** Client-only: synthesised from `Library.paths` (older server) — cannot be edited or deleted. */
@@ -163,7 +164,7 @@ export interface SourceInput {
 	name?: string;
 	root: string;
 	/** Paired agent (M5c, recommended): `{ agentId, share }` · manual token: `{ url, token, share }`. */
-	agent?: { agentId: number; share: string } | { url: string; token: string; share: string };
+	agent?: { agentId: number; share: string } | { url: string; token: string; share: string; fingerprint?: string };
 	sftp?: { host: string; port?: number; user: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
 }
 
@@ -171,7 +172,7 @@ export interface SourceInput {
 export interface SourcePatch {
 	name?: string;
 	root?: string;
-	agent?: { agentId?: number; url?: string; token?: string; share?: string };
+	agent?: { agentId?: number; url?: string; token?: string; share?: string; fingerprint?: string };
 	sftp?: { host?: string; port?: number; user?: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
 }
 
@@ -181,7 +182,11 @@ export interface SourceTestResult {
 	error?: string;
 	/** SFTP: fingerprint to confirm ("SHA256:…"). */
 	hostKey?: string;
-	agent?: { hostname: string; version: string; shares: string[] };
+	agent?: { hostname: string; version: string; shares: string[]; tls?: boolean };
+	/** Agent with a manual token over https (M5d): SHA-256 of its certificate (lowercase hex). */
+	fingerprint?: string;
+	/** "fingerprint_tofu": no fingerprint given, the certificate seen now will be pinned. */
+	warning?: string;
 }
 
 export interface SourceStatusEvent {
@@ -204,7 +209,14 @@ export interface Agent {
 	lastSeen?: string;
 	/** Number of sources using this agent (unpairing is refused while > 0). */
 	sources: number;
+	/** M5d: SHA-256 (lowercase hex) of the pinned certificate. */
+	fingerprint?: string;
+	/** M5d: how the server reaches the agent. */
+	transport: AgentTransport;
 }
+
+/** `https-pinned`: certificate pinned at pairing · `https-ca`: checked by the system CAs · `http`: not encrypted. */
+export type AgentTransport = 'https-pinned' | 'https-ca' | 'http';
 
 /** Answer to the LAN discovery broadcast (POST /agents/discover). */
 export interface DiscoveredAgent {
@@ -218,6 +230,8 @@ export interface DiscoveredAgent {
 	url: string;
 	paired: boolean;
 	agentId?: number;
+	/** Fingerprint announced over UDP (unauthenticated: the pairing checks the real one). */
+	fingerprint?: string;
 }
 
 export interface Folder {

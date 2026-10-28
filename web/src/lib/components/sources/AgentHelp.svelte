@@ -29,7 +29,7 @@ path = "/srv/media/films"`;
 				<li>Lancez <code>aether agent --config agent.toml</code>.</li>
 				<li>
 					Le <strong>jeton</strong> est affiché dans les journaux au premier démarrage et enregistré dans
-					<code>&lt;data&gt;/agent.token</code>. Collez-le ci-dessus avec l’adresse <code>http://hote:8097</code>.
+					<code>&lt;data&gt;/agent.token</code>. Collez-le ci-dessus avec l’adresse <code>https://hote:8097</code>.
 				</li>
 			</ol>
 			<p class="note">Plus simple : lancez <code>aether agent</code> sans configuration et utilisez l’appairage guidé par code.</p>
@@ -42,7 +42,7 @@ path = "/srv/media/films"`;
 				</li>
 				<li>
 					L’agent affiche un <strong>code d’appairage</strong> (<code>XXXX-XXXX</code>, renouvelé toutes les 10 minutes) dans ses
-					journaux et sur sa page d’état <code>http://localhost:8097</code>, à ouvrir sur la machine de l’agent.
+					journaux et sur sa page d’état <code>https://localhost:8097</code>, à ouvrir sur la machine de l’agent.
 				</li>
 				<li>
 					Ici, cliquez sur « Rechercher sur le réseau » (ou saisissez son adresse), tapez le code, puis choisissez les dossiers à partager.

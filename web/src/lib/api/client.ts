@@ -259,7 +259,8 @@ export const api = {
 	agents: async (signal?: AbortSignal) => ((await request<Agent[]>('/agents', s(signal))) ?? []).map(normalizeAgent),
 	/** LAN broadcast: answers after ~2 s. */
 	discoverAgents: async (signal?: AbortSignal) => (await request<DiscoveredAgent[]>('/agents/discover', { method: 'POST', signal })) ?? [],
-	pairAgent: async (body: { url: string; code: string }, signal?: AbortSignal) =>
+	/** `agentId` re-pairs that agent (new certificate, HTTP → HTTPS). */
+	pairAgent: async (body: { url: string; code: string; agentId?: number }, signal?: AbortSignal) =>
 		normalizeAgent(await request<Agent>('/agents/pair', { method: 'POST', body, signal })),
 	deleteAgent: (id: number) => request<void>(`/agents/${id}`, { method: 'DELETE' }),
 	agentBrowse: async (id: number, path = '', signal?: AbortSignal) =>
@@ -460,6 +461,7 @@ export function normalizeAgent(a: Agent): Agent {
 	a.status ??= 'unknown';
 	a.sources ??= 0;
 	a.name ||= a.url;
+	a.transport ??= a.fingerprint ? 'https-pinned' : /^https:/i.test(a.url) ? 'https-ca' : 'http';
 	return a;
 }
 

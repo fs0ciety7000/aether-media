@@ -192,7 +192,8 @@ Sur macOS, un binaire téléchargé est mis en quarantaine par Gatekeeper : `xat
 
 ```
 aether service install|uninstall|status [--user] [--name NOM] [--config F] [--run-as U] [--dry-run]
-aether agent   install|uninstall|status [--user] [--name NOM] [--config F] [--run-as U] [--dry-run]
+aether agent   install|uninstall|status [--user] [--method systemd|launchd|cron] [--listen ADR] [--data-dir D]
+                                        [--name NOM] [--config F] [--run-as U] [--dry-run]
 ```
 
 `--dry-run` affiche le fichier d'unité (ou le plist, ou la configuration du service Windows) et les commandes, sans rien modifier. `--name` permet d'installer plusieurs instances. La désinstallation conserve les données.
@@ -204,8 +205,11 @@ aether agent   install|uninstall|status [--user] [--name NOM] [--config F] [--ru
 | Données (système) | `/var/lib/<nom>` | `/Library/Application Support/Aether` (agent : `Aether Agent`) | `C:\ProgramData\Aether` (agent : `Aether Agent`) |
 | Données (`--user`) | `~/.local/share/aether`, agent `~/.config/aether-agent` | `~/Library/Application Support/Aether`, agent `…/aether-agent` | — |
 | Journaux | `journalctl [--user] -u <nom>` | `/Library/Logs/Aether/<nom>.log` (`~/Library/Logs/…` avec `--user`) | `<données>\logs\<nom>.log` |
+| Agent `--method cron` | crontab de l'utilisateur, journal `~/.local/state/aether/agent.log` | idem | — |
 
 Avec `--user` sous Linux, le service s'arrête à la fermeture de la session, sauf après `loginctl enable-linger $USER`.
+
+**Agent sans root ni systemd : `--method cron`.** `aether agent install --user --method cron` ajoute à la crontab de l'utilisateur deux lignes encadrées de commentaires `# BEGIN aether-agent` / `# END aether-agent` : `@reboot` et une surveillance `*/5 * * * *` qui relance l'agent s'il ne tourne pas (verrou `flock` tenu par l'agent pendant toute sa vie, insensible aux PID recyclés). Cette méthode est choisie **d'office** si `systemctl --user` est absent ou en échec (le message l'indique). Journal : `~/.local/state/aether/agent.log` (`$XDG_STATE_HOME` respecté), tourné au-delà de 10 Mio (`agent.log.1`). `uninstall` ne retire que les lignes marquées et arrête l'agent ; `status` indique si l'agent tourne. Les autres lignes de la crontab ne sont jamais modifiées ; une crontab vide ou absente est gérée. `--listen` (ex. `0.0.0.0:23456`) et `--data-dir` sont aussi acceptés par les autres méthodes `--user`.
 
 ---
 
@@ -239,9 +243,62 @@ Expand-Archive aether.zip -DestinationPath "C:\Program Files\Aether" -Force
 
 Avec un paquet `.deb` / `.rpm` : `sudo systemctl enable --now aether-agent`.
 
-Ensuite, dans Aether : **Réglages › Bibliothèques › Appairer un agent**. La machine apparaît si elle est sur le même réseau local ; sinon, saisissez `http://<adresse>:8097`. Tapez le code d'appairage affiché par l'agent : dans ses journaux, ou sur `http://127.0.0.1:8097` depuis la machine de l'agent. Choisissez enfin les dossiers à partager.
+Ensuite, dans Aether : **Réglages › Bibliothèques › Appairer un agent**. La machine apparaît si elle est sur le même réseau local ; sinon, saisissez `https://<adresse>:8097`. Tapez le code d'appairage affiché par l'agent : dans ses journaux, ou sur `https://127.0.0.1:8097` depuis la machine de l'agent (certificat auto-signé : le navigateur avertit, c'est attendu). Choisissez enfin les dossiers à partager.
 
-Pare-feu : TCP 8097 (agent) et UDP 7360 (découverte) en entrée sur la machine de l'agent. Hors du réseau local, passez par un VPN (WireGuard, Tailscale) ou activez TLS (`tls_cert`, `tls_key`, voir [AGENT_PROTOCOL.md](AGENT_PROTOCOL.md)).
+L'agent sert **HTTPS par défaut** avec un certificat auto-signé créé au premier démarrage. À l'appairage, le serveur l'épingle et affiche son **empreinte** ; vous pouvez la comparer à celle de l'agent (journaux : `Empreinte du certificat TLS (SHA-256…) : 3F2A 9C01 …`, ou sa page locale). Le code d'appairage ne circule jamais en clair et un intermédiaire qui présenterait un autre certificat fait échouer l'appairage. Si le certificat change ensuite, le serveur refuse l'agent (« Certificat changé ») jusqu'à un **Réappairer**. Les agents appairés en HTTP avant cette version continuent de fonctionner en HTTP ; « Réappairer » les passe en HTTPS. Détails : [AGENT_PROTOCOL.md](AGENT_PROTOCOL.md).
+
+Pare-feu : TCP 8097 (agent) et UDP 7360 (découverte) en entrée sur la machine de l'agent. Derrière un proxy HTTPS qui termine TLS, réglez `tls = false` dans `agent.toml` (ou `AETHER_AGENT_TLS=0`).
+
+---
+
+## Seedbox sans root (ex. Whatbox)
+
+Sur une seedbox mutualisée, on n'a ni `sudo` ni (souvent) `systemd --user`, et les fichiers transitent par Internet. L'agent s'y installe dans votre dossier personnel, démarre par la crontab, et chiffre tout par HTTPS.
+
+1. **Télécharger le binaire** (Linux amd64 dans la plupart des cas ; `uname -m` pour vérifier) :
+
+   ```sh
+   mkdir -p ~/bin && cd ~/bin
+   curl -fL https://github.com/fs0ciety7000/aether-media/releases/download/v0.1.0/aether_0.1.0_linux_amd64.tar.gz | tar xz aether
+   ./aether version
+   ```
+
+2. **Choisir un port libre.** Les ports bas et le 8097 sont souvent pris ou interdits sur une machine partagée : prenez un port dans la plage que votre hébergeur autorise (voir son aide), par exemple 23456, et vérifiez qu'il est libre :
+
+   ```sh
+   nc -z 127.0.0.1 23456 && echo "occupé" || echo "libre"
+   ```
+
+3. **Installer l'agent** (crontab, sans root ; choisie d'office si `systemctl --user` ne répond pas) :
+
+   ```sh
+   ~/bin/aether agent install --user --method cron --listen 0.0.0.0:23456 --dry-run   # pour voir
+   ~/bin/aether agent install --user --method cron --listen 0.0.0.0:23456
+   ~/bin/aether agent status --method cron
+   ```
+
+   Données : `~/.config/aether-agent` (ou `--data-dir ~/aether-agent`). Journal : `~/.local/state/aether/agent.log`. L'agent redémarre au reboot et est relancé dans les 5 minutes s'il s'arrête.
+
+4. **Vérifier ffprobe.** L'analyse des fichiers est faite par l'agent, sur la seedbox. Le journal dit `ffprobe=true` au démarrage ; sinon, installez un ffprobe statique dans `~/bin` (la surveillance cron ajoute `~/bin` et `~/.local/bin` au `PATH`) :
+
+   ```sh
+   cd ~/bin && curl -fL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | tar xJ --strip-components=1 --wildcards '*/ffprobe'
+   ./ffprobe -version
+   ```
+
+   ou indiquez son chemin dans un `agent.toml` (clé `ffprobe = "/home/moi/bin/ffprobe"`), à passer à l'installation avec `--config ~/agent.toml`. Relancez : `aether agent uninstall --method cron && aether agent install --user --method cron …`.
+
+5. **Appairer.** Dans Aether : Réglages › Bibliothèques › **Appairer un agent** › « Saisir une adresse » : `https://<nom-de-la-seedbox>:23456` (la découverte réseau ne traverse pas Internet). Le code d'appairage est dans le journal :
+
+   ```sh
+   grep -E "Code d'appairage|Empreinte" ~/.local/state/aether/agent.log | tail -2
+   ```
+
+6. **Vérifier l'empreinte** (facultatif, recommandé à travers Internet) : l'empreinte affichée par Aether après l'appairage doit être identique à la ligne `Empreinte du certificat TLS` du journal. Choisissez ensuite le dossier de vos médias (les racines de navigation se règlent par `browse_roots` dans `agent.toml`, par défaut votre dossier personnel).
+
+**Variante : tunnel SSH.** Si l'hébergeur n'autorise aucun port entrant, faites passer l'agent par SSH depuis la machine du serveur Aether : lancez l'agent en écoute locale (`--listen 127.0.0.1:23456`), puis `ssh -N -L 23456:127.0.0.1:23456 moi@seedbox` (ou `autossh` pour le garder ouvert) et appairez `https://127.0.0.1:23456`. HTTPS et l'épinglage restent actifs de bout en bout.
+
+**Agent ou simple source SFTP ?** Une source « SFTP / seedbox » ne demande rien sur la seedbox, mais chaque analyse ffprobe et chaque scan lisent les fichiers à travers Internet, et les changements ne sont vus qu'au prochain scan. L'agent analyse les fichiers sur place (seul le résultat JSON voyage), parcourt les dossiers en un seul flux, signale les nouveaux fichiers en direct (SSE) et sert la lecture par plages ; il demande en échange un port ouvert (ou un tunnel) et un processus permanent. Pour une grosse bibliothèque qui change souvent, l'agent ; pour un usage ponctuel ou un hébergeur qui interdit les processus permanents, SFTP.
 
 ---
 
@@ -285,7 +342,7 @@ docker compose start aether
 
 Restauration : arrêtez le serveur, videz le dossier de données, extrayez l'archive (`tar xzf … -C ./data`), rétablissez le propriétaire (`chown -R 1000:1000 data`, ou `aether:aether` pour les paquets), redémarrez.
 
-L'agent garde dans son dossier `agent-state.json` (partages et serveurs appairés) et `agent.token` ; les perdre oblige seulement à l'appairer de nouveau.
+L'agent garde dans son dossier `agent-state.json` (partages et serveurs appairés), `agent.token`, et son certificat `agent-tls.crt` / `agent-tls.key` ; les perdre oblige seulement à l'appairer de nouveau.
 
 ---
 

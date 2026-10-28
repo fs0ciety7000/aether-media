@@ -50,6 +50,9 @@ type AgentConfig struct {
 	Share    string `json:"share"`
 	Hostname string `json:"hostname,omitempty"`
 	Version  string `json:"version,omitempty"`
+	// Fingerprint pins the certificate of a manual-token agent (lowercase
+	// hex SHA-256; paired agents keep theirs in remote_agents).
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 type SFTPConfig struct {
@@ -83,8 +86,9 @@ type Factory interface {
 	// AgentEvents streams change notifications of an agent share until ctx
 	// is done (reconnecting as needed).
 	AgentEvents(ctx context.Context, cfg AgentConfig, sec Secrets) (<-chan []string, error)
-	// AgentInfo queries an agent (connection test, share list).
-	AgentInfo(ctx context.Context, url, token string) (AgentInfo, error)
+	// AgentInfo queries an agent (connection test, share list), pinning
+	// its certificate when fingerprint is set.
+	AgentInfo(ctx context.Context, url, token, fingerprint string) (AgentInfo, error)
 	// SFTPHostKey connects only to read the server's host key fingerprint.
 	SFTPHostKey(ctx context.Context, cfg SFTPConfig) (string, error)
 }
@@ -94,6 +98,7 @@ type AgentInfo struct {
 	Hostname string   `json:"hostname"`
 	Version  string   `json:"version"`
 	Shares   []string `json:"shares"`
+	TLS      bool     `json:"tls"`
 }
 
 // Manager caches open file systems and tracks source health.
@@ -305,8 +310,9 @@ func (m *Manager) Stat(ctx context.Context, loc string) (vfs.Entry, error) {
 }
 
 // InputURL returns what FFmpeg/ffprobe should read for a location: the local
-// path, the agent's direct URL, or a short-lived signed URL of the server's
-// internal proxy (SFTP).
+// path, or a short-lived signed loopback URL of the server's internal proxy
+// (agents, SFTP). FFmpeg never connects to an agent itself: it could not
+// check the pinned certificate and the token would show on its command line.
 func (m *Manager) InputURL(ctx context.Context, loc string) (string, error) {
 	id, rel, ok := ParseRemote(loc)
 	if !ok {

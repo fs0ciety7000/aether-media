@@ -11,7 +11,6 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
@@ -383,31 +383,13 @@ func TestTokenAndInputURL(t *testing.T) {
 	a := newFake()
 	a.add("lib/Heat (1995)/heat & co.mkv", []byte("data"))
 	srv, f := newTestFS(t, a, "lib")
-	u := f.InputURL("Heat (1995)/heat & co.mkv")
-	pu, err := url.Parse(u)
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := pu.Query()
-	if pu.Path != "/agent/v1/file" || q.Get("share") != "films" || q.Get("path") != "lib/Heat (1995)/heat & co.mkv" || q.Get("t") != token {
+	// FFmpeg never gets a direct agent URL: the server proxies instead.
+	if u := f.InputURL("Heat (1995)/heat & co.mkv"); u != "" {
 		t.Fatalf("InputURL = %s", u)
-	}
-	// The URL works without any header (as FFmpeg would use it).
-	resp, err := http.Get(u)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != 200 || string(b) != "data" {
-		t.Fatalf("status %d body %q", resp.StatusCode, b)
-	}
-	if f.InputURL("../x") != "" {
-		t.Fatal("InputURL accepted ../")
 	}
 	// Wrong token → ErrUnauthorized mentioning the token.
 	bad, _ := New(Config{BaseURL: srv.URL, Token: "nope", Share: "films"})
-	_, err = bad.Stat(context.Background(), "x")
+	_, err := bad.Stat(context.Background(), "x")
 	if !errors.Is(err, ErrUnauthorized) || !strings.Contains(err.Error(), "token") {
 		t.Fatalf("err = %v", err)
 	}
@@ -565,5 +547,46 @@ func BenchmarkReadThroughput(b *testing.B) {
 			b.Fatal(err)
 		}
 		fl.Close()
+	}
+}
+
+func TestPinnedTLS(t *testing.T) {
+	a := newFake()
+	a.add("x.mkv", []byte("data"))
+	srv := httptest.NewTLSServer(a)
+	defer srv.Close()
+	fp := agentproto.CertFingerprint(srv.Certificate())
+	f, err := New(Config{BaseURL: srv.URL, Token: token, Share: "films", Fingerprint: fp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Stat(context.Background(), "x.mkv"); err != nil {
+		t.Fatalf("pinned stat: %v", err)
+	}
+	if err := f.Ping(context.Background()); err != nil {
+		t.Fatalf("pinned ping: %v", err)
+	}
+	// Without a pin, the self-signed certificate is not trusted (CA check).
+	if _, err := Info(context.Background(), srv.URL, token, nil); err == nil {
+		t.Fatal("self-signed accepted without pin")
+	}
+	// Another certificate than the pinned one.
+	other := strings.Repeat("0", 64)
+	g, _ := New(Config{BaseURL: srv.URL, Token: token, Share: "films", Fingerprint: other})
+	_, err = g.Stat(context.Background(), "x.mkv")
+	var fe *FingerprintError
+	if !errors.Is(err, ErrFingerprintMismatch) || !errors.As(err, &fe) || fe.Got != fp || fe.Want != other {
+		t.Fatalf("mismatch err = %v", err)
+	}
+	// A pinned agent is never reached in clear.
+	if _, err := New(Config{BaseURL: "http://127.0.0.1:1", Share: "films", Fingerprint: fp}); err == nil {
+		t.Fatal("pinned http:// accepted")
+	}
+	info, err := ProbeTLS(context.Background(), srv.URL)
+	if err != nil || info.Fingerprint != fp || info.CAValid {
+		t.Fatalf("probe: %+v %v", info, err)
+	}
+	if c1, c2 := ClientFor(fp), ClientFor(fp); c1 != c2 {
+		t.Fatal("pinned clients are not shared")
 	}
 }

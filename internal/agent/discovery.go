@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 )
 
 // DiscoveryMagic is the UDP request an Aether server broadcasts to find
@@ -29,6 +31,11 @@ type discoveryReply struct {
 	Version  string `json:"version"`
 	Port     int    `json:"port"`
 	TLS      bool   `json:"tls"`
+	// Scheme and Fingerprint (lowercase hex SHA-256 of the certificate)
+	// are informative: UDP is not authenticated, the pairing checks the
+	// fingerprint for real.
+	Scheme      string `json:"scheme,omitempty"`
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // Discovered is an agent found by Discover.
@@ -41,6 +48,8 @@ type Discovered struct {
 	TLS      bool   `json:"tls"`
 	Addr     string `json:"addr"` // source IP of the reply
 	URL      string `json:"url"`  // http(s)://Addr:Port
+	// Fingerprint announced by the agent (unauthenticated, for display).
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 var cgnat = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
@@ -95,7 +104,7 @@ func (s *Server) serveDiscovery(ctx context.Context, conn net.PacketConn) {
 		replies++
 		b, err := json.Marshal(discoveryReply{
 			UID: s.uid, Name: s.name, Hostname: s.hostname, Version: s.version,
-			Port: int(s.httpPort.Load()), TLS: s.cfg.TLSCert != "",
+			Port: int(s.httpPort.Load()), TLS: s.tls != nil, Scheme: s.scheme(), Fingerprint: s.Fingerprint(),
 		})
 		if err != nil {
 			continue
@@ -198,13 +207,15 @@ func discover(ctx context.Context, port int, timeout time.Duration, targets []ne
 			addr = v4.String()
 		}
 		scheme := "http"
-		if rep.TLS {
+		if rep.TLS || rep.Scheme == "https" {
 			scheme = "https"
 		}
+		fp, _ := agentproto.NormalizeFingerprint(rep.Fingerprint)
 		out = append(out, Discovered{
 			UID: rep.UID, Name: rep.Name, Hostname: rep.Hostname, Version: rep.Version,
-			Port: rep.Port, TLS: rep.TLS, Addr: addr,
-			URL: scheme + "://" + net.JoinHostPort(addr, strconv.Itoa(rep.Port)),
+			Port: rep.Port, TLS: scheme == "https", Addr: addr,
+			URL:         scheme + "://" + net.JoinHostPort(addr, strconv.Itoa(rep.Port)),
+			Fingerprint: fp,
 		})
 	}
 	if err := context.Cause(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {

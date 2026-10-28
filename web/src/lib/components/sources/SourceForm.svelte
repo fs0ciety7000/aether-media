@@ -6,6 +6,7 @@
 	import type { Source } from '$lib/api/types';
 	import {
 		draftToInput,
+		formatFingerprint,
 		isTested,
 		sourceErrorMessage,
 		testKey,
@@ -268,7 +269,7 @@
 				class="f-input f-mono"
 				type="url"
 				inputmode="url"
-				placeholder="http://hote:8097"
+				placeholder="https://hote:8097"
 				bind:value={draft.agent.url}
 				oninput={() => clear('url')}
 				autocomplete="off"
@@ -287,6 +288,30 @@
 			hint="Affiché au premier démarrage de l’agent et enregistré dans <data>/agent.token."
 			error={errors.token}
 		/>
+		<div class="f-field">
+			<label class="f-label" for={id('fp')}>Empreinte du certificat<span class="f-optional">{' (facultatif)'}</span></label>
+			<input
+				id={id('fp')}
+				class="f-input f-mono"
+				type="text"
+				placeholder="3F2A 9C01 … (affichée dans les journaux de l’agent)"
+				bind:value={draft.agent.fingerprint}
+				autocomplete="off"
+				spellcheck="false"
+				autocapitalize="characters"
+				aria-describedby={id('fp-hint')}
+			/>
+			<p class="f-hint" id={id('fp-hint')}>
+				Adresse en https : sans empreinte, le certificat vu au premier test est enregistré (confiance à la première connexion) ; avec, tout autre
+				certificat est refusé.
+			</p>
+			{#if draft.test?.warning === 'fingerprint_tofu' && draft.test.fingerprint}
+				<p class="f-hint tofu" role="status">
+					Certificat enregistré à la première connexion : <code>{formatFingerprint(draft.test.fingerprint)}</code>. Comparez-le à l’empreinte
+					affichée par l’agent.
+				</p>
+			{/if}
+		</div>
 		{@render testButton('Tester la connexion')}
 	{:else}
 		<div class="host-row">
@@ -505,6 +530,12 @@
 </div>
 
 <style>
+	.tofu code {
+		font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+		color: var(--text);
+		overflow-wrap: anywhere;
+	}
+
 	.form {
 		display: grid;
 		gap: var(--sp-4);

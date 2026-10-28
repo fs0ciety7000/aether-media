@@ -14,6 +14,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/fsbrowse"
 	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs/agentfs"
 )
 
 // DiscoveryPort is the UDP port agents answer discovery on.
@@ -29,10 +30,15 @@ type agentDTO struct {
 	LastError string     `json:"lastError,omitempty"`
 	LastSeen  *time.Time `json:"lastSeen,omitempty"`
 	Sources   int64      `json:"sources"`
+	// Fingerprint: SHA-256 (lowercase hex) of the pinned certificate;
+	// Transport: https-pinned | https-ca | http.
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Transport   string `json:"transport"`
 }
 
 func (s *Server) agentDTO(r *http.Request, a db.RemoteAgent) agentDTO {
-	dto := agentDTO{ID: a.ID, UID: a.Uid, Name: a.Name, URL: a.Url, Version: a.Version, Status: a.Status, LastError: a.LastError}
+	dto := agentDTO{ID: a.ID, UID: a.Uid, Name: a.Name, URL: a.Url, Version: a.Version, Status: a.Status, LastError: a.LastError,
+		Fingerprint: a.Fingerprint, Transport: sources.AgentTransport(a)}
 	if a.LastSeen.Valid {
 		t := time.Unix(a.LastSeen.Int64, 0).UTC()
 		dto.LastSeen = &t
@@ -85,6 +91,9 @@ func (s *Server) discoverAgents(w http.ResponseWriter, r *http.Request) {
 type pairRequest struct {
 	URL  string `json:"url"`
 	Code string `json:"code"`
+	// AgentID re-pairs that agent (new token and certificate, e.g. moving
+	// from HTTP to HTTPS, or after a certificate change).
+	AgentID int64 `json:"agentId,omitempty"`
 }
 
 // pairAgent: POST /api/v1/agents/pair — exchanges the code shown by the agent.
@@ -97,7 +106,7 @@ func (s *Server) pairAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
 		return
 	}
-	a, err := s.Sources.Pair(r.Context(), req.URL, req.Code)
+	a, err := s.Sources.Pair(r.Context(), req.URL, req.Code, req.AgentID)
 	if s.sourceError(w, err) {
 		return
 	}
@@ -124,6 +133,10 @@ func (s *Server) loadAgent(w http.ResponseWriter, r *http.Request) (db.RemoteAge
 
 // agentProxyError maps agent call failures to API errors.
 func (s *Server) agentProxyError(w http.ResponseWriter, err error) {
+	if errors.Is(err, agentfs.ErrFingerprintMismatch) {
+		writeError(w, http.StatusBadGateway, "agent_cert_mismatch", err.Error())
+		return
+	}
 	var ae *sources.AgentError
 	if errors.As(err, &ae) {
 		code := ae.Code
@@ -136,6 +149,8 @@ func (s *Server) agentProxyError(w http.ResponseWriter, err error) {
 			status = ae.Status
 		case http.StatusUnauthorized:
 			code = "agent_unpaired"
+		case http.StatusUpgradeRequired:
+			code = "agent_tls_required"
 		}
 		writeError(w, status, code, ae.Error())
 		return

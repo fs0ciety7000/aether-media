@@ -1,12 +1,14 @@
 <script lang="ts">
 	// Settings › Libraries › Agents (M5c): paired machines, live status, pair a new one, unpair.
 	// Unpairing is refused (409 agent_in_use) while sources use the agent: we say which ones.
+	// M5d: transport (HTTPS pinned / CA / HTTP) and certificate fingerprint of each agent; "Réappairer"
+	// moves an agent paired over HTTP to HTTPS, or accepts a certificate that changed legitimately.
 	import { onMount } from 'svelte';
 	import { api, ApiError, errorMessage } from '$lib/api/client';
 	import { agents, libraries } from '$lib/api/stores.svelte';
 	import type { Agent } from '$lib/api/types';
 	import { formatRelative } from '$lib/format';
-	import { emptyDraft, hostOf, sourceErrorMessage, type SourceDraft } from '$lib/sources';
+	import { emptyDraft, hostOf, sourceErrorMessage, TRANSPORT_LABEL, type SourceDraft } from '$lib/sources';
 	import { toasts } from '$lib/toast.svelte';
 	import Button from '../Button.svelte';
 	import ConfirmDialog from '../ConfirmDialog.svelte';
@@ -14,6 +16,7 @@
 	import Icon from '../Icon.svelte';
 	import Skeleton from '../Skeleton.svelte';
 	import AgentWizard from '../sources/AgentWizard.svelte';
+	import FingerprintNote from '../sources/FingerprintNote.svelte';
 	import SourceStatusPill from '../sources/SourceStatusPill.svelte';
 
 	interface Props {
@@ -24,6 +27,8 @@
 
 	let pairOpen = $state(false);
 	let pairDraft = $state<SourceDraft>(emptyDraft('agent'));
+	/** Agent being paired again (null: a new one). */
+	let repairing = $state<Agent | null>(null);
 	let toUnpair = $state<Agent | null>(null);
 	let unpairOpen = $state(false);
 	let unpairing = $state(false);
@@ -43,12 +48,24 @@
 
 	function openPair() {
 		pairDraft = emptyDraft('agent');
+		repairing = null;
+		pairOpen = true;
+	}
+
+	function openRepair(a: Agent) {
+		pairDraft = emptyDraft('agent');
+		repairing = a;
 		pairOpen = true;
 	}
 
 	function paired(a: Agent) {
 		pairOpen = false;
-		toasts.show(`Agent « ${a.name} » appairé`, { detail: 'Ajoutez une source « Agent Aether » pour partager ses dossiers.' });
+		const again = !!repairing;
+		repairing = null;
+		agents.refresh();
+		toasts.show(again ? `Agent « ${a.name} » réappairé` : `Agent « ${a.name} » appairé`, {
+			detail: again ? 'Ses sources utilisent désormais la nouvelle connexion.' : 'Ajoutez une source « Agent Aether » pour partager ses dossiers.'
+		});
 	}
 
 	function askUnpair(a: Agent) {
@@ -117,10 +134,21 @@
 					<div class="a-text">
 						<p class="a-name">{a.name}</p>
 						<p class="a-meta">{meta(a)}</p>
-						{#if a.status === 'offline' && a.lastError}<p class="a-err"><Icon name="alert" size={13} />{sourceErrorMessage(a.lastError)}</p>{/if}
+						<p class={['a-transport', a.transport]}>
+							<Icon name={a.transport === 'http' ? 'unlock' : 'lock'} size={12} />{TRANSPORT_LABEL[a.transport]}{#if a.transport === 'http'}
+								— réappairez pour chiffrer{/if}
+						</p>
+						{#if a.fingerprint}<FingerprintNote transport={a.transport} fingerprint={a.fingerprint} compact />{/if}
+						{#if (a.status === 'offline' || a.status === 'cert_mismatch') && a.lastError}<p class="a-err"><Icon name="alert" size={13} />{sourceErrorMessage(a.lastError)}</p>{/if}
 					</div>
 					<span class="a-status"><SourceStatusPill status={a.status} lastError={a.lastError} lastSeen={a.lastSeen} {now} /></span>
 					<span class="a-actions">
+						<Button
+							variant={a.status === 'cert_mismatch' || a.transport === 'http' ? 'secondary' : 'tertiary'}
+							icon="key"
+							onclick={() => openRepair(a)}
+							aria-label="Réappairer {a.name}"><span class="lbl">Réappairer</span></Button
+						>
 						<Button variant="tertiary" icon="unlock" onclick={() => askUnpair(a)} aria-label="Désappairer {a.name}"><span class="lbl">Désappairer</span></Button>
 					</span>
 				</li>
@@ -129,9 +157,18 @@
 	{/if}
 </section>
 
-<Dialog bind:open={pairOpen} title="Appairer un agent" description="Trouvez la machine sur le réseau ou saisissez son adresse, puis tapez le code qu’elle affiche." size="lg">
+<Dialog
+	bind:open={pairOpen}
+	title={repairing ? `Réappairer « ${repairing.name} »` : 'Appairer un agent'}
+	description={repairing
+		? 'Saisissez le code affiché par l’agent : le serveur reçoit un nouveau jeton et enregistre le certificat actuel (HTTPS).'
+		: 'Trouvez la machine sur le réseau ou saisissez son adresse, puis tapez le code qu’elle affiche.'}
+	size="lg"
+>
 	{#if pairOpen}
-		<AgentWizard bind:draft={pairDraft} idp="pair" pairOnly onpaired={paired} />
+		{#key repairing?.id}
+			<AgentWizard bind:draft={pairDraft} idp="pair" pairOnly onpaired={paired} repairAgent={repairing ?? undefined} />
+		{/key}
 	{/if}
 	{#snippet footer()}
 		<Button variant="tertiary" onclick={() => (pairOpen = false)}>Fermer</Button>
@@ -222,7 +259,8 @@
 		color: var(--accent-ink);
 	}
 
-	.offline .a-icon {
+	.offline .a-icon,
+	.cert_mismatch .a-icon {
 		background: color-mix(in srgb, var(--text) 6%, transparent);
 		color: var(--text-muted);
 	}
@@ -247,6 +285,18 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.a-transport {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		font-size: var(--fs-micro);
+		color: var(--text-muted);
+	}
+
+	.a-transport.http {
+		color: var(--danger);
 	}
 
 	.a-err {
@@ -301,8 +351,8 @@
 		}
 
 		.agent {
-			grid-template-columns: auto minmax(0, 1fr) auto;
-			grid-template-areas: 'icon text text' 'icon status actions';
+			grid-template-columns: auto minmax(0, 1fr);
+			grid-template-areas: 'icon text' 'icon status' 'icon actions';
 			row-gap: var(--sp-2);
 			align-items: start;
 		}
@@ -317,12 +367,15 @@
 
 		.a-status {
 			grid-area: status;
-			align-self: center;
+			justify-self: start;
 		}
 
 		.a-actions {
 			grid-area: actions;
-			justify-self: end;
+			justify-self: start;
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--sp-2);
 		}
 	}
 </style>

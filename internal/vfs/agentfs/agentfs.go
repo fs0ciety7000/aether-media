@@ -22,12 +22,15 @@ import (
 
 // Config describes an agent share.
 type Config struct {
-	BaseURL    string // e.g. "https://nas.lan:8097" (no /agent/v1 suffix)
-	Token      string
-	Share      string
-	Root       string // sub-path inside the share ("" = share root)
-	HTTPClient *http.Client
-	UserAgent  string
+	BaseURL string // e.g. "https://nas.lan:8097" (no /agent/v1 suffix)
+	Token   string
+	Share   string
+	Root    string // sub-path inside the share ("" = share root)
+	// Fingerprint pins the agent's certificate (lowercase hex SHA-256);
+	// empty means CA verification for https URLs.
+	Fingerprint string
+	HTTPClient  *http.Client
+	UserAgent   string
 }
 
 // AgentInfo is the /agent/v1/info payload.
@@ -36,6 +39,9 @@ type AgentInfo struct {
 	Shares   []Share `json:"shares"`
 	FFprobe  bool    `json:"ffprobe"`
 	Hostname string  `json:"hostname"`
+	// TLS and Fingerprint describe the agent's own HTTPS (agents ≥ M5d).
+	TLS         bool   `json:"tls"`
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // Share is one exported folder of an agent.
@@ -106,15 +112,33 @@ func newFS(cfg Config) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := cfg.HTTPClient
-	if c == nil {
-		c = DefaultClient()
+	c, err := clientFor(base.Scheme, cfg.Fingerprint, cfg.HTTPClient)
+	if err != nil {
+		return nil, err
 	}
 	ua := cfg.UserAgent
 	if ua == "" {
 		ua = defaultUA
 	}
 	return &FS{base: base, token: cfg.Token, share: cfg.Share, root: root, client: c, ua: ua}, nil
+}
+
+// clientFor picks the HTTP client of an agent: pinned to fingerprint when
+// set (https only: a pinned agent is never reached in clear).
+func clientFor(scheme, fingerprint string, base *http.Client) (*http.Client, error) {
+	if fingerprint == "" {
+		if base != nil {
+			return base, nil
+		}
+		return ClientFor(""), nil
+	}
+	if scheme != "https" {
+		return nil, errors.New("agentfs: empreinte de certificat définie mais adresse http:// (https:// attendu)")
+	}
+	if base != nil {
+		return PinClient(base, fingerprint), nil
+	}
+	return ClientFor(fingerprint), nil
 }
 
 // remote maps a source-relative path to a share-relative one.
@@ -368,22 +392,15 @@ func (f *FS) ReadDir(ctx context.Context, dir string) ([]vfs.Entry, error) {
 	return out, nil
 }
 
-// InputURL returns a URL FFmpeg can read directly (token in the query).
-func (f *FS) InputURL(name string) string {
-	_, remote, err := f.remote(name)
-	if err != nil {
-		return ""
-	}
-	q := f.query(remote)
-	if f.token != "" {
-		q.Set("t", f.token)
-	}
-	return f.endpoint("/file", q)
-}
+// InputURL returns "": FFmpeg and ffprobe never connect to agents directly
+// (they could not check a pinned self-signed certificate, and the token
+// would appear on their command line). The server hands them a signed
+// loopback URL of its internal proxy instead, which reads through this FS.
+func (f *FS) InputURL(string) string { return "" }
 
 // Ping checks the agent answers /info with this token and exports the share.
 func (f *FS) Ping(ctx context.Context) error {
-	info, err := Info(ctx, f.base.String(), f.token, f.client)
+	info, err := Info(ctx, f.base.String(), f.token, f.client) // f.client is pinned
 	if err != nil {
 		return err
 	}
@@ -401,14 +418,15 @@ func (f *FS) Close() error {
 	return nil
 }
 
-// Info fetches /agent/v1/info (used by the "test connection" endpoint).
+// Info fetches /agent/v1/info (used by the "test connection" endpoint). c
+// must already pin the agent's certificate when it has one (ClientFor).
 func Info(ctx context.Context, baseURL, token string, c *http.Client) (AgentInfo, error) {
 	base, err := parseBase(baseURL)
 	if err != nil {
 		return AgentInfo{}, err
 	}
 	if c == nil {
-		c = DefaultClient()
+		c = ClientFor("")
 	}
 	ctx, cancel := withMetaTimeout(ctx)
 	defer cancel()

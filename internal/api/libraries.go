@@ -247,7 +247,11 @@ func (s *Server) sourceError(w http.ResponseWriter, err error) bool {
 	}
 	var ve *sources.ValidationError
 	if errors.As(err, &ve) {
-		writeError(w, http.StatusBadRequest, "invalid_source", ve.Msg)
+		code := ve.Code
+		if code == "" {
+			code = "invalid_source"
+		}
+		writeError(w, http.StatusBadRequest, code, ve.Msg)
 		return true
 	}
 	if errors.Is(err, vfs.ErrOffline) {
@@ -414,7 +418,7 @@ func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {
 // remote sources to the server's own FFmpeg/ffprobe/image fetcher. Signed,
 // expiring and restricted to loopback clients.
 func (s *Server) vfsProxy(w http.ResponseWriter, r *http.Request) {
-	if s.Sources == nil || !isLoopback(r.RemoteAddr) {
+	if s.Sources == nil || !sameHost(r) {
 		http.NotFound(w, r)
 		return
 	}
@@ -440,6 +444,22 @@ func (s *Server) vfsProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = f.Close() }()
 	http.ServeContent(w, r, "", f.ModTime(), f)
+}
+
+// sameHost reports whether r comes from this machine: a loopback peer, or
+// a peer whose address is the very address it connected to (the server
+// bound to one LAN address, where FFmpeg reaches it through that address).
+func sameHost(r *http.Request) bool {
+	if isLoopback(r.RemoteAddr) {
+		return true
+	}
+	la, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if !ok {
+		return false
+	}
+	rh, _, err1 := net.SplitHostPort(r.RemoteAddr)
+	lh, _, err2 := net.SplitHostPort(la.String())
+	return err1 == nil && err2 == nil && rh == lh
 }
 
 func isLoopback(remoteAddr string) bool {

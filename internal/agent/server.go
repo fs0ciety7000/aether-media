@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 	"github.com/fs0ciety7000/aether-media/internal/fsbrowse"
 	"github.com/fsnotify/fsnotify"
 )
@@ -55,6 +57,11 @@ type Server struct {
 	limiter     *failLimiter // bad tokens
 	pairLimiter *failLimiter // bad pairing codes
 	pairing     *pairing
+	pairKDF     chan struct{} // one Argon2id derivation at a time
+
+	// tls is the served certificate (nil with tls = false).
+	tls         *agentTLS
+	plainWarned sync.Map // caller key → struct{}: plain HTTP use logged once
 	hub         *hub
 	httpPort    atomic.Int32 // actual listening port once Run started
 
@@ -100,6 +107,7 @@ func New(cfg Config, version string) (*Server, error) {
 		limiter:     newFailLimiter(5, time.Minute),
 		pairLimiter: newFailLimiter(pairMaxFails, pairFailSpan),
 		pairing:     newPairing(log),
+		pairKDF:     make(chan struct{}, 1),
 		hub:         newHub(),
 		debounce:    10 * time.Second,
 		pingEvery:   25 * time.Second,
@@ -118,16 +126,27 @@ func New(cfg Config, version string) (*Server, error) {
 		}
 		s.activateLocked(sh)
 	}
-	tok, err := loadOrCreateToken(cfg.DataDir)
+	tok, tokCreated, err := loadOrCreateToken(cfg.DataDir)
 	if err != nil {
 		s.Close()
 		return nil, err
 	}
 	s.token = tok
 	s.tokenSum = sha256.Sum256([]byte(tok))
-	if err := s.loadState(); err != nil {
+	if err := s.loadState(tokCreated); err != nil {
 		s.Close()
 		return nil, err
+	}
+	if !cfg.DisableTLS {
+		t, created, err := loadTLS(cfg, s.hostname)
+		if err != nil {
+			s.Close()
+			return nil, err
+		}
+		s.tls = t
+		if created {
+			log.Info("certificat TLS auto-signé créé", "fichier", filepath.Join(cfg.DataDir, certFileName))
+		}
 	}
 	s.ffprobePath = detectFFprobe(cfg.FFprobe)
 	if s.ffprobePath == "" {
@@ -138,11 +157,29 @@ func New(cfg Config, version string) (*Server, error) {
 }
 
 // loadState reads agent-state.json, opens the managed shares and saves the
-// state back when it was created or cleaned up.
-func (s *Server) loadState() error {
+// state back when it was created, upgraded or cleaned up. tokenCreated
+// tells whether agent.token was just generated.
+func (s *Server) loadState(tokenCreated bool) error {
 	st, dirty, err := loadState(s.cfg.DataDir)
 	if err != nil {
 		return err
+	}
+	if st.Version < stateVersion {
+		if st.Version == 0 {
+			// Written by an agent that only spoke HTTP (or none yet, but an
+			// agent.token from a v1 agent): what was paired keeps working
+			// over HTTP until it pairs again.
+			for i := range st.Servers {
+				st.Servers[i].Plain = true
+			}
+			st.LegacyTokenPlain = !tokenCreated
+		}
+		st.Version = stateVersion
+		dirty = true
+	}
+	if tokenCreated && st.LegacyTokenPlain {
+		st.LegacyTokenPlain = false
+		dirty = true
 	}
 	if st.Name == "" {
 		st.Name = s.hostname
@@ -208,44 +245,44 @@ func (s *Server) nameOrPathUsed(sc Share, kept []Share) string {
 	return ""
 }
 
-func loadOrCreateToken(dir string) (string, error) {
+func loadOrCreateToken(dir string) (tok string, created bool, err error) {
 	p := filepath.Join(dir, tokenFileName)
 	b, err := os.ReadFile(p)
 	switch {
 	case err == nil:
 		tok := strings.TrimSpace(string(b))
 		if len(tok) < 32 {
-			return "", fmt.Errorf("agent: jeton invalide dans %s (supprimez le fichier pour en générer un nouveau)", p)
+			return "", false, fmt.Errorf("agent: jeton invalide dans %s (supprimez le fichier pour en générer un nouveau)", p)
 		}
 		if fi, err := os.Stat(p); err == nil && fi.Mode().Perm()&0o077 != 0 {
 			if err := os.Chmod(p, 0o600); err != nil {
-				return "", fmt.Errorf("agent: permissions de %s : %w", p, err)
+				return "", false, fmt.Errorf("agent: permissions de %s : %w", p, err)
 			}
 		}
-		return tok, nil
+		return tok, false, nil
 	case !errors.Is(err, os.ErrNotExist):
-		return "", fmt.Errorf("agent: lecture du jeton : %w", err)
+		return "", false, fmt.Errorf("agent: lecture du jeton : %w", err)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("agent: création de %s : %w", dir, err)
+		return "", false, fmt.Errorf("agent: création de %s : %w", dir, err)
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
-		return "", err
+		return "", false, err
 	}
-	tok := base64.RawURLEncoding.EncodeToString(raw)
+	tok = base64.RawURLEncoding.EncodeToString(raw)
 	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("agent: écriture du jeton : %w", err)
+		return "", false, fmt.Errorf("agent: écriture du jeton : %w", err)
 	}
 	if _, err := io.WriteString(f, tok+"\n"); err != nil {
 		_ = f.Close()
-		return "", fmt.Errorf("agent: écriture du jeton : %w", err)
+		return "", false, fmt.Errorf("agent: écriture du jeton : %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("agent: écriture du jeton : %w", err)
+		return "", false, fmt.Errorf("agent: écriture du jeton : %w", err)
 	}
-	return tok, nil
+	return tok, true, nil
 }
 
 // Token returns the pairing token. Never log it.
@@ -253,6 +290,41 @@ func (s *Server) Token() string { return s.token }
 
 // Handler returns the HTTP handler serving the agent protocol.
 func (s *Server) Handler() http.Handler { return s.handler }
+
+// Fingerprint returns the lowercase hex SHA-256 of the served certificate
+// ("" with tls = false).
+func (s *Server) Fingerprint() string {
+	if s.tls == nil {
+		return ""
+	}
+	return s.tls.fingerprint
+}
+
+// TLSConfig returns the TLS configuration the agent serves (nil with
+// tls = false). Tests use it to serve the handler over HTTPS.
+func (s *Server) TLSConfig() *tls.Config {
+	if s.tls == nil {
+		return nil
+	}
+	return s.tls.config()
+}
+
+// WrapListener returns the listener Run serves on: HTTPS and plain HTTP on
+// the same port when TLS is on (plain HTTP is limited to the local page and
+// pre-HTTPS pairings), ln itself with tls = false.
+func (s *Server) WrapListener(ln net.Listener) net.Listener {
+	if s.tls == nil {
+		return ln
+	}
+	return newSniffListener(ln, s.tls.config())
+}
+
+func (s *Server) scheme() string {
+	if s.tls != nil {
+		return "https"
+	}
+	return "http"
+}
 
 // UID returns the agent's stable identifier.
 func (s *Server) UID() string { return s.uid }
@@ -316,10 +388,7 @@ func (s *Server) Run(ctx context.Context) error {
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelDebug),
 	}
-	scheme := "http"
-	if s.cfg.TLSCert != "" {
-		scheme = "https"
-	}
+	scheme := s.scheme()
 	shares := s.activeShares()
 	names := make([]string, len(shares))
 	for i, sh := range shares {
@@ -330,16 +399,11 @@ func (s *Server) Run(ctx context.Context) error {
 		s.log.Info("page locale : " + scheme + "://localhost:" + strconv.Itoa(int(s.httpPort.Load())) + "/ · adresses : " + strings.Join(urls, " "))
 	}
 	s.log.Info("Jeton d'appairage manuel (agent.token) : " + s.token)
+	s.logTLS()
 	s.pairing.current() // logs the pairing code
 
 	errc := make(chan error, 1)
-	go func() {
-		if s.cfg.TLSCert != "" {
-			errc <- srv.ServeTLS(ln, s.cfg.TLSCert, s.cfg.TLSKey)
-		} else {
-			errc <- srv.Serve(ln)
-		}
-	}()
+	go func() { errc <- srv.Serve(s.WrapListener(ln)) }()
 
 	select {
 	case err := <-errc:
@@ -392,6 +456,56 @@ func (s *Server) routes() http.Handler {
 	return public
 }
 
+// logTLS logs the certificate fingerprint and the HTTP compatibility state.
+func (s *Server) logTLS() {
+	if s.tls == nil {
+		s.log.Warn("HTTPS désactivé (tls = false) : à n'utiliser que derrière un proxy HTTPS ou un VPN")
+		return
+	}
+	src := "auto-signé"
+	if s.tls.source == certCustom {
+		src = "tls_cert"
+	}
+	s.log.Info("Empreinte du certificat TLS (SHA-256, " + src + ") : " + agentproto.FormatFingerprint(s.tls.fingerprint))
+	if s.cfg.DisableHTTPCompat {
+		return
+	}
+	n, legacy := s.plainCompat()
+	if n > 0 {
+		s.log.Warn(fmt.Sprintf("%d serveur(s) appairé(s) en HTTP avant le passage à HTTPS : HTTP non chiffré reste accepté pour eux jusqu'à leur réappairage (Réglages › Agents › Réappairer). http_compat = false pour l'interdire.", n))
+	}
+	if legacy {
+		s.log.Warn("Le jeton manuel agent.token antérieur à HTTPS reste accepté en HTTP (compatibilité) ; supprimez agent.token (nouveau jeton) ou réglez http_compat = false pour l'interdire.")
+	}
+}
+
+// plainCompat counts the servers allowed to use plain HTTP and tells
+// whether the legacy token is.
+func (s *Server) plainCompat() (servers int, legacyToken bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sv := range s.state.Servers {
+		if sv.Plain {
+			servers++
+		}
+	}
+	return servers, s.state.LegacyTokenPlain
+}
+
+// plainAllowed reports whether caller c may use plain HTTP while the agent
+// serves HTTPS (compatibility with what was paired before HTTPS).
+func (s *Server) plainAllowed(c caller) bool {
+	if s.cfg.DisableHTTPCompat {
+		return false
+	}
+	if c.legacy {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.state.LegacyTokenPlain
+	}
+	return c.plain
+}
+
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -435,6 +549,19 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "jeton manquant ou invalide")
 			return
 		}
+		if s.tls != nil && r.TLS == nil {
+			if !s.plainAllowed(c) {
+				writeError(w, http.StatusUpgradeRequired, "tls_required", "cet agent exige HTTPS : utilisez https:// (réappairez l'agent depuis le serveur)")
+				return
+			}
+			key := "legacy"
+			if !c.legacy {
+				key = "server:" + c.serverID
+			}
+			if _, seen := s.plainWarned.LoadOrStore(key, struct{}{}); !seen {
+				s.log.Warn("appel en HTTP non chiffré accepté (appairage antérieur à HTTPS) : réappairez ce serveur pour passer en HTTPS", "appelant", key, "ip", ip)
+			}
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callerKey{}, c)))
 	})
 }
@@ -468,12 +595,14 @@ type infoShare struct {
 }
 
 type infoResponse struct {
-	UID      string      `json:"uid"`
-	Name     string      `json:"name"`
-	Version  string      `json:"version"`
-	Hostname string      `json:"hostname"`
-	Shares   []infoShare `json:"shares"`
-	FFprobe  bool        `json:"ffprobe"`
+	UID         string      `json:"uid"`
+	Name        string      `json:"name"`
+	Version     string      `json:"version"`
+	Hostname    string      `json:"hostname"`
+	Shares      []infoShare `json:"shares"`
+	FFprobe     bool        `json:"ffprobe"`
+	TLS         bool        `json:"tls"`
+	Fingerprint string      `json:"fingerprint,omitempty"`
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
@@ -485,7 +614,9 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Hostname: s.hostname,
 		Shares:   make([]infoShare, 0, len(shares)),
 		FFprobe:  s.ffprobePath != "",
+		TLS:      s.tls != nil,
 	}
+	resp.Fingerprint = s.Fingerprint()
 	for _, sh := range shares {
 		is := infoShare{Name: sh.name}
 		if s.cfg.ExposePaths {

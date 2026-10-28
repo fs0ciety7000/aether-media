@@ -102,8 +102,11 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-0B8 Tests de bout en bout : bibliothèque mixant local + agent + SFTP
 - [ ] T-0B9 Codes d'erreur stables pour les tests de connexion (aujourd'hui texte libre traduit côté UI)
 - [ ] T-0BA SFTP : parcours parallèle des gros arbres, détection des changements (polling léger)
-- [ ] T-0BB Agent : HTTPS par défaut (certificat auto-signé + empreinte épinglée)
-- [ ] T-0BC Proxy interne : supporter un serveur lié à une IP non-loopback
+- [x] T-0BB Agent : HTTPS par défaut (certificat auto-signé ECDSA P-256 + empreinte épinglée par le serveur, HTTPS et HTTP compatibilité sur le même port, appairage v2 lié à l'empreinte via Argon2id + HMAC, code invalidé après un échec de liaison, statut `cert_mismatch`, « Réappairer », TOFU pour le jeton manuel, FFmpeg toujours via le proxy interne) — M5d
+- [x] T-0BC Proxy interne : supporter un serveur lié à une IP non-loopback (client accepté si son adresse est celle sur laquelle il a joint le serveur)
+- [ ] T-0BD Appairage par PAKE (SPAKE2 / CPace) pour supprimer l'attaque hors ligne sur le code enregistré (aujourd'hui rendue coûteuse par Argon2id)
+- [ ] T-0BE Agent : rechargement du certificat `tls_cert` à chaud (renouvellement Let's Encrypt sans redémarrage)
+- [ ] T-0BF Avertir dans l'UI quand l'empreinte annoncée en UDP diffère de celle reçue à l'appairage
 
 ## M5c — Appairage simplifié des agents ✅
 - [x] T-0E0 Agent sans configuration : état persistant, partages gérés à chaud
@@ -117,6 +120,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0EA Service Windows : choix du compte (aujourd'hui LocalSystem) et rotation du journal ; tester install/arrêt/désinstallation sur un vrai Windows et un vrai macOS (seuls la génération et la compilation croisée sont testées)
 - [ ] T-0E8 Supprimer un partage d'agent depuis l'UI (route serveur à exposer)
 - [ ] T-0E9 Découverte réseau : tester sur un vrai LAN (la diffusion UDP n'est pas disponible dans l'environnement de dev)
+- [x] T-0EB `aether agent install --user --method cron` : crontab de l'utilisateur (`@reboot` + surveillance 5 min, verrou flock, journal tourné), choisie d'office sans `systemctl --user`, `--listen` / `--data-dir`, `uninstall` / `status` ; section « Seedbox sans root » dans INSTALL.md
+- [ ] T-0EC Méthode cron : tester sur une vraie seedbox (Whatbox) et sur macOS / BSD (crontab et flock testés avec un faux binaire `crontab`)
 
 ## M6 — Utilisateurs & progression ✅
 - [x] T-070 Comptes, argon2id, sessions, rôles (premier compte = admin, limitation des connexions, contrôle d'Origin)

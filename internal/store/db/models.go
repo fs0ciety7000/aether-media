@@ -205,16 +205,17 @@ type Person struct {
 }
 
 type RemoteAgent struct {
-	ID        int64         `json:"id"`
-	Uid       string        `json:"uid"`
-	Name      string        `json:"name"`
-	Url       string        `json:"url"`
-	Secret    []byte        `json:"secret"`
-	Version   string        `json:"version"`
-	Status    string        `json:"status"`
-	LastError string        `json:"lastError"`
-	LastSeen  sql.NullInt64 `json:"lastSeen"`
-	CreatedAt int64         `json:"createdAt"`
+	ID          int64         `json:"id"`
+	Uid         string        `json:"uid"`
+	Name        string        `json:"name"`
+	Url         string        `json:"url"`
+	Secret      []byte        `json:"secret"`
+	Version     string        `json:"version"`
+	Status      string        `json:"status"`
+	LastError   string        `json:"lastError"`
+	LastSeen    sql.NullInt64 `json:"lastSeen"`
+	CreatedAt   int64         `json:"createdAt"`
+	Fingerprint string        `json:"fingerprint"`
 }
 
 type Session struct {

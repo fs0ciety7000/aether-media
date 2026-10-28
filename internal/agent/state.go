@@ -14,6 +14,9 @@ import (
 const (
 	stateFileName = "agent-state.json"
 	maxNameLen    = 100
+	// stateVersion 2: HTTPS by default. States written before it (no
+	// "version") come from agents that only spoke plain HTTP.
+	stateVersion = 2
 )
 
 // pairedServer is an Aether server paired with a code. Only the SHA-256 of
@@ -23,14 +26,23 @@ type pairedServer struct {
 	Name      string    `json:"name"`
 	TokenHash string    `json:"tokenHash"` // hex SHA-256
 	PairedAt  time.Time `json:"pairedAt"`
+	// Plain: paired over plain HTTP (before the agent switched to HTTPS, or
+	// with tls = false). Such a server may keep calling over HTTP until it
+	// pairs again; pairing over HTTPS clears it.
+	Plain bool `json:"plain,omitempty"`
 }
 
 // agentState is <data>/agent-state.json.
 type agentState struct {
+	Version int            `json:"version"`
 	UID     string         `json:"uid"`
 	Name    string         `json:"name"`
 	Shares  []Share        `json:"shares"` // managed shares (UI), possibly unavailable
 	Servers []pairedServer `json:"servers"`
+	// LegacyTokenPlain: agent.token predates HTTPS, so a server may use it
+	// over plain HTTP (manual pairing). Cleared when agent.token is
+	// regenerated.
+	LegacyTokenPlain bool `json:"legacyTokenPlain,omitempty"`
 }
 
 // newUID returns a random RFC 4122 version 4 UUID.
@@ -57,7 +69,7 @@ func loadState(dir string) (st agentState, created bool, err error) {
 		if err != nil {
 			return agentState{}, false, err
 		}
-		return agentState{UID: uid}, true, nil
+		return agentState{UID: uid}, true, nil // Version 0: upgraded by the caller
 	case err != nil:
 		return agentState{}, false, fmt.Errorf("agent: lecture de %s : %w", p, err)
 	}

@@ -5,6 +5,8 @@
 	//   3. Folder: browse the agent's folders, share the chosen one (POST /agents/{id}/shares)
 	//   4. Check: POST /sources/test on { agentId, share }; the parent then saves the source.
 	// `pairOnly` stops after step 2 (Settings › Agents: pair a machine without creating a source).
+	// M5d: after pairing, the pinned certificate fingerprint is shown for an optional comparison
+	// with the agent's; `repairAgent` pairs an existing agent again (HTTP → HTTPS, new certificate).
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { api, isAbort } from '$lib/api/client';
 	import { agents } from '$lib/api/stores.svelte';
@@ -12,6 +14,7 @@
 	import {
 		agentErrorMessage,
 		draftToInput,
+		formatFingerprint,
 		formatPairCode,
 		hostOf,
 		isTested,
@@ -27,6 +30,7 @@
 	import Skeleton from '../Skeleton.svelte';
 	import Stepper, { type Step as StepItem } from '../Stepper.svelte';
 	import AgentHelp from './AgentHelp.svelte';
+	import FingerprintNote from './FingerprintNote.svelte';
 	import SourceStatusPill from './SourceStatusPill.svelte';
 
 	interface Props {
@@ -37,13 +41,17 @@
 		onpaired?: (a: Agent) => void;
 		/** Switch to the manual token form (agent.toml + agent.token). */
 		ontokenmode?: () => void;
+		/** Pair this agent again (starts at the code step). */
+		repairAgent?: Agent;
 	}
 
-	let { draft = $bindable(), idp = 'agent', pairOnly = false, onpaired, ontokenmode }: Props = $props();
+	let { draft = $bindable(), idp = 'agent', pairOnly = false, onpaired, ontokenmode, repairAgent }: Props = $props();
 
-	type StepId = 'agent' | 'code' | 'folder' | 'check';
+	type StepId = 'agent' | 'code' | 'folder' | 'check' | 'done';
 
-	let step = $state<StepId>(untrack(() => (draft.agent.agentId ? (draft.agent.share ? 'check' : 'folder') : 'agent')));
+	let step = $state<StepId>(
+		untrack(() => (repairAgent ? 'code' : draft.agent.agentId ? (draft.agent.share ? 'check' : 'folder') : 'agent'))
+	);
 	/** The agent was picked from the paired list: the code step is skipped. */
 	let codeSkipped = $state(untrack(() => !!draft.agent.agentId));
 	let headEl = $state<HTMLElement>();
@@ -58,10 +66,16 @@
 	let discoverCtrl: AbortController | null = null;
 
 	// — Step 2: code —
-	let target = $state<{ url: string; name?: string; detail?: string; repair?: boolean } | null>(null);
+	let target = $state<{ url: string; name?: string; detail?: string; repair?: boolean; agentId?: number } | null>(
+		untrack(() => (repairAgent ? { url: repairAgent.url, name: repairAgent.name, detail: hostOf(repairAgent.url), repair: true, agentId: repairAgent.id } : null))
+	);
 	let code = $state('');
 	let codeError = $state<string | null>(null);
+	/** API code of the last pairing failure (certificate problems get their own explanation). */
+	let codeErrorKind = $state('');
 	let pairing = $state(false);
+	/** Agent just paired here: its certificate fingerprint is shown for comparison. */
+	let justPaired = $state<Agent | null>(null);
 
 	// — Step 3: folder —
 	let shares = $state<AgentShare[] | null>(null);
@@ -143,7 +157,7 @@
 				return selectAgent(a);
 			}
 		}
-		startPairing({ url: d.url, name: d.name, detail: `${d.hostname} · ${d.addr}:${d.port}`, repair: d.paired });
+		startPairing({ url: d.url, name: d.name, detail: `${d.hostname} · ${d.addr}:${d.port}`, repair: d.paired, agentId: d.paired ? d.agentId : undefined });
 	}
 
 	function pickKnown(a: Agent) {
@@ -155,6 +169,7 @@
 		target = t;
 		code = '';
 		codeError = null;
+		codeErrorKind = '';
 		codeSkipped = false;
 		go('code');
 	}
@@ -168,7 +183,7 @@
 		}
 		addressError = null;
 		const k = known.find((a) => a.url.replace(/\/+$/, '') === r.url);
-		startPairing({ url: r.url, name: k?.name, detail: hostOf(r.url), repair: !!k });
+		startPairing({ url: r.url, name: k?.name, detail: hostOf(r.url), repair: !!k, agentId: k?.id });
 	}
 
 	async function toggleManual() {
@@ -198,15 +213,18 @@
 		}
 		pairing = true;
 		codeError = null;
+		codeErrorKind = '';
 		try {
-			const a = await api.pairAgent({ url: target.url, code });
+			const a = await api.pairAgent({ url: target.url, code, agentId: target.agentId });
 			agents.upsert(a);
+			justPaired = a;
 			if (pairOnly) {
-				onpaired?.(a);
+				go('done');
 				return;
 			}
 			selectAgent(a);
 		} catch (err) {
+			codeErrorKind = (err as { code?: string })?.code ?? '';
 			codeError = agentErrorMessage(err, 'pair');
 			await tick();
 			document.getElementById(`${idp}-code`)?.focus();
@@ -278,8 +296,11 @@
 
 	function repair() {
 		if (!agent) return;
-		startPairing({ url: agent.url, name: agent.name, detail: hostOf(agent.url), repair: true });
+		startPairing({ url: agent.url, name: agent.name, detail: hostOf(agent.url), repair: true, agentId: agent.id });
 	}
+
+	/** Pairing refused because of the certificate (interception, proxy): explained apart from a wrong code. */
+	const certProblem = $derived(['agent_fingerprint_mismatch', 'agent_proof_invalid', 'agent_cert_untrusted'].includes(codeErrorKind));
 
 	// ——— Step 4 ———
 
@@ -315,15 +336,15 @@
 			{ label: 'Vérification' }
 		].slice(0, order.length)
 	);
-	const current = $derived(order.indexOf(step));
+	const current = $derived(step === 'done' ? order.length : order.indexOf(step));
 
 	const id = (n: string) => `${idp}-${n}`;
 	const localPage = $derived.by(() => {
 		try {
 			const u = new URL(target?.url ?? '');
-			return `${u.protocol}//localhost:${u.port || (u.protocol === 'https:' ? '443' : '80')}`;
+			return `https://localhost:${u.port || (u.protocol === 'https:' ? '443' : '80')}`;
 		} catch {
-			return 'http://localhost:8097';
+			return 'https://localhost:8097';
 		}
 	});
 	const tested = $derived(isTested(draft));
@@ -381,7 +402,7 @@
 								class="f-input f-mono"
 								type="text"
 								inputmode="url"
-								placeholder="192.168.1.20 ou http://nas.local:8097"
+								placeholder="192.168.1.20 ou https://nas.local:8097"
 								bind:value={address}
 								oninput={() => (addressError = null)}
 								onkeydown={(e) => {
@@ -398,7 +419,10 @@
 							/>
 							<Button variant="secondary" icon="arrow-right" onclick={submitAddress}>Continuer</Button>
 						</div>
-						<p class="f-hint" id={id('addr-hint')}>Port 8097 par défaut. Utile à travers un VPN, ou quand Aether tourne dans Docker sans réseau « host ».</p>
+						<p class="f-hint" id={id('addr-hint')}>
+							Port 8097 par défaut ; HTTPS est utilisé dès que l’agent le propose. Utile à travers Internet (seedbox), un VPN, ou quand Aether tourne
+							dans Docker sans réseau « host ».
+						</p>
 						{#if addressError}<p class="f-err" id={id('addr-err')}><Icon name="alert" size={14} />{addressError}</p>{/if}
 					</div>
 				</div>
@@ -426,7 +450,9 @@
 										<strong>{d.name}</strong>
 										<span>{d.hostname !== d.name ? `${d.hostname} · ` : ''}{d.addr}:{d.port}{d.version ? ` · agent ${d.version}` : ''}</span>
 									</span>
-									{#if d.tls}<span class="tag" title="Connexion chiffrée (TLS)"><Icon name="lock" size={13} />TLS</span>{/if}
+									{#if d.tls}<span class="tag" title={d.fingerprint ? `HTTPS · empreinte annoncée ${formatFingerprint(d.fingerprint)}` : 'Connexion chiffrée (HTTPS)'}
+											><Icon name="lock" size={13} />HTTPS</span
+										>{/if}
 									{#if d.paired}<span class="tag on"><Icon name="check" size={13} />Appairé</span>{/if}
 									<span class="c-go" aria-hidden="true"><Icon name="chevron-right" size={18} /></span>
 								</button>
@@ -496,9 +522,24 @@
 				/>
 				<Button variant="primary" icon="key" onclick={pair} disabled={pairing} aria-busy={pairing}>{pairing ? 'Appairage…' : 'Appairer'}</Button>
 			</div>
-			<p class="f-hint" id={id('code-hint')}>8 caractères, valable 10 minutes. Il change après chaque appairage.</p>
-			{#if codeError}<p class="f-err" id={id('code-err')} role="alert"><Icon name="alert" size={14} />{codeError}</p>{/if}
+			<p class="f-hint" id={id('code-hint')}>8 caractères, valable 10 minutes. Il change après chaque appairage. Le code ne circule jamais en clair.</p>
+			{#if codeError && !certProblem}<p class="f-err" id={id('code-err')} role="alert"><Icon name="alert" size={14} />{codeError}</p>{/if}
 		</div>
+		{#if codeError && certProblem}
+			<div class="result bad" role="alert" id={id('code-err')} data-pair-error={codeErrorKind}>
+				<Icon name="shield" size={18} />
+				<div class="t-body">
+					<strong>Appairage refusé : certificat inattendu</strong>
+					<p>{codeError}</p>
+					{#if codeErrorKind === 'agent_fingerprint_mismatch'}
+						<p>
+							Un proxy, un pare-feu qui inspecte le trafic ou un intermédiaire malveillant présente son propre certificat à la place de celui de
+							l’agent. Vérifiez que l’adresse mène directement à l’agent (ou passez par un tunnel SSH / VPN), puis saisissez le nouveau code.
+						</p>
+					{/if}
+				</div>
+			</div>
+		{/if}
 
 		<div class="where">
 			<p class="w-title"><Icon name="info" size={16} />Où trouver le code ?</p>
@@ -514,8 +555,19 @@
 				</li>
 			</ol>
 		</div>
+	{:else if step === 'done' && justPaired}
+		<h4 class="s-head" tabindex="-1" bind:this={headEl}>Agent appairé</h4>
+		<div class="result ok" role="status">
+			<Icon name="check" size={18} />
+			<div><strong>« {justPaired.name} » est appairé</strong><p><code>{justPaired.url}</code></p></div>
+		</div>
+		<FingerprintNote transport={justPaired.transport} fingerprint={justPaired.fingerprint} />
+		<div class="actions"><Button variant="primary" icon="check" onclick={() => justPaired && onpaired?.(justPaired)}>Terminer</Button></div>
 	{:else if step === 'folder' && draft.agent.agentId}
 		<h4 class="s-head" tabindex="-1" bind:this={headEl}>Quel dossier partager ?</h4>
+		{#if justPaired && justPaired.id === draft.agent.agentId}
+			<FingerprintNote transport={justPaired.transport} fingerprint={justPaired.fingerprint} />
+		{/if}
 		<div class="target">
 			<span class="c-icon" aria-hidden="true"><Icon name="server" size={20} /></span>
 			<span class="c-text">

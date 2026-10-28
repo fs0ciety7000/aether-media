@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/vfs"
+	"github.com/fs0ciety7000/aether-media/internal/vfs/agentfs"
 )
 
 // Input is what clients send to create or update a source (see docs/API.md).
@@ -30,6 +32,10 @@ type AgentIn struct {
 	URL     string `json:"url"`
 	Token   string `json:"token"`
 	Share   string `json:"share"`
+	// Fingerprint (optional, manual token over https): SHA-256 of the
+	// agent's certificate as shown by the agent. Absent: trusted on first
+	// use (TOFU) unless a recognised CA signed it.
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 type SFTPInput struct {
@@ -42,8 +48,12 @@ type SFTPInput struct {
 	HostKey    string `json:"hostKey"`
 }
 
-// ValidationError is a user-facing input problem (HTTP 400).
-type ValidationError struct{ Msg string }
+// ValidationError is a user-facing input problem (HTTP 400). Code, when
+// set, is the API error code (default "invalid_source").
+type ValidationError struct {
+	Msg  string
+	Code string
+}
 
 func (e *ValidationError) Error() string { return e.Msg }
 
@@ -96,10 +106,17 @@ func prepare(in Input, prev *Secrets) (prepared, error) {
 		}
 		u, err := url.Parse(strings.TrimSpace(a.URL))
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return p, invalid("URL de l'agent invalide (ex. http://nas.local:8097)")
+			return p, invalid("URL de l'agent invalide (ex. https://nas.local:8097)")
 		}
 		if strings.TrimSpace(a.Share) == "" {
 			return p, invalid("partage de l'agent requis")
+		}
+		fp, err := agentproto.NormalizeFingerprint(a.Fingerprint)
+		if err != nil {
+			return p, invalid("%s", err.Error())
+		}
+		if fp != "" && u.Scheme != "https" {
+			return p, invalid("une empreinte de certificat suppose une adresse https://")
 		}
 		if a.Token != "" {
 			p.sec.Token = strings.TrimSpace(a.Token)
@@ -112,7 +129,7 @@ func prepare(in Input, prev *Secrets) (prepared, error) {
 			return p, err
 		}
 		p.root = root
-		p.cfg.Agent = &AgentConfig{URL: strings.TrimSuffix(u.String(), "/"), Share: strings.TrimSpace(a.Share)}
+		p.cfg.Agent = &AgentConfig{URL: strings.TrimSuffix(u.String(), "/"), Share: strings.TrimSpace(a.Share), Fingerprint: fp}
 		if p.name == "" {
 			p.name = u.Host + " · " + path.Join(a.Share, root)
 		}
@@ -188,6 +205,39 @@ type TestResult struct {
 	Error   string     `json:"error,omitempty"`
 	HostKey string     `json:"hostKey,omitempty"`
 	Agent   *AgentInfo `json:"agent,omitempty"`
+	// Fingerprint is the agent certificate's SHA-256 (manual token over
+	// https); Warning "fingerprint_tofu" means it was not given and will be
+	// pinned as first seen.
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Warning     string `json:"warning,omitempty"`
+}
+
+// WarnTOFU: the certificate of a manual-token agent is trusted on first use.
+const WarnTOFU = "fingerprint_tofu"
+
+// tofu pins, for a manual-token https agent without fingerprint, the
+// certificate seen now, unless the system CAs vouch for it.
+func (m *Manager) tofu(ctx context.Context, ac *AgentConfig, res *TestResult) error {
+	if ac.AgentID != 0 || !strings.HasPrefix(ac.URL, "https://") {
+		return nil
+	}
+	if ac.Fingerprint != "" {
+		res.Fingerprint = ac.Fingerprint
+		return nil
+	}
+	ti, err := agentfs.ProbeTLS(ctx, ac.URL)
+	if err != nil {
+		return err
+	}
+	if ti.CAValid {
+		return nil
+	}
+	ac.Fingerprint = ti.Fingerprint
+	res.Fingerprint, res.Warning = ti.Fingerprint, WarnTOFU
+	if m.log != nil {
+		m.log.Warn("agent (jeton manuel) : certificat accepté à la première connexion (TOFU), vérifiez son empreinte", "url", ac.URL, "empreinte", agentproto.FormatFingerprint(ti.Fingerprint))
+	}
+	return nil
 }
 
 // Test checks that a source can be reached and listed.
@@ -204,11 +254,17 @@ func (m *Manager) Test(ctx context.Context, in Input) (TestResult, error) {
 		}
 		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
-		info, err := m.factory.AgentInfo(ctx, p.cfg.Agent.URL, p.sec.Token)
-		if err != nil {
+		var res TestResult
+		if err := m.tofu(ctx, p.cfg.Agent, &res); err != nil {
 			return TestResult{Error: err.Error()}, nil
 		}
-		return TestResult{OK: true, Agent: &info}, nil
+		info, err := m.factory.AgentInfo(ctx, p.cfg.Agent.URL, p.sec.Token, p.cfg.Agent.Fingerprint)
+		if err != nil {
+			res.Error = err.Error()
+			return res, nil
+		}
+		res.OK, res.Agent = true, &info
+		return res, nil
 	}
 	p, err := prepare(in, nil)
 	if err != nil {
@@ -223,9 +279,17 @@ func (m *Manager) Test(ctx context.Context, in Input) (TestResult, error) {
 		if err != nil {
 			return TestResult{Error: err.Error()}, nil
 		}
-		info, err := m.factory.AgentInfo(ctx, ac.URL, asec.Token)
-		if err != nil {
+		if err := m.tofu(ctx, &ac, &res); err != nil {
 			return TestResult{Error: err.Error()}, nil
+		}
+		p.cfg.Agent.Fingerprint = ac.Fingerprint
+		if p.cfg.Agent.AgentID != 0 {
+			p.cfg.Agent.Fingerprint = "" // lives with the paired agent
+		}
+		info, err := m.factory.AgentInfo(ctx, ac.URL, asec.Token, ac.Fingerprint)
+		if err != nil {
+			res.Error = err.Error()
+			return res, nil
 		}
 		res.Agent = &info
 		found := false
@@ -293,6 +357,9 @@ func (m *Manager) Create(ctx context.Context, q *db.Queries, libID int64, in Inp
 		if !res.OK {
 			return db.LibrarySource{}, invalid("connexion impossible : %s", res.Error)
 		}
+		if res.Warning == WarnTOFU && p.cfg.Agent != nil && p.cfg.Agent.AgentID == 0 {
+			p.cfg.Agent.Fingerprint = res.Fingerprint
+		}
 		if res.Agent != nil {
 			p.cfg.Agent.Hostname, p.cfg.Agent.Version = res.Agent.Hostname, res.Agent.Version
 			if strings.TrimSpace(in.Name) == "" && p.cfg.Agent.AgentID != 0 {
@@ -333,6 +400,12 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 		if test.Agent != nil && test.Agent.Token == "" {
 			test.Agent.Token = prevSec.Token
 		}
+		if test.Agent != nil && test.Agent.Fingerprint == "" && p.cfg.Agent != nil && prevCfg.Agent != nil &&
+			p.cfg.Agent.URL == prevCfg.Agent.URL {
+			a := *test.Agent
+			a.Fingerprint = prevCfg.Agent.Fingerprint // same address: keep the pin, no new TOFU
+			test.Agent = &a
+		}
 		if test.SFTP != nil && test.SFTP.Password == "" && test.SFTP.PrivateKey == "" {
 			test.SFTP.Password, test.SFTP.PrivateKey, test.SFTP.Passphrase = prevSec.Password, prevSec.PrivateKey, prevSec.Passphrase
 		}
@@ -343,6 +416,13 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 		if !res.OK {
 			return src, invalid("connexion impossible : %s", res.Error)
 		}
+		if res.Warning == WarnTOFU && p.cfg.Agent != nil && p.cfg.Agent.AgentID == 0 {
+			p.cfg.Agent.Fingerprint = res.Fingerprint
+		}
+	}
+	if p.cfg.Agent != nil && prevCfg.Agent != nil && p.cfg.Agent.AgentID == 0 && p.cfg.Agent.Fingerprint == "" &&
+		p.cfg.Agent.URL == prevCfg.Agent.URL {
+		p.cfg.Agent.Fingerprint = prevCfg.Agent.Fingerprint // unchanged address keeps its pin
 	}
 	if p.cfg.Agent != nil && prevCfg.Agent != nil && sameTarget {
 		p.cfg.Agent.Hostname, p.cfg.Agent.Version = prevCfg.Agent.Hostname, prevCfg.Agent.Version
@@ -363,7 +443,8 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 func sameConfig(a, b Config) bool {
 	switch {
 	case a.Agent != nil && b.Agent != nil:
-		return a.Agent.URL == b.Agent.URL && a.Agent.Share == b.Agent.Share
+		return a.Agent.URL == b.Agent.URL && a.Agent.Share == b.Agent.Share &&
+			(a.Agent.Fingerprint == "" || a.Agent.Fingerprint == b.Agent.Fingerprint)
 	case a.SFTP != nil && b.SFTP != nil:
 		return *a.SFTP == *b.SFTP
 	}

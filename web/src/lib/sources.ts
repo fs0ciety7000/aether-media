@@ -1,6 +1,6 @@
 // Sources (M5b): labels, descriptions and the editable draft behind the source forms.
 import type { IconName } from '$lib/components/Icon.svelte';
-import type { SftpAuth, Source, SourceInput, SourceKind, SourcePatch, SourceStatus, SourceTestResult } from '$lib/api/types';
+import type { AgentTransport, SftpAuth, Source, SourceInput, SourceKind, SourcePatch, SourceStatus, SourceTestResult } from '$lib/api/types';
 
 export const SOURCE_KINDS: { id: SourceKind; label: string; icon: IconName; hint: string }[] = [
 	{ id: 'local', label: 'Dossier local', icon: 'folder', hint: 'Un chemin absolu sur le serveur Aether (disque, NAS monté…).' },
@@ -12,7 +12,26 @@ export function sourceKindInfo(kind: SourceKind) {
 	return SOURCE_KINDS.find((k) => k.id === kind) ?? SOURCE_KINDS[0];
 }
 
-export const STATUS_LABEL: Record<SourceStatus, string> = { online: 'En ligne', offline: 'Hors ligne', unknown: 'Inconnu' };
+export const STATUS_LABEL: Record<SourceStatus, string> = {
+	online: 'En ligne',
+	offline: 'Hors ligne',
+	unknown: 'Inconnu',
+	cert_mismatch: 'Certificat changé'
+};
+
+/** SHA-256 fingerprint for humans: 16 groups of 4 uppercase hex digits (the agent shows the same). */
+export function formatFingerprint(fp: string | undefined): string {
+	const hex = (fp ?? '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+	if (hex.length !== 64) return fp ?? '';
+	return hex.match(/.{4}/g)!.join(' ');
+}
+
+/** Copy for how the server reaches an agent (Settings › Agents). */
+export const TRANSPORT_LABEL: Record<AgentTransport, string> = {
+	'https-pinned': 'HTTPS · certificat épinglé',
+	'https-ca': 'HTTPS · autorité reconnue',
+	http: 'HTTP non chiffré'
+};
 
 /** Secondary line under a source name: where it lives. */
 export function sourceLocation(s: Pick<Source, 'kind' | 'root' | 'agent' | 'sftp'>): string {
@@ -60,6 +79,11 @@ const ERRORS: Record<string, string> = {
 	bad_passphrase: 'Phrase de passe incorrecte.',
 	tls: 'Échec TLS : certificat invalide ou protocole incorrect (http/https).',
 	version_mismatch: 'Version de l’agent incompatible avec ce serveur.',
+	cert_mismatch:
+		'L’agent présente un autre certificat que celui enregistré à l’appairage : les échanges sont bloqués. Si vous avez réinstallé l’agent ou supprimé son certificat, réappairez-le ; sinon, quelqu’un intercepte peut-être la connexion.',
+	agent_cert_mismatch:
+		'L’agent présente un autre certificat que celui enregistré à l’appairage : les échanges sont bloqués. Si vous avez réinstallé l’agent ou supprimé son certificat, réappairez-le ; sinon, quelqu’un intercepte peut-être la connexion.',
+	tls_required: 'Cet agent exige HTTPS : réappairez-le pour passer en HTTPS.',
 	already_covered: 'Ce dossier est déjà couvert par une autre source.'
 };
 
@@ -79,6 +103,8 @@ const PATTERNS: [RegExp, string][] = [
 	[/no such file|not found|does not exist/, 'not_found'],
 	[/not a directory/, 'not_a_directory'],
 	[/permission denied/, 'permission_denied'],
+	[/certificat de l.agent inattendu|fingerprint mismatch/, 'cert_mismatch'],
+	[/exige https|tls_required/, 'tls_required'],
 	[/x509|tls:|certificate/, 'tls'],
 	[/already covered|déjà couvert/, 'already_covered']
 ];
@@ -114,6 +140,8 @@ export interface SourceDraft {
 		url: string;
 		token: string;
 		share: string;
+		/** Manual token over https (M5d): optional certificate fingerprint; empty = pinned on first use. */
+		fingerprint?: string;
 	};
 	sftp: { host: string; port: string; user: string; auth: SftpAuth; password: string; privateKey: string; passphrase: string; hostKey: string };
 	/** Shares returned by the last successful agent test. */
@@ -143,6 +171,7 @@ export function draftFromSource(s: Source): SourceDraft {
 		d.agent.agentId = s.agent.agentId || undefined;
 		d.agent.agentName = s.agent.hostname;
 		d.agent.url = s.agent.url ?? '';
+		d.agent.fingerprint = s.agent.fingerprint ?? '';
 		d.agent.share = s.agent.share;
 		d.shares = s.agent.share ? [s.agent.share] : [];
 	}
@@ -171,7 +200,12 @@ export function draftToInput(d: SourceDraft): SourceInput {
 			kind: 'agent',
 			name,
 			root,
-			agent: { url: normalizeAgentUrl(d.agent.url), token: d.agent.token.trim(), share: d.agent.share }
+			agent: {
+				url: normalizeAgentUrl(d.agent.url),
+				token: d.agent.token.trim(),
+				share: d.agent.share,
+				...(d.agent.fingerprint?.trim() ? { fingerprint: d.agent.fingerprint.trim() } : {})
+			}
 		};
 	}
 	if (d.kind === 'sftp') {
@@ -199,7 +233,7 @@ export function draftToInput(d: SourceDraft): SourceInput {
 export function testKey(d: SourceDraft): string {
 	const i = draftToInput(d);
 	if (i.kind === 'agent' && d.agent.mode === 'paired') return JSON.stringify(['agent', d.agent.agentId, d.agent.share, i.root]);
-	if (i.kind === 'agent' && i.agent && 'url' in i.agent) return JSON.stringify(['agent', i.agent.url, i.agent.token]);
+	if (i.kind === 'agent' && i.agent && 'url' in i.agent) return JSON.stringify(['agent', i.agent.url, i.agent.token, i.agent.fingerprint ?? '']);
 	return JSON.stringify(i);
 }
 
@@ -235,7 +269,7 @@ export function validateDraft(d: SourceDraft, { editing = false, forTest = false
 				const u = new URL(url);
 				if (!u.hostname) throw new Error();
 			} catch {
-				e.url = 'Adresse invalide (ex. http://nas.local:8097).';
+				e.url = 'Adresse invalide (ex. https://nas.local:8097).';
 			}
 		}
 		if (!editing && !d.agent.token.trim()) e.token = 'Collez le jeton d’appairage de l’agent.';
@@ -274,6 +308,7 @@ export function draftToPatch(d: SourceDraft, orig: Source): SourcePatch {
 		if (i.agent.url !== orig.agent?.url) a.url = i.agent.url;
 		if (i.agent.share !== orig.agent?.share) a.share = i.agent.share;
 		if (i.agent.token) a.token = i.agent.token;
+		if (i.agent.fingerprint && i.agent.fingerprint !== orig.agent?.fingerprint) a.fingerprint = i.agent.fingerprint;
 		if (Object.keys(a).length) p.agent = a;
 	}
 	if (i.kind === 'sftp' && i.sftp) {
@@ -347,7 +382,7 @@ export function parseAgentAddress(raw: string): { url: string } | { error: strin
 		if (!parsed.port && parsed.protocol === 'http:' && !/:\d+$/.test(raw.trim().replace(/\/+$/, ''))) parsed.port = '8097';
 		u = parsed.origin;
 	} catch {
-		return { error: 'Adresse invalide (ex. 192.168.1.20 ou http://nas.local:8097).' };
+		return { error: 'Adresse invalide (ex. 192.168.1.20 ou https://nas.local:8097).' };
 	}
 	return { url: u };
 }
@@ -365,6 +400,8 @@ export function agentErrorMessage(err: unknown, action: 'pair' | 'browse' | 'sha
 			return 'Agent injoignable à cette adresse : vérifiez qu’il est lancé, l’adresse et le port (8097 par défaut), et le pare-feu.';
 	}
 	if (code === 'agent_unpaired') return 'L’agent ne reconnaît plus ce serveur (appairage révoqué) : appairez-le de nouveau avec un code.';
+	if (code === 'agent_cert_mismatch') return ERRORS.cert_mismatch;
+	if (code === 'agent_tls_required') return ERRORS.tls_required;
 	if (code === 'agent_offline' || e?.status === 502) return 'Agent injoignable : vérifiez que la machine est allumée et que l’agent tourne.';
 	if (code === 'denied' || e?.status === 403) return 'Dossier hors des emplacements autorisés sur cette machine.';
 	if (code === 'not_found' || e?.status === 404) return action === 'share' ? 'Ce dossier n’existe plus.' : 'Dossier introuvable ou illisible.';

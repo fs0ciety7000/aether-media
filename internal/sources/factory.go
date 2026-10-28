@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/vfs"
@@ -21,7 +22,7 @@ type DefaultFactory struct {
 func (f DefaultFactory) Local(root string) (vfs.FS, error) { return local.New(root) }
 
 func (f DefaultFactory) agentConfig(cfg AgentConfig, sec Secrets, root string) agentfs.Config {
-	return agentfs.Config{BaseURL: cfg.URL, Token: sec.Token, Share: cfg.Share, Root: root, HTTPClient: f.HTTP, UserAgent: f.UserAgent}
+	return agentfs.Config{BaseURL: cfg.URL, Token: sec.Token, Share: cfg.Share, Root: root, Fingerprint: cfg.Fingerprint, HTTPClient: f.HTTP, UserAgent: f.UserAgent}
 }
 
 func (f DefaultFactory) Agent(_ context.Context, cfg AgentConfig, sec Secrets, root string) (vfs.FS, error) {
@@ -49,12 +50,19 @@ func (f DefaultFactory) SFTPHostKey(ctx context.Context, cfg SFTPConfig) (string
 	return fp, err
 }
 
-func (f DefaultFactory) AgentInfo(ctx context.Context, url, token string) (AgentInfo, error) {
-	info, err := agentfs.Info(ctx, url, token, f.HTTP)
+func (f DefaultFactory) AgentInfo(ctx context.Context, url, token, fingerprint string) (AgentInfo, error) {
+	c := agentfs.ClientFor(fingerprint)
+	if f.HTTP != nil {
+		c = agentfs.PinClient(f.HTTP, fingerprint)
+	}
+	if fingerprint != "" && !strings.HasPrefix(url, "https://") {
+		return AgentInfo{}, errors.New("empreinte de certificat définie mais adresse http:// (https:// attendu)")
+	}
+	info, err := agentfs.Info(ctx, url, token, c)
 	if err != nil {
 		return AgentInfo{}, err
 	}
-	out := AgentInfo{Hostname: info.Hostname, Version: info.Version, Shares: []string{}}
+	out := AgentInfo{Hostname: info.Hostname, Version: info.Version, Shares: []string{}, TLS: info.TLS}
 	for _, s := range info.Shares {
 		out.Shares = append(out.Shares, s.Name)
 	}

@@ -7,6 +7,9 @@ linters:
     - misspell
     - revive
   settings:
+    misspell:
+      # French words that look like English misspellings.
+      ignore-rules: [interm, marrage]
     errcheck:
       exclude-functions:
         - (net/http.ResponseWriter).Write

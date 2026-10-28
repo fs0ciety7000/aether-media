@@ -30,7 +30,7 @@ func (q *Queries) DeleteAgent(ctx context.Context, id int64) error {
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, uid, name, url, secret, version, status, last_error, last_seen, created_at FROM remote_agents WHERE id = ?
+SELECT id, uid, name, url, secret, version, status, last_error, last_seen, created_at, fingerprint FROM remote_agents WHERE id = ?
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id int64) (RemoteAgent, error) {
@@ -47,12 +47,36 @@ func (q *Queries) GetAgent(ctx context.Context, id int64) (RemoteAgent, error) {
 		&i.LastError,
 		&i.LastSeen,
 		&i.CreatedAt,
+		&i.Fingerprint,
+	)
+	return i, err
+}
+
+const getAgentByUID = `-- name: GetAgentByUID :one
+SELECT id, uid, name, url, secret, version, status, last_error, last_seen, created_at, fingerprint FROM remote_agents WHERE uid = ?
+`
+
+func (q *Queries) GetAgentByUID(ctx context.Context, uid string) (RemoteAgent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentByUID, uid)
+	var i RemoteAgent
+	err := row.Scan(
+		&i.ID,
+		&i.Uid,
+		&i.Name,
+		&i.Url,
+		&i.Secret,
+		&i.Version,
+		&i.Status,
+		&i.LastError,
+		&i.LastSeen,
+		&i.CreatedAt,
+		&i.Fingerprint,
 	)
 	return i, err
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, uid, name, url, secret, version, status, last_error, last_seen, created_at FROM remote_agents ORDER BY name COLLATE NOCASE
+SELECT id, uid, name, url, secret, version, status, last_error, last_seen, created_at, fingerprint FROM remote_agents ORDER BY name COLLATE NOCASE
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]RemoteAgent, error) {
@@ -75,6 +99,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]RemoteAgent, error) {
 			&i.LastError,
 			&i.LastSeen,
 			&i.CreatedAt,
+			&i.Fingerprint,
 		); err != nil {
 			return nil, err
 		}
@@ -87,6 +112,52 @@ func (q *Queries) ListAgents(ctx context.Context) ([]RemoteAgent, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const repairAgent = `-- name: RepairAgent :one
+UPDATE remote_agents SET uid = ?, name = ?, url = ?, secret = ?, version = ?, fingerprint = ?,
+    status = 'online', last_error = '', last_seen = unixepoch()
+WHERE id = ?
+RETURNING id, uid, name, url, secret, version, status, last_error, last_seen, created_at, fingerprint
+`
+
+type RepairAgentParams struct {
+	Uid         string `json:"uid"`
+	Name        string `json:"name"`
+	Url         string `json:"url"`
+	Secret      []byte `json:"secret"`
+	Version     string `json:"version"`
+	Fingerprint string `json:"fingerprint"`
+	ID          int64  `json:"id"`
+}
+
+// Pairs an existing row again (new token, address, certificate; the uid
+// of a legacy row becomes the agent's real one).
+func (q *Queries) RepairAgent(ctx context.Context, arg RepairAgentParams) (RemoteAgent, error) {
+	row := q.db.QueryRowContext(ctx, repairAgent,
+		arg.Uid,
+		arg.Name,
+		arg.Url,
+		arg.Secret,
+		arg.Version,
+		arg.Fingerprint,
+		arg.ID,
+	)
+	var i RemoteAgent
+	err := row.Scan(
+		&i.ID,
+		&i.Uid,
+		&i.Name,
+		&i.Url,
+		&i.Secret,
+		&i.Version,
+		&i.Status,
+		&i.LastError,
+		&i.LastSeen,
+		&i.CreatedAt,
+		&i.Fingerprint,
+	)
+	return i, err
 }
 
 const setAgentStatus = `-- name: SetAgentStatus :exec
@@ -113,20 +184,21 @@ func (q *Queries) SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) 
 }
 
 const upsertAgent = `-- name: UpsertAgent :one
-INSERT INTO remote_agents (uid, name, url, secret, version, status, last_seen)
-VALUES (?, ?, ?, ?, ?, 'online', unixepoch())
+INSERT INTO remote_agents (uid, name, url, secret, version, fingerprint, status, last_seen)
+VALUES (?, ?, ?, ?, ?, ?, 'online', unixepoch())
 ON CONFLICT (uid) DO UPDATE SET
     name = excluded.name, url = excluded.url, secret = excluded.secret, version = excluded.version,
-    status = 'online', last_error = '', last_seen = unixepoch()
-RETURNING id, uid, name, url, secret, version, status, last_error, last_seen, created_at
+    fingerprint = excluded.fingerprint, status = 'online', last_error = '', last_seen = unixepoch()
+RETURNING id, uid, name, url, secret, version, status, last_error, last_seen, created_at, fingerprint
 `
 
 type UpsertAgentParams struct {
-	Uid     string `json:"uid"`
-	Name    string `json:"name"`
-	Url     string `json:"url"`
-	Secret  []byte `json:"secret"`
-	Version string `json:"version"`
+	Uid         string `json:"uid"`
+	Name        string `json:"name"`
+	Url         string `json:"url"`
+	Secret      []byte `json:"secret"`
+	Version     string `json:"version"`
+	Fingerprint string `json:"fingerprint"`
 }
 
 func (q *Queries) UpsertAgent(ctx context.Context, arg UpsertAgentParams) (RemoteAgent, error) {
@@ -136,6 +208,7 @@ func (q *Queries) UpsertAgent(ctx context.Context, arg UpsertAgentParams) (Remot
 		arg.Url,
 		arg.Secret,
 		arg.Version,
+		arg.Fingerprint,
 	)
 	var i RemoteAgent
 	err := row.Scan(
@@ -149,6 +222,7 @@ func (q *Queries) UpsertAgent(ctx context.Context, arg UpsertAgentParams) (Remot
 		&i.LastError,
 		&i.LastSeen,
 		&i.CreatedAt,
+		&i.Fingerprint,
 	)
 	return i, err
 }

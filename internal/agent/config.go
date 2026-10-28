@@ -29,13 +29,22 @@ type Share struct {
 
 // Config configures an agent Server.
 type Config struct {
-	Listen      string // default "0.0.0.0:8097"
-	TLSCert     string
-	TLSKey      string
-	Shares      []Share // from agent.toml; combined with the shares managed from the UI
-	DataDir     string  // agent.token and agent-state.json live here (0600)
-	FFprobe     string  // default "ffprobe"
-	ExposePaths bool    // include local share paths in /info
+	Listen string // default "0.0.0.0:8097"
+	// DisableTLS serves plain HTTP (tls = false, AETHER_AGENT_TLS=0), e.g.
+	// behind a reverse proxy that terminates TLS. By default the agent
+	// serves HTTPS with a self-signed certificate created in DataDir, or
+	// with TLSCert/TLSKey when set.
+	DisableTLS bool
+	// DisableHTTPCompat refuses plain HTTP entirely, even for the servers
+	// paired over HTTP before the agent switched to HTTPS (http_compat =
+	// false).
+	DisableHTTPCompat bool
+	TLSCert           string
+	TLSKey            string
+	Shares            []Share // from agent.toml; combined with the shares managed from the UI
+	DataDir           string  // agent.token and agent-state.json live here (0600)
+	FFprobe           string  // default "ffprobe"
+	ExposePaths       bool    // include local share paths in /info
 	// Name is the display name; empty keeps the stored one (default: the
 	// machine's hostname).
 	Name string
@@ -49,7 +58,10 @@ type Config struct {
 }
 
 type fileConfig struct {
-	Listen      string   `toml:"listen"`
+	Listen string `toml:"listen"`
+	// TLS and HTTPCompat are pointers: an absent key keeps the default (on).
+	TLS         *bool    `toml:"tls"`
+	HTTPCompat  *bool    `toml:"http_compat"`
 	TLSCert     string   `toml:"tls_cert"`
 	TLSKey      string   `toml:"tls_key"`
 	DataDir     string   `toml:"data_dir"`
@@ -64,8 +76,9 @@ type fileConfig struct {
 }
 
 // LoadConfig reads an agent.toml file. Unknown keys are rejected. The
-// environment variables AETHER_AGENT_LISTEN, AETHER_AGENT_DATA_DIR and
-// AETHER_AGENT_BROWSE_ROOTS (list separated like PATH)
+// environment variables AETHER_AGENT_LISTEN, AETHER_AGENT_DATA_DIR,
+// AETHER_AGENT_TLS (0/false disables HTTPS) and AETHER_AGENT_BROWSE_ROOTS
+// (list separated like PATH)
 // override the corresponding file values. An empty path skips the file and
 // only applies defaults and environment overrides: this is the zero-config
 // mode, where shares and paired servers are managed from the server's UI.
@@ -96,6 +109,12 @@ func LoadConfig(path string) (Config, error) {
 		Name:        strings.TrimSpace(fc.Name),
 		BrowseRoots: fc.BrowseRoots,
 	}
+	if fc.TLS != nil {
+		cfg.DisableTLS = !*fc.TLS
+	}
+	if fc.HTTPCompat != nil {
+		cfg.DisableHTTPCompat = !*fc.HTTPCompat
+	}
 	if fc.DiscoveryPort != nil {
 		cfg.DiscoveryPort = *fc.DiscoveryPort
 		if cfg.DiscoveryPort == 0 {
@@ -108,11 +127,28 @@ func LoadConfig(path string) (Config, error) {
 	if v := os.Getenv("AETHER_AGENT_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 	}
+	if v := strings.TrimSpace(os.Getenv("AETHER_AGENT_TLS")); v != "" {
+		on, err := parseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("agent: AETHER_AGENT_TLS=%q : attendu 0/1, true/false, on/off", v)
+		}
+		cfg.DisableTLS = !on
+	}
 	if v := os.Getenv("AETHER_AGENT_BROWSE_ROOTS"); v != "" {
 		cfg.BrowseRoots = filepath.SplitList(v)
 	}
 	cfg.applyDefaults()
 	return cfg, nil
+}
+
+func parseBool(v string) (bool, error) {
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on", "oui":
+		return true, nil
+	case "0", "false", "no", "off", "non":
+		return false, nil
+	}
+	return false, errors.New("booléen invalide")
 }
 
 func (c *Config) applyDefaults() {
@@ -144,6 +180,9 @@ func validShareName(n string) bool {
 func (c *Config) validate() error {
 	if (c.TLSCert == "") != (c.TLSKey == "") {
 		return errors.New("agent: tls_cert et tls_key doivent être définis ensemble")
+	}
+	if c.DisableTLS && c.TLSCert != "" {
+		return errors.New("agent: tls = false est incompatible avec tls_cert / tls_key")
 	}
 	if c.DiscoveryPort > 65535 {
 		return fmt.Errorf("agent: discovery_port invalide (%d)", c.DiscoveryPort)

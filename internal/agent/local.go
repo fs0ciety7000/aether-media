@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 )
 
 // isLocalRequest reports whether r comes from this machine: loopback peer,
@@ -55,10 +57,7 @@ func localOnly(h http.HandlerFunc) http.HandlerFunc {
 // listenURLs lists the URLs the agent can be reached at: every non-loopback
 // IPv4 address of the machine when listening on all interfaces.
 func (s *Server) listenURLs() []string {
-	scheme := "http"
-	if s.cfg.TLSCert != "" {
-		scheme = "https"
-	}
+	scheme := s.scheme()
 	host, port, err := net.SplitHostPort(s.cfg.Listen)
 	if err != nil {
 		return nil
@@ -88,6 +87,7 @@ type localServer struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	PairedAt time.Time `json:"pairedAt"`
+	Plain    bool      `json:"plain"` // paired over HTTP (compatibility)
 }
 
 type localStatus struct {
@@ -99,6 +99,10 @@ type localStatus struct {
 	PairingCode      string        `json:"pairingCode"`
 	PairingExpiresAt time.Time     `json:"pairingExpiresAt"`
 	DiscoveryPort    int           `json:"discoveryPort"` // 0: disabled
+	TLS              bool          `json:"tls"`
+	Fingerprint      string        `json:"fingerprint,omitempty"` // display form (groups)
+	CertSource       string        `json:"certSource,omitempty"`
+	HTTPCompat       bool          `json:"httpCompat"` // plain HTTP still accepted for older pairings
 	FFprobe          bool          `json:"ffprobe"`
 	Shares           []shareInfo   `json:"shares"`
 	Servers          []localServer `json:"servers"`
@@ -121,11 +125,20 @@ func (s *Server) localStatus() localStatus {
 	if s.cfg.DiscoveryPort > 0 {
 		st.DiscoveryPort = s.cfg.DiscoveryPort
 	}
+	if s.tls != nil {
+		st.TLS = true
+		st.Fingerprint = agentproto.FormatFingerprint(s.tls.fingerprint)
+		st.CertSource = s.tls.source
+	}
 	s.mu.RLock()
 	for _, sv := range s.state.Servers {
-		st.Servers = append(st.Servers, localServer{ID: sv.ID, Name: sv.Name, PairedAt: sv.PairedAt})
+		st.Servers = append(st.Servers, localServer{ID: sv.ID, Name: sv.Name, PairedAt: sv.PairedAt, Plain: sv.Plain && s.tls != nil})
 	}
 	s.mu.RUnlock()
+	if s.tls != nil && !s.cfg.DisableHTTPCompat {
+		n, legacy := s.plainCompat()
+		st.HTTPCompat = n > 0 || legacy
+	}
 	return st
 }
 
@@ -185,6 +198,8 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font
 .tag{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 8px}
 .tag.on{color:var(--accent);border-color:var(--accent)}
 .empty{color:var(--muted)}
+.fp{font:600 15px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.04em;color:var(--text);word-spacing:.2em;margin:8px 0 0}
+.warn{color:#F2C26B;margin-top:10px}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
 </style>
 </head>
@@ -196,6 +211,14 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
 <h2>Code d'appairage</h2>
 <div class="code">{{.PairingCode}}</div>
 <p class="hint">Valable encore {{.Remaining}}. Dans le serveur Aether, ajoutez un agent puis saisissez ce code. Il change après chaque appairage.</p>
+</section>
+
+<section>
+<h2>Certificat (HTTPS)</h2>
+{{if .TLS}}<p class="hint">Empreinte SHA-256 — lors de l'appairage, le serveur Aether affiche l'empreinte qu'il a reçue : elle doit être identique.</p>
+<div class="fp">{{.Fingerprint}}</div>{{if .HTTPCompat}}
+<p class="hint warn">HTTP non chiffré reste accepté pour les appairages antérieurs à HTTPS (marqués « HTTP » ci-dessous) : réappairez-les depuis le serveur.</p>{{end}}
+{{else}}<p class="hint warn">HTTPS désactivé (tls = false) : réservez cet usage à un proxy HTTPS ou à un VPN.</p>{{end}}
 </section>
 
 <section>
@@ -211,7 +234,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:24px}
 
 <section>
 <h2>Serveurs appairés</h2>
-<ul>{{range .Servers}}<li><strong>{{.Name}}</strong><span class="ver">depuis le {{date .PairedAt}}</span></li>{{else}}<li class="empty">Aucun serveur appairé.</li>{{end}}</ul>
+<ul>{{range .Servers}}<li><strong>{{.Name}}{{if .Plain}} <span class="tag">HTTP</span>{{end}}</strong><span class="ver">depuis le {{date .PairedAt}}</span></li>{{else}}<li class="empty">Aucun serveur appairé.</li>{{end}}</ul>
 </section>
 
 <footer>Page visible uniquement depuis cette machine · actualisée toutes les 30 s</footer>

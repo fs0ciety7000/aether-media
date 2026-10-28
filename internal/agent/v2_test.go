@@ -3,9 +3,13 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -17,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/agentproto"
 )
 
 // postJSON sends a JSON body.
@@ -43,14 +49,36 @@ func (e *env) postJSON(method, endpoint, token string, body any) result {
 
 func (e *env) pair(code, id string) (int, pairResponse) {
 	e.t.Helper()
-	r := e.postJSON("POST", "/pair", "", map[string]string{"code": code, "serverName": "Salon", "serverId": id})
+	st, pr, _ := e.pairFP(code, id, e.s.Fingerprint())
+	return st, pr
+}
+
+// pairFP runs a v2 pairing as a server that saw certificate fp; it checks
+// the agent's proof on success and returns the error code otherwise.
+func (e *env) pairFP(code, id, fp string) (int, pairResponse, string) {
+	e.t.Helper()
+	nonce := make([]byte, agentproto.NonceLen)
+	_, _ = rand.Read(nonce)
+	key := agentproto.PairKey(normalizePairCode(code), nonce)
+	r := e.postJSON("POST", "/pair", "", pairRequest{
+		Version: agentproto.PairVersion, ServerName: "Salon", ServerID: id, Fingerprint: fp,
+		Nonce: base64.RawURLEncoding.EncodeToString(nonce),
+		Proof: base64.RawURLEncoding.EncodeToString(agentproto.ServerProof(key, fp, nonce, id)),
+	})
 	var pr pairResponse
-	if r.StatusCode == 200 {
-		if err := json.NewDecoder(r.Body).Decode(&pr); err != nil {
-			e.t.Fatal(err)
-		}
+	if r.StatusCode != 200 {
+		var ae apiError
+		_ = json.NewDecoder(r.Body).Decode(&ae)
+		return r.StatusCode, pr, ae.Error
 	}
-	return r.StatusCode, pr
+	if err := json.NewDecoder(r.Body).Decode(&pr); err != nil {
+		e.t.Fatal(err)
+	}
+	proof, _ := base64.RawURLEncoding.DecodeString(pr.Proof)
+	if !agentproto.Equal(proof, agentproto.AgentProof(key, fp, nonce, pr.Token)) {
+		e.t.Fatal("agent proof does not verify")
+	}
+	return 200, pr, ""
 }
 
 func TestZeroConfig(t *testing.T) {
@@ -81,26 +109,55 @@ func TestZeroConfig(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	base := "http://127.0.0.1:" + strconv.Itoa(int(port))
+	// HTTPS by default, with the self-signed certificate of the data dir.
+	base := "https://127.0.0.1:" + strconv.Itoa(int(port))
+	var seen string
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // the test checks the fingerprint below
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			seen = agentproto.CertFingerprint(cs.PeerCertificates[0])
+			return nil
+		},
+	}}}
 	req, _ := http.NewRequest("GET", base+apiPrefix+"/info", nil)
 	req.Header.Set("Authorization", "Bearer "+s.Token())
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var info infoResponse
 	_ = json.NewDecoder(resp.Body).Decode(&info)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || info.UID != s.UID() || info.Name != s.Name() || len(info.Shares) != 0 || info.Shares == nil {
-		t.Fatalf("info: %d %+v", resp.StatusCode, info)
+	if resp.StatusCode != 200 || info.UID != s.UID() || info.Name != s.Name() || len(info.Shares) != 0 || info.Shares == nil ||
+		!info.TLS || info.Fingerprint != s.Fingerprint() || seen != s.Fingerprint() || len(seen) != 64 {
+		t.Fatalf("info: %d %+v (seen %s)", resp.StatusCode, info, seen)
 	}
-	resp, err = http.Get(base + "/")
+	for _, f := range []string{certFileName, keyFileName} {
+		if fi, err := os.Stat(filepath.Join(cfg.DataDir, f)); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Fatalf("%s: %v", f, err)
+		}
+	}
+	// Same port, plain HTTP: the local page works, the API demands HTTPS
+	// (a fresh agent has no pre-HTTPS pairing).
+	plain := "http://127.0.0.1:" + strconv.Itoa(int(port))
+	resp, err = http.Get(plain + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || !strings.Contains(string(page), agentproto.FormatFingerprint(seen)) {
+		t.Fatalf("local page over loopback: %d", resp.StatusCode)
+	}
+	req, _ = http.NewRequest("GET", plain+apiPrefix+"/info", nil)
+	req.Header.Set("Authorization", "Bearer "+s.Token())
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("local page over loopback: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUpgradeRequired {
+		t.Fatalf("plain API on a fresh HTTPS agent: %d", resp.StatusCode)
 	}
 	cancel()
 	select {
@@ -131,7 +188,7 @@ func TestPairing(t *testing.T) {
 		}
 	}
 	// Wrong content type is refused without consuming the code.
-	req, _ := http.NewRequest("POST", e.url("/pair", nil), strings.NewReader(`{"code":"`+code+`"}`))
+	req, _ := http.NewRequest("POST", e.url("/pair", nil), strings.NewReader(`{"version":2}`))
 	req.Header.Set("Content-Type", "text/plain")
 	resp, err := e.ts.Client().Do(req)
 	if err != nil {
@@ -215,7 +272,7 @@ func TestPairingRateLimit(t *testing.T) {
 		}
 	}
 	code, _ := e.s.PairingCode()
-	r := e.postJSON("POST", "/pair", "", map[string]string{"code": code, "serverId": "x"})
+	r := e.postJSON("POST", "/pair", "", pairRequest{Version: 2, Proof: "x", ServerID: "x"})
 	if r.StatusCode != 429 || r.Header.Get("Retry-After") == "" {
 		t.Fatalf("expected 429, got %d", r.StatusCode)
 	}
@@ -257,7 +314,7 @@ func TestStatePersistence(t *testing.T) {
 	if err != nil || !created || sc.Name != "mes-films" {
 		t.Fatalf("add: %+v %v %v", sc, created, err)
 	}
-	ts := httptest.NewServer(s1.Handler())
+	ts := startTestServer(s1)
 	e := &env{t: t, s: s1, ts: ts}
 	code, _ := s1.PairingCode()
 	st, pr := e.pair(code, "srv")
@@ -679,8 +736,8 @@ func TestDiscovery(t *testing.T) {
 		t.Fatalf("discover: %+v %v", found, err)
 	}
 	d := found[0]
-	if d.UID != e.s.UID() || d.Name != e.s.Name() || d.Port != 8097 || d.TLS || d.Addr != "127.0.0.1" ||
-		d.URL != "http://127.0.0.1:8097" || d.Version != "1.2.3" {
+	if d.UID != e.s.UID() || d.Name != e.s.Name() || d.Port != 8097 || !d.TLS || d.Addr != "127.0.0.1" ||
+		d.URL != "https://127.0.0.1:8097" || d.Version != "1.2.3" || d.Fingerprint != e.s.Fingerprint() {
 		t.Fatalf("discovered: %+v", d)
 	}
 	// Cancellation returns early.

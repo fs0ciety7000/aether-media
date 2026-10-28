@@ -5,6 +5,8 @@ package main
 //   aether agent   install|uninstall|status [options]
 // Linux : unité systemd (système, ou --user) ; macOS : LaunchDaemon (ou
 // LaunchAgent avec --user) ; Windows : service Windows (golang.org/x/sys).
+// Agent sans root ni systemd (seedbox) : crontab de l'utilisateur
+// (--method cron, choisie d'office si systemd --user est indisponible).
 // Les fichiers générés sont des fonctions pures (testées sur tous les OS) ;
 // l'exécution est décrite par une liste d'étapes que --dry-run affiche.
 
@@ -13,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -28,6 +31,12 @@ const serviceUsage = `Usage :
 Options :
   --user          service de l'utilisateur courant (systemd --user, LaunchAgent)
                   au lieu d'un service système (Linux, macOS)
+  --method M      agent : systemd, launchd ou cron (crontab de l'utilisateur,
+                  sans root ni systemd ; implique --user). Par défaut, cron est
+                  choisi si systemd --user est indisponible.
+  --listen ADR    agent : adresse d'écoute (ex. 0.0.0.0:23456, un port libre
+                  sur une seedbox)
+  --data-dir D    agent, avec --user : dossier de données
   --name NOM      nom du service (défaut : aether / aether-agent)
   --config F      fichier de configuration passé au service (-config F)
   --run-as U      compte qui exécute un service système (Linux, macOS ;
@@ -58,6 +67,11 @@ type serviceSpec struct {
 	// LogEnv passes LogFile as AETHER_LOG_FILE (Windows: the binary
 	// redirects its own output there).
 	LogEnv bool
+	// Method is the installation method ("" = the platform's default,
+	// methodCron = user crontab).
+	Method string
+	// Listen is the agent's listening address (AETHER_AGENT_LISTEN).
+	Listen string
 }
 
 var serviceNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
@@ -71,6 +85,9 @@ func isServiceVerb(s string) bool {
 func runAgentCmd(args []string) error {
 	if len(args) > 0 && isServiceVerb(args[0]) {
 		return runServiceCmd(roleAgent, args)
+	}
+	if len(args) > 0 && args[0] == "cron-run" {
+		return cronRun(args[1:])
 	}
 	return runAgent(args)
 }
@@ -95,20 +112,38 @@ func runServiceCmd(role string, args []string) error {
 			return err
 		}
 	}
-	if err := spec.resolve(dry); err != nil {
+	if err := spec.chooseMethod(verb, func(m string) { fmt.Fprintln(os.Stderr, m) }); err != nil {
 		return err
 	}
 	var steps []step
-	switch verb {
-	case "install":
-		steps, err = installSteps(spec)
-	case "uninstall":
-		steps, err = uninstallSteps(spec)
-	case "status":
-		steps, err = statusSteps(spec)
-	}
-	if err != nil {
-		return err
+	var cp cronPaths
+	if spec.Method == methodCron {
+		if cp, err = newCronPaths(spec.Name); err != nil {
+			return err
+		}
+		switch verb {
+		case "install":
+			steps = cronInstallSteps(spec, cp)
+		case "uninstall":
+			steps = cronUninstallSteps(spec, cp)
+		case "status":
+			steps = cronStatusSteps(spec, cp)
+		}
+	} else {
+		if err := spec.resolve(dry); err != nil {
+			return err
+		}
+		switch verb {
+		case "install":
+			steps, err = installSteps(spec)
+		case "uninstall":
+			steps, err = uninstallSteps(spec)
+		case "status":
+			steps, err = statusSteps(spec)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	if verb == "install" && strings.HasPrefix(spec.Exe, filepath.Clean(os.TempDir())+string(filepath.Separator)) {
 		fmt.Fprintf(os.Stderr, "Attention : le binaire est dans un dossier temporaire (%s) ; copiez-le d'abord à un emplacement durable.\n", spec.Exe)
@@ -117,7 +152,7 @@ func runServiceCmd(role string, args []string) error {
 		printSteps(os.Stdout, steps)
 		return nil
 	}
-	if verb != "status" {
+	if verb != "status" && spec.Method != methodCron {
 		if err := checkPrivileges(spec); err != nil {
 			return err
 		}
@@ -128,7 +163,11 @@ func runServiceCmd(role string, args []string) error {
 	switch verb {
 	case "install":
 		fmt.Printf("\n« %s » est installé et démarré.\n", spec.Name)
-		for _, h := range installHints(spec) {
+		hints := installHints(spec)
+		if spec.Method == methodCron {
+			hints = cronHints(spec, cp)
+		}
+		for _, h := range hints {
 			fmt.Println(h)
 		}
 	case "uninstall":
@@ -146,12 +185,43 @@ func parseServiceFlags(role, verb string, args []string, out io.Writer) (service
 	fs.StringVar(&spec.Name, "name", "", "nom du service")
 	fs.StringVar(&spec.Config, "config", "", "fichier de configuration")
 	fs.StringVar(&spec.RunAs, "run-as", "", "compte qui exécute le service système")
+	fs.StringVar(&spec.Method, "method", "", "méthode d'installation (systemd, launchd, cron)")
+	fs.StringVar(&spec.Listen, "listen", "", "adresse d'écoute de l'agent")
+	dataDir := fs.String("data-dir", "", "dossier de données de l'agent (--user)")
 	dry := fs.Bool("dry-run", false, "affiche ce qui serait fait")
 	if err := fs.Parse(args); err != nil {
 		return spec, false, err
 	}
 	if fs.NArg() > 0 {
 		return spec, false, fmt.Errorf("argument inattendu : %q", fs.Arg(0))
+	}
+	switch spec.Method {
+	case "", "auto":
+		spec.Method = methodAuto
+	case methodSystemd, methodLaunchd, methodCron:
+	default:
+		return spec, false, fmt.Errorf("méthode inconnue : %q (systemd, launchd ou cron)", spec.Method)
+	}
+	if spec.Method == methodCron {
+		spec.User = true
+	}
+	if (spec.Listen != "" || *dataDir != "") && role != roleAgent {
+		return spec, false, errors.New("--listen et --data-dir concernent l'agent (le serveur se règle dans sa configuration)")
+	}
+	if spec.Listen != "" {
+		if _, _, err := net.SplitHostPort(spec.Listen); err != nil {
+			return spec, false, fmt.Errorf("--listen invalide (ex. 0.0.0.0:23456) : %w", err)
+		}
+	}
+	if *dataDir != "" {
+		if !spec.User {
+			return spec, false, errors.New("--data-dir : réservé aux installations --user (un service système garde ses données dans son dossier d'état)")
+		}
+		abs, err := filepath.Abs(*dataDir)
+		if err != nil {
+			return spec, false, err
+		}
+		spec.DataDir = abs
 	}
 	if spec.Name == "" {
 		spec.Name = "aether"
@@ -244,6 +314,9 @@ func (s serviceSpec) env() [][2]string {
 			k = "AETHER_AGENT_DATA_DIR"
 		}
 		env = append(env, [2]string{k, s.DataDir})
+	}
+	if s.Listen != "" && s.Role == roleAgent {
+		env = append(env, [2]string{"AETHER_AGENT_LISTEN", s.Listen})
 	}
 	if s.LogFile != "" && s.LogEnv {
 		env = append(env, [2]string{"AETHER_LOG_FILE", s.LogFile})
@@ -419,7 +492,6 @@ func writeFileStep(path, content string, mode os.FileMode) step {
 	}
 }
 
-//nolint:unused // macOS, Windows
 func mkdirStep(path string) step {
 	return step{desc: "créer le dossier " + path, run: func() error { return os.MkdirAll(path, 0o755) }}
 }
@@ -512,7 +584,7 @@ func runSteps(w io.Writer, steps []step) error {
 func roleHints(s serviceSpec) []string {
 	if s.Role == roleAgent {
 		return []string{
-			"Code d'appairage : dans les journaux, ou sur http://127.0.0.1:8097 depuis cette machine.",
+			"Code d'appairage et empreinte du certificat : dans les journaux, ou sur https://127.0.0.1:8097 depuis cette machine.",
 			"Ajoutez ensuite l'agent depuis le serveur Aether (Réglages › Bibliothèques › « Appairer un agent »).",
 		}
 	}

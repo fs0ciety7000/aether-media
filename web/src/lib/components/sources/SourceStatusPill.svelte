@@ -70,6 +70,16 @@
 		background: var(--danger);
 	}
 
+	.cert_mismatch {
+		color: var(--text);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 60%, transparent);
+	}
+
+	.cert_mismatch .dot {
+		background: var(--danger);
+		border-radius: 2px;
+	}
+
 	.unknown .dot {
 		background: transparent;
 		box-shadow: inset 0 0 0 1.5px var(--text-muted);

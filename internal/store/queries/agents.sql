@@ -1,13 +1,24 @@
 -- name: UpsertAgent :one
-INSERT INTO remote_agents (uid, name, url, secret, version, status, last_seen)
-VALUES (?, ?, ?, ?, ?, 'online', unixepoch())
+INSERT INTO remote_agents (uid, name, url, secret, version, fingerprint, status, last_seen)
+VALUES (?, ?, ?, ?, ?, ?, 'online', unixepoch())
 ON CONFLICT (uid) DO UPDATE SET
     name = excluded.name, url = excluded.url, secret = excluded.secret, version = excluded.version,
+    fingerprint = excluded.fingerprint, status = 'online', last_error = '', last_seen = unixepoch()
+RETURNING *;
+
+-- name: RepairAgent :one
+-- Pairs an existing row again (new token, address, certificate; the uid
+-- of a legacy row becomes the agent's real one).
+UPDATE remote_agents SET uid = ?, name = ?, url = ?, secret = ?, version = ?, fingerprint = ?,
     status = 'online', last_error = '', last_seen = unixepoch()
+WHERE id = ?
 RETURNING *;
 
 -- name: GetAgent :one
 SELECT * FROM remote_agents WHERE id = ?;
+
+-- name: GetAgentByUID :one
+SELECT * FROM remote_agents WHERE uid = ?;
 
 -- name: ListAgents :many
 SELECT * FROM remote_agents ORDER BY name COLLATE NOCASE;

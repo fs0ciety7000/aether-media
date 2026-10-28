@@ -163,7 +163,7 @@ type Source = {
   name: string                 // libellé affiché (défaut : hôte + dossier)
   root: string                 // local : chemin absolu · agent : sous-dossier du partage ("" = racine) · sftp : chemin distant absolu
   status: "online" | "offline" | "unknown"; lastError?: string; lastSeen?: string
-  agent?: { url: string; share: string; hostname?: string; version?: string }
+  agent?: { url: string; share: string; hostname?: string; version?: string; fingerprint?: string /* M5d, jeton manuel */ }
   sftp?: { host: string; port: number; user: string; auth: "password" | "key"; hostKey: string }  // empreinte SHA256:...
 }
 // Les secrets (jeton, mot de passe, clé privée) ne sont jamais renvoyés.
@@ -261,6 +261,28 @@ type Folder = { name: string; path: string }
 - `Source.agent` gagne `agentId`. SSE : `agent.status` `{ id, status, lastError? }`.
 
 Parcours UI recommandé pour « Agent Aether » : agents connus + « Rechercher sur le réseau » + « Saisir une adresse » → (si non appairé) code → navigateur de dossiers de l'agent → `POST /agents/{id}/shares` → source `{ kind: "agent", agent: { agentId, share }, root: "" }`.
+
+### HTTPS des agents (M5d)
+
+Les agents servent HTTPS par défaut avec un certificat auto-signé que le serveur **épingle** à l'appairage ; l'appairage lie le code à l'empreinte du certificat vu (détails et modèle de menace : `docs/AGENT_PROTOCOL.md`, « HTTPS et appairage lié à l'empreinte »).
+
+```ts
+type Agent = { …M5c
+               status: "online" | "offline" | "unknown" | "cert_mismatch"
+               fingerprint?: string        // SHA-256 du certificat épinglé, 64 hex minuscules (affichage : groupes de 4)
+               transport: "https-pinned" | "https-ca" | "http" }
+type DiscoveredAgent = { …M5c; tls: boolean; url: string /* https://… si l'agent sert HTTPS */
+                         fingerprint?: string /* annoncée en UDP, non authentifiée : affichage seul */ }
+```
+- `POST /agents/pair` `{ url, code, agentId? }` → `Agent`. Une adresse `http://` est passée en `https://` si l'agent parle HTTPS (même port). `agentId` réappaire cet agent (passage HTTP → HTTPS, certificat régénéré) en gardant ses sources.
+  Erreurs 400 (en plus de `invalid_source`) :
+  - `agent_fingerprint_mismatch` : le certificat reçu n'est pas celui de l'agent (interception) ; l'agent a invalidé le code.
+  - `agent_proof_invalid` : la réponse ne prouve pas la connaissance du code (faux agent).
+  - `agent_cert_untrusted` : agent `tls = false` derrière un proxy HTTPS dont le certificat n'est reconnu par aucune autorité.
+  - `agent_not_same` : réappairage vers une autre machine · `agent_already_paired` : l'agent répondant est déjà une autre entrée · `agent_too_old` : agent ou serveur en protocole d'appairage v1.
+- Appels proxifiés (`/agents/{id}/browse`, `/shares`) : 502 `agent_cert_mismatch` (certificat différent de l'empreinte épinglée : réappairer), 502 `agent_tls_required` (l'agent exige HTTPS).
+- `SourceInput.agent` (jeton manuel) accepte `fingerprint?: string` (formes `AB12 CD34 …`, `ab:12:…`, `sha256:…`) ; avec `https://`. `POST /sources/test` renvoie alors `fingerprint` et, si aucune n'a été donnée et que le certificat n'est pas reconnu par une autorité, `warning: "fingerprint_tofu"` : l'empreinte vue est épinglée à la création de la source. `Source.agent.fingerprint` la restitue.
+- SSE `agent.status` : `status` peut valoir `cert_mismatch` (avec `lastError` lisible, empreintes abrégées).
 
 ## Synchronisation Trakt / Simkl (M6b)
 
