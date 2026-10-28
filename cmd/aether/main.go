@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -149,6 +151,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 		return nil, err
 	}
 	srcs := sources.New(st, box, sources.DefaultFactory{UserAgent: userAgent()}, hub, log)
+	srcs.ServerID, srcs.ServerName = serverIdentity(cfg.Paths.Data)
 	nfo.SetFileSystem(srcs.NFOFileSystem())
 	scanner := library.NewScanner(st, runner, hub, log, srcs)
 	prober := probe.New(cfg.Paths.FFprobe)
@@ -489,4 +492,19 @@ func runAgent(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return srv.Run(ctx)
+}
+
+// serverIdentity returns a stable id (stored in <data>/server.id) and a
+// display name for agent pairing.
+func serverIdentity(dir string) (string, string) {
+	name, _ := os.Hostname()
+	p := filepath.Join(dir, "server.id")
+	if b, err := os.ReadFile(p); err == nil && len(b) >= 16 {
+		return strings.TrimSpace(string(b)), "Aether · " + name
+	}
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	id := hex.EncodeToString(b)
+	_ = os.WriteFile(p, []byte(id), 0o600)
+	return id, "Aether · " + name
 }

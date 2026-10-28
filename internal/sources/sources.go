@@ -45,6 +45,7 @@ const remotePrefix = "src:"
 
 // AgentConfig and SFTPConfig are the non-secret settings stored in clear.
 type AgentConfig struct {
+	AgentID  int64  `json:"agentId,omitempty"` // paired agent (remote_agents); URL/token come from it
 	URL      string `json:"url"`
 	Share    string `json:"share"`
 	Hostname string `json:"hostname,omitempty"`
@@ -102,6 +103,9 @@ type Manager struct {
 	factory Factory
 	hub     *events.Hub
 	log     *slog.Logger
+
+	// ServerID and ServerName identify this server to agents when pairing.
+	ServerID, ServerName string
 
 	// ProxyBase is the server's own base URL (e.g. http://127.0.0.1:8096),
 	// used to expose files of sources FFmpeg cannot read directly.
@@ -205,7 +209,11 @@ func (m *Manager) open(ctx context.Context, src db.LibrarySource) (vfs.FS, error
 		if cfg.Agent == nil {
 			return nil, errors.New("agent source without config")
 		}
-		return m.factory.Agent(ctx, *cfg.Agent, sec, src.Root)
+		ac, asec, err := m.agentCreds(ctx, *cfg.Agent, sec)
+		if err != nil {
+			return nil, err
+		}
+		return m.factory.Agent(ctx, ac, asec, src.Root)
 	case KindSFTP:
 		if cfg.SFTP == nil {
 			return nil, errors.New("sftp source without config")
@@ -377,8 +385,9 @@ func (m *Manager) Monitor(ctx context.Context, every time.Duration) {
 	}
 }
 
-// PingAll checks every source once.
+// PingAll checks every agent and source once.
 func (m *Manager) PingAll(ctx context.Context) {
+	m.pingAgents(ctx)
 	srcs, err := m.store.ListAllSources(ctx)
 	if err != nil {
 		return
@@ -475,7 +484,11 @@ func (m *Manager) Changes(ctx context.Context, sourceID int64) (<-chan []string,
 	if cfg.Agent == nil {
 		return nil, errors.New("agent source without config")
 	}
-	return m.factory.AgentEvents(ctx, *cfg.Agent, sec)
+	ac, asec, err := m.agentCreds(ctx, *cfg.Agent, sec)
+	if err != nil {
+		return nil, err
+	}
+	return m.factory.AgentEvents(ctx, ac, asec)
 }
 
 // Probe analyses a media file wherever it lives. Agents run ffprobe next to
@@ -498,7 +511,11 @@ func (m *Manager) Probe(ctx context.Context, p *probe.Prober, loc string) (*prob
 		if cfg.Agent == nil {
 			return nil, errors.New("agent source without config")
 		}
-		data, err := agentProbe(ctx, *cfg.Agent, sec, path.Join(src.Root, rel))
+		ac, asec, err := m.agentCreds(ctx, *cfg.Agent, sec)
+		if err != nil {
+			return nil, err
+		}
+		data, err := agentProbe(ctx, ac, asec, path.Join(src.Root, rel))
 		if err != nil {
 			return nil, err
 		}

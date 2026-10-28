@@ -236,3 +236,27 @@ type Collection = { id: string /* "c<id>" manuelle · "t<nom>" automatique TMDB 
 - `GET /collections/{id}/items` → `{ collection: Collection, items: Item[] }`
 - `POST /collections` `{ name, shared? }` → `201 Collection` (partagée : admin seulement) · `PATCH /collections/{id}` `{ name?, shared? }` · `DELETE /collections/{id}`
 - `PUT /collections/{id}/items/{itemId}` → 204 · `DELETE /collections/{id}/items/{itemId}` → 204
+
+## Agents appairés et sélecteur de dossiers (M5c)
+
+Ajout d'une machine sans fichier de configuration : on lance `aether agent` sur la machine, on la trouve depuis l'interface (ou on saisit son adresse), on tape le **code d'appairage** affiché par l'agent, puis on choisit les dossiers à partager. Voir `docs/AGENT_PROTOCOL.md` (v2).
+
+```ts
+type Agent = { id: number; uid: string; name: string; url: string; version?: string
+               status: "online" | "offline" | "unknown"; lastError?: string; lastSeen?: string; sources: number }
+type DiscoveredAgent = { uid: string; name: string; hostname: string; version: string; port: number; tls: boolean
+                         addr: string; url: string; paired: boolean; agentId?: number }
+type Folder = { name: string; path: string }
+```
+(admin)
+- `GET /agents` → `Agent[]`
+- `POST /agents/discover` → `DiscoveredAgent[]` (diffusion UDP ~2 s sur le réseau local)
+- `POST /agents/pair` `{ url, code }` → `Agent` · 400 `invalid_source` (« code d'appairage incorrect ou expiré », « trop d'essais… »)
+- `GET /agents/{id}/browse?path=` → `{ path, parent?, dirs: Folder[] }` (sans `path` : racines de la machine)
+- `GET /agents/{id}/shares` → `{ name, path, managed }[]` · `POST /agents/{id}/shares` `{ path, name? }` → `201 { name, path }` (idempotent par chemin)
+- `DELETE /agents/{id}` → 204 (désappairage) · 409 `agent_in_use` si des sources l'utilisent
+- `GET /fs/browse?path=` → `{ path, parent?, dirs: Folder[] }` : dossiers **du serveur** (sélecteur des sources locales)
+- `SourceInput.agent` accepte `{ agentId, share }` (agent appairé, recommandé) ; `{ url, token, share }` reste possible (jeton manuel).
+- `Source.agent` gagne `agentId`. SSE : `agent.status` `{ id, status, lastError? }`.
+
+Parcours UI recommandé pour « Agent Aether » : agents connus + « Rechercher sur le réseau » + « Saisir une adresse » → (si non appairé) code → navigateur de dossiers de l'agent → `POST /agents/{id}/shares` → source `{ kind: "agent", agent: { agentId, share }, root: "" }`.

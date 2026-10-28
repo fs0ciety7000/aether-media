@@ -204,6 +204,19 @@ type Person struct {
 	ImageUrl    string `json:"imageUrl"`
 }
 
+type RemoteAgent struct {
+	ID        int64         `json:"id"`
+	Uid       string        `json:"uid"`
+	Name      string        `json:"name"`
+	Url       string        `json:"url"`
+	Secret    []byte        `json:"secret"`
+	Version   string        `json:"version"`
+	Status    string        `json:"status"`
+	LastError string        `json:"lastError"`
+	LastSeen  sql.NullInt64 `json:"lastSeen"`
+	CreatedAt int64         `json:"createdAt"`
+}
+
 type Session struct {
 	TokenHash  []byte        `json:"tokenHash"`
 	UserID     int64         `json:"userId"`

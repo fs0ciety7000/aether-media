@@ -26,9 +26,10 @@ type Input struct {
 }
 
 type AgentIn struct {
-	URL   string `json:"url"`
-	Token string `json:"token"`
-	Share string `json:"share"`
+	AgentID int64  `json:"agentId"` // a paired agent (preferred); else URL + token
+	URL     string `json:"url"`
+	Token   string `json:"token"`
+	Share   string `json:"share"`
 }
 
 type SFTPInput struct {
@@ -79,6 +80,19 @@ func prepare(in Input, prev *Secrets) (prepared, error) {
 		a := in.Agent
 		if a == nil {
 			return p, invalid("paramètres de l'agent manquants")
+		}
+		if a.AgentID != 0 {
+			if strings.TrimSpace(a.Share) == "" {
+				return p, invalid("partage de l'agent requis")
+			}
+			root, err := cleanRemote(in.Root, false)
+			if err != nil {
+				return p, err
+			}
+			p.root = root
+			p.cfg.Agent = &AgentConfig{AgentID: a.AgentID, Share: strings.TrimSpace(a.Share)}
+			p.sec = Secrets{} // credentials live with the paired agent
+			break
 		}
 		u, err := url.Parse(strings.TrimSpace(a.URL))
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -205,7 +219,11 @@ func (m *Manager) Test(ctx context.Context, in Input) (TestResult, error) {
 	res := TestResult{}
 	switch p.kind {
 	case KindAgent:
-		info, err := m.factory.AgentInfo(ctx, p.cfg.Agent.URL, p.sec.Token)
+		ac, asec, err := m.agentCreds(ctx, *p.cfg.Agent, p.sec)
+		if err != nil {
+			return TestResult{Error: err.Error()}, nil
+		}
+		info, err := m.factory.AgentInfo(ctx, ac.URL, asec.Token)
 		if err != nil {
 			return TestResult{Error: err.Error()}, nil
 		}
@@ -249,7 +267,11 @@ func (m *Manager) openPrepared(ctx context.Context, p prepared) (vfs.FS, error) 
 	case KindLocal:
 		return m.factory.Local(p.root)
 	case KindAgent:
-		return m.factory.Agent(ctx, *p.cfg.Agent, p.sec, p.root)
+		ac, asec, err := m.agentCreds(ctx, *p.cfg.Agent, p.sec)
+		if err != nil {
+			return nil, err
+		}
+		return m.factory.Agent(ctx, ac, asec, p.root)
 	case KindSFTP:
 		return m.factory.SFTP(ctx, *p.cfg.SFTP, p.sec, p.root)
 	}
@@ -273,6 +295,9 @@ func (m *Manager) Create(ctx context.Context, q *db.Queries, libID int64, in Inp
 		}
 		if res.Agent != nil {
 			p.cfg.Agent.Hostname, p.cfg.Agent.Version = res.Agent.Hostname, res.Agent.Version
+			if strings.TrimSpace(in.Name) == "" && p.cfg.Agent.AgentID != 0 {
+				p.name = res.Agent.Hostname + " · " + path.Join(p.cfg.Agent.Share, p.root)
+			}
 		}
 	}
 	return m.insert(ctx, q, libID, p)

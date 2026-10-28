@@ -36,3 +36,35 @@ path = "/srv/media/films"
 name = "series"
 path = "/srv/media/series"
 ```
+
+---
+
+# v2 — Appairage sans configuration (M5c)
+
+Objectif : comme Jellyfin, on installe l'agent, on le lance **sans fichier de configuration**, et tout le reste se fait depuis l'interface du serveur : découverte sur le réseau, appairage par code, choix des dossiers à partager. `agent.toml` reste possible (avancé) et se combine avec l'état géré par l'interface.
+
+## Démarrage sans configuration
+- `aether agent` sans `-config` : écoute `0.0.0.0:8097`, données dans le dossier par défaut, aucun partage.
+- État persistant `<data>/agent-state.json` (0600) : `{ "uid", "name", "shares": [{ "name", "path" }], "servers": [{ "id", "name", "tokenHash", "pairedAt" }] }`. Les partages de `agent.toml` et de l'état s'additionnent (noms uniques ; ceux du fichier ne sont pas supprimables depuis l'interface).
+- `name` : nom d'affichage, par défaut le nom de la machine.
+- Le jeton historique `agent.token` reste accepté (appairage manuel).
+
+## Code d'appairage
+- Un code de 8 caractères (alphabet sans ambiguïté `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, affiché `XXXX-XXXX`) est généré au démarrage puis renouvelé toutes les 10 minutes et après chaque appairage réussi.
+- Il est affiché dans les logs (`Code d'appairage : K7PQ-4XRM (valable 10 min)`) et sur la page locale de l'agent `GET /` — **servie uniquement aux clients locaux (loopback)** : nom, adresses, code, partages, serveurs appairés.
+- `POST /agent/v1/pair` (sans authentification) `{ "code", "serverName", "serverId" }` → `{ "token", "uid", "name", "version" }`. Le code est à usage unique ; 5 essais erronés / 10 min / IP puis 429 ; comparaison en temps constant. Le jeton (256 bits) est propre à ce serveur ; seul son hash est stocké.
+- `DELETE /agent/v1/pair` (authentifié) : le serveur appelant se désappaire (son jeton est révoqué).
+
+## Navigation et partages (authentifié)
+- Racines de navigation : `browse_roots` dans `agent.toml`, sinon les emplacements usuels du système (dossier personnel, `/mnt`, `/media`, `/srv`, `/data`, `/volume1`… ; lecteurs sous Windows ; `/Volumes` sous macOS).
+- `GET /agent/v1/browse?path=<chemin absolu>` → `{ "path", "parent"?, "dirs": [{ "name", "path" }] }` (sans `path` : les racines). Hors racines → 403 `denied`.
+- `GET /agent/v1/shares` → `[{ "name", "path", "managed": bool }]` (`managed` = créé par l'interface, supprimable).
+- `POST /agent/v1/shares` `{ "path", "name"? }` → `201 { "name", "path" }` — le dossier doit exister et être dans les racines ; nom dérivé du dossier si absent (minuscules, `[a-z0-9_-]`, suffixe numérique si pris). Si un partage existe déjà pour ce chemin, il est renvoyé (200).
+- `DELETE /agent/v1/shares/{name}` → 204 (partages gérés uniquement ; 409 pour ceux du fichier).
+- Les partages ajoutés sont immédiatement servis et surveillés (événements).
+
+## Découverte sur le réseau local
+- L'agent écoute en UDP sur le port **7360** (`discovery_port`, `0` pour désactiver).
+- Requête (diffusion broadcast) : la chaîne `AETHER_DISCOVER_AGENT_V1`.
+- Réponse (unicast vers l'émetteur) : JSON `{ "uid", "name", "hostname", "version", "port", "tls": bool }`. Le serveur en déduit l'URL `http(s)://<adresse source>:<port>`.
+- En Docker, la découverte exige le réseau `host` ; sinon on saisit l'adresse à la main.
