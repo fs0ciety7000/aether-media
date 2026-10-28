@@ -24,6 +24,19 @@ type Config struct {
 	Library   LibraryConfig   `toml:"library"`
 	Metadata  MetadataConfig  `toml:"metadata"`
 	Transcode TranscodeConfig `toml:"transcode"`
+	Sync      SyncConfig      `toml:"sync"`
+}
+
+// SyncConfig holds Trakt / Simkl application credentials. They take
+// precedence over credentials entered in the admin UI. The API URLs are for
+// development and tests (a local fake server).
+type SyncConfig struct {
+	TraktClientID     string   `toml:"trakt_client_id"`
+	TraktClientSecret string   `toml:"trakt_client_secret"`
+	SimklClientID     string   `toml:"simkl_client_id"`
+	TraktAPIURL       string   `toml:"trakt_api_url"`
+	SimklAPIURL       string   `toml:"simkl_api_url"`
+	Interval          Duration `toml:"interval"` // periodic synchronisation, default 30m
 }
 
 type TranscodeConfig struct {
@@ -98,6 +111,7 @@ func Default() Config {
 		},
 		Metadata:  MetadataConfig{Language: "fr-FR"},
 		Transcode: TranscodeConfig{MaxSessions: 2, HWAccel: "none", VAAPIDevice: "/dev/dri/renderD128"},
+		Sync:      SyncConfig{Interval: Duration{30 * time.Minute}},
 	}
 }
 
@@ -137,17 +151,22 @@ func Load(path string) (Config, error) {
 
 func applyEnv(cfg *Config) error {
 	str := map[string]*string{
-		"AETHER_HOST":          &cfg.Server.Host,
-		"AETHER_DATA_DIR":      &cfg.Paths.Data,
-		"AETHER_CACHE_DIR":     &cfg.Paths.Cache,
-		"AETHER_TRANSCODE_DIR": &cfg.Paths.Transcode,
-		"AETHER_FFMPEG":        &cfg.Paths.FFmpeg,
-		"AETHER_FFPROBE":       &cfg.Paths.FFprobe,
-		"AETHER_LOG_LEVEL":     &cfg.Log.Level,
-		"AETHER_LOG_FORMAT":    &cfg.Log.Format,
-		"AETHER_TMDB_API_KEY":  &cfg.Metadata.TMDBAPIKey,
-		"AETHER_LANGUAGE":      &cfg.Metadata.Language,
-		"AETHER_HWACCEL":       &cfg.Transcode.HWAccel,
+		"AETHER_HOST":                &cfg.Server.Host,
+		"AETHER_DATA_DIR":            &cfg.Paths.Data,
+		"AETHER_CACHE_DIR":           &cfg.Paths.Cache,
+		"AETHER_TRANSCODE_DIR":       &cfg.Paths.Transcode,
+		"AETHER_FFMPEG":              &cfg.Paths.FFmpeg,
+		"AETHER_FFPROBE":             &cfg.Paths.FFprobe,
+		"AETHER_LOG_LEVEL":           &cfg.Log.Level,
+		"AETHER_LOG_FORMAT":          &cfg.Log.Format,
+		"AETHER_TMDB_API_KEY":        &cfg.Metadata.TMDBAPIKey,
+		"AETHER_LANGUAGE":            &cfg.Metadata.Language,
+		"AETHER_HWACCEL":             &cfg.Transcode.HWAccel,
+		"AETHER_TRAKT_CLIENT_ID":     &cfg.Sync.TraktClientID,
+		"AETHER_TRAKT_CLIENT_SECRET": &cfg.Sync.TraktClientSecret,
+		"AETHER_SIMKL_CLIENT_ID":     &cfg.Sync.SimklClientID,
+		"AETHER_TRAKT_API_URL":       &cfg.Sync.TraktAPIURL,
+		"AETHER_SIMKL_API_URL":       &cfg.Sync.SimklAPIURL,
 	}
 	for k, dst := range str {
 		if v := os.Getenv(k); v != "" {
@@ -184,6 +203,14 @@ func (c *Config) validate() error {
 	case "none", "auto", "vaapi", "qsv", "nvenc", "videotoolbox":
 	default:
 		return fmt.Errorf("transcode.hwaccel: %q (none, auto, vaapi, qsv, nvenc, videotoolbox)", c.Transcode.HWAccel)
+	}
+	if c.Sync.Interval.Duration < 5*time.Minute {
+		return fmt.Errorf("sync.interval: %s (minimum 5m)", c.Sync.Interval)
+	}
+	for k, u := range map[string]string{"sync.trakt_api_url": c.Sync.TraktAPIURL, "sync.simkl_api_url": c.Sync.SimklAPIURL} {
+		if u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return fmt.Errorf("%s: %q (URL http(s) attendue)", k, u)
+		}
 	}
 	if f := c.Log.Format; f != "text" && f != "json" {
 		return fmt.Errorf("log.format: %q (expected text or json)", f)

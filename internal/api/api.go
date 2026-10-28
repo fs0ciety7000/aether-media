@@ -12,6 +12,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
 	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
+	"github.com/fs0ciety7000/aether-media/internal/syncsvc"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 )
 
@@ -29,6 +30,8 @@ type Deps struct {
 	Features  Features
 	Playback  *Playback
 	Sources   *sources.Manager
+	// Sync is the Trakt / Simkl synchronisation (nil disables the routes).
+	Sync *syncsvc.Service
 	// BrowseRoots limits the server-side folder picker (nil = OS defaults).
 	BrowseRoots []string
 }
@@ -122,6 +125,20 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/playback/sessions/{sid}/{name}", s.serveHLS)
 	mux.HandleFunc("GET /api/v1/media/{id}/stream", s.mediaStream)
 	mux.HandleFunc("GET /api/v1/media/{id}/subtitles/{file}", s.mediaSubtitle)
+	// Trakt / Simkl synchronisation and watchlist.
+	mux.HandleFunc("GET /api/v1/me/sync", s.syncList)
+	mux.HandleFunc("PATCH /api/v1/me/sync/{service}", s.syncPatch)
+	mux.HandleFunc("DELETE /api/v1/me/sync/{service}", s.syncDisconnect)
+	mux.HandleFunc("POST /api/v1/me/sync/{service}/connect", s.syncConnect)
+	mux.HandleFunc("POST /api/v1/me/sync/{service}/poll", s.syncPoll)
+	mux.HandleFunc("POST /api/v1/me/sync/{service}/run", s.syncRun)
+	mux.HandleFunc("GET /api/v1/me/sync/{service}/events", s.syncEvents)
+	mux.HandleFunc("GET /api/v1/sync/apps", s.admin(s.syncApps))
+	mux.HandleFunc("PUT /api/v1/sync/apps/{service}", s.admin(s.syncSetApp))
+	mux.HandleFunc("DELETE /api/v1/sync/apps/{service}", s.admin(s.syncDeleteApp))
+	mux.HandleFunc("GET /api/v1/watchlist", s.watchlist)
+	mux.HandleFunc("PUT /api/v1/watchlist/{id}", s.watchlistAdd)
+	mux.HandleFunc("DELETE /api/v1/watchlist/{id}", s.watchlistRemove)
 	mux.HandleFunc("GET /api/v1/jobs", s.admin(s.jobStats))
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
@@ -146,6 +163,12 @@ type systemInfo struct {
 	StartedAt     time.Time `json:"startedAt"`
 	SetupRequired bool      `json:"setupRequired"`
 	Metadata      Features  `json:"metadata"`
+	Sync          syncInfo  `json:"sync"`
+}
+
+type syncInfo struct {
+	Trakt bool `json:"trakt"`
+	Simkl bool `json:"simkl"`
 }
 
 func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +185,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		StartedAt:     s.startedAt,
 		SetupRequired: users == 0,
 		Metadata:      s.Features,
+		Sync:          syncInfo{Trakt: s.Sync != nil && s.Sync.Available(r.Context(), "trakt"), Simkl: s.Sync != nil && s.Sync.Available(r.Context(), "simkl")},
 	})
 }
 

@@ -31,7 +31,8 @@ const browseExtras = `,
 	 OR EXISTS (SELECT 1 FROM media_files mf LEFT JOIN library_sources ls ON ls.id = mf.source_id
 	            WHERE mf.item_id = i.id AND COALESCE(ls.status, 'online') != 'offline'))`
 
-// Viewer data; the unplayed-episode count takes the user id as first argument.
+// Viewer data; the unplayed-episode count and the watchlist flag take the user
+// id as first and second arguments.
 const userExtras = `,
 	CASE WHEN i.kind IN ('series', 'season') THEN (
 		SELECT count(*) FROM items e WHERE e.kind = 'episode' AND e.missing = 0
@@ -40,6 +41,7 @@ const userExtras = `,
 	END,
 	COALESCE(ud.position_ms, 0), COALESCE(ud.played, 0) = 1, COALESCE(ud.play_count, 0), ud.last_played_at,
 	COALESCE(ud.is_favorite, 0) = 1, ud.rating,
+	EXISTS (SELECT 1 FROM user_watchlist wl WHERE wl.user_id = ? AND wl.item_id = i.id AND wl.removed_at IS NULL),
 	CASE WHEN i.kind = 'episode' THEN (SELECT g.id FROM items p JOIN items g ON g.id = p.parent_id WHERE p.id = i.parent_id) END,
 	CASE WHEN i.kind = 'episode' THEN (SELECT g.title FROM items p JOIN items g ON g.id = p.parent_id WHERE p.id = i.parent_id) END`
 
@@ -98,6 +100,7 @@ type BrowseParams struct {
 	Played     *bool
 	InProgress bool
 	Favorite   bool
+	Watchlist  bool // only items in the viewer's watchlist
 	LibraryID  int64
 	ParentID   int64
 	Kinds      []string
@@ -132,6 +135,7 @@ type BrowseRow struct {
 	LastPlayedAt  sql.NullInt64
 	Favorite      bool
 	UserRating    sql.NullFloat64
+	InWatchlist   bool
 	UnplayedCount sql.NullInt64 // series and seasons
 	SeriesID      sql.NullInt64 // episodes
 	SeriesTitle   sql.NullString
@@ -160,6 +164,9 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	}
 	if p.Favorite {
 		add("COALESCE(ud.is_favorite, 0) = 1")
+	}
+	if p.Watchlist {
+		add("EXISTS (SELECT 1 FROM user_watchlist wl WHERE wl.user_id = ? AND wl.item_id = i.id AND wl.removed_at IS NULL)", p.Viewer.UserID)
 	}
 	if p.LibraryID != 0 {
 		add("i.library_id = ?", p.LibraryID)
@@ -254,7 +261,7 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	}
 	q := "SELECT " + itemColumns + browseExtras + userExtras + " FROM items i" + join + "WHERE " + cond +
 		" ORDER BY " + order + ", i.id LIMIT ? OFFSET ?"
-	all := append([]any{p.Viewer.UserID}, joinArgs...)
+	all := append([]any{p.Viewer.UserID, p.Viewer.UserID}, joinArgs...)
 	all = append(all, args...)
 	rows, err := s.DB.QueryContext(ctx, q, append(all, limit, p.Offset)...)
 	if err != nil {
@@ -265,7 +272,7 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	for rows.Next() {
 		var r BrowseRow
 		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available,
-			&r.UnplayedCount, &r.PositionMs, &r.Played, &r.PlayCount, &r.LastPlayedAt, &r.Favorite, &r.UserRating,
+			&r.UnplayedCount, &r.PositionMs, &r.Played, &r.PlayCount, &r.LastPlayedAt, &r.Favorite, &r.UserRating, &r.InWatchlist,
 			&r.SeriesID, &r.SeriesTitle)...); err != nil {
 			return nil, 0, err
 		}

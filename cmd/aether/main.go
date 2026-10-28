@@ -38,6 +38,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/stream"
+	"github.com/fs0ciety7000/aether-media/internal/syncsvc"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 	"github.com/fs0ciety7000/aether-media/internal/webui"
 )
@@ -138,6 +139,7 @@ type services struct {
 	images    *images.Cache
 	features  api.Features
 	sources   *sources.Manager
+	box       *secret.Box
 }
 
 func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
@@ -176,7 +178,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 			log.Error("planification des métadonnées", "library", libID, "err", err)
 		}
 	}
-	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features, sources: srcs}, nil
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features, sources: srcs, box: box}, nil
 }
 
 func userAgent() string {
@@ -223,6 +225,29 @@ func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *
 		[]metadata.LocalProvider{nfo.New()}, remote, ingest), features
 }
 
+// newSync assembles Trakt / Simkl synchronisation. Credentials from the
+// configuration (file or environment) win over those stored by an admin.
+func newSync(cfg config.Config, svc *services, log *slog.Logger) *syncsvc.Service {
+	sc := cfg.Sync
+	if sc.TraktAPIURL != "" || sc.SimklAPIURL != "" {
+		log.Warn("synchronisation : URL d'API surchargée (développement)", "trakt", sc.TraktAPIURL, "simkl", sc.SimklAPIURL)
+	}
+	s := syncsvc.New(svc.store, svc.box, svc.runner, svc.hub, log, syncsvc.Options{
+		Config: map[string]syncsvc.Creds{
+			"trakt": {ClientID: sc.TraktClientID, ClientSecret: sc.TraktClientSecret},
+			"simkl": {ClientID: sc.SimklClientID},
+		},
+		Interval: sc.Interval.Duration,
+	},
+		syncsvc.NewTrakt(sc.TraktAPIURL, userAgent(), nil),
+		syncsvc.NewSimkl(sc.SimklAPIURL, userAgent(), version.Version, nil),
+	)
+	for _, name := range syncsvc.Services {
+		log.Info("synchronisation", "service", name, "disponible", s.Available(context.Background(), name))
+	}
+	return s
+}
+
 func runServe(args []string) error {
 	cfg, log, err := setup("serve", args)
 	if err != nil {
@@ -242,11 +267,15 @@ func runServe(args []string) error {
 		log.Warn("classification par âge", "err", err)
 	}
 
+	syncSvc := newSync(cfg, svc, log)
+	syncSvc.Register()
+
 	bgCtx, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()
 	if err := svc.runner.Start(bgCtx); err != nil {
 		return err
 	}
+	go syncSvc.Run(bgCtx)
 	go svc.sources.Monitor(bgCtx, time.Minute)
 	watcher := library.NewWatcher(svc.scanner, cfg.Library.WatchDebounce.Duration, cfg.Library.ScanInterval.Duration)
 	go func() {
@@ -274,7 +303,7 @@ func runServe(args []string) error {
 		Handler: api.New(api.Deps{
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
 			Refresher: svc.refresher, Images: svc.images, Features: svc.features, Playback: playback,
-			Sources: svc.sources,
+			Sources: svc.sources, Sync: syncSvc,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

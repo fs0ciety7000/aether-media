@@ -15,6 +15,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/stream"
+	"github.com/fs0ciety7000/aether-media/internal/syncsvc"
 	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
@@ -166,7 +167,9 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p := principalFrom(r); p != nil {
-		s.plays.start(sess.ID, &play{userID: p.user.ID, itemID: it.ID, kind: it.Kind, durationMs: sess.DurationMs})
+		pl := &play{userID: p.user.ID, itemID: it.ID, kind: it.Kind, durationMs: sess.DurationMs, positionMs: sess.StartMs}
+		s.plays.start(sess.ID, pl)
+		s.scrobble(r, pl, syncsvc.ActStart, percent(sess.StartMs, sess.DurationMs))
 	}
 	d := sess.Decision
 	out := playbackInfo{
@@ -223,6 +226,14 @@ func (s *Server) pingPlayback(w http.ResponseWriter, r *http.Request) {
 	var req pingRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&req); err == nil && req.PositionMs >= 0 {
 		s.record(r, p, req.PositionMs)
+		if !p.finished && req.Paused != p.paused {
+			p.paused = req.Paused
+			a := syncsvc.ActStart
+			if req.Paused {
+				a = syncsvc.ActPause
+			}
+			s.scrobble(r, p, a, percent(req.PositionMs, p.durationMs))
+		}
 	}
 	if !s.Playback.Streams.Ping(sid) {
 		writeError(w, http.StatusNotFound, "not_found", "session inconnue ou expirée")
@@ -244,6 +255,11 @@ func (s *Server) stopPlayback(w http.ResponseWriter, r *http.Request) {
 	var req pingRequest // optional final position
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&req); err == nil && req.PositionMs > 0 {
 		s.record(r, p, req.PositionMs)
+	}
+	if !p.finished && p.positionMs > 0 {
+		// Stopped before the end: the service keeps a resume point.
+		s.scrobble(r, p, syncsvc.ActPause, percent(p.positionMs, p.durationMs))
+		s.localChanged(r, p.userID)
 	}
 	s.plays.end(sid)
 	s.Playback.Streams.Stop(sid)

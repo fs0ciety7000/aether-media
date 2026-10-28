@@ -232,6 +232,57 @@ type Studio struct {
 	Name string `json:"name"`
 }
 
+type SyncApp struct {
+	Service   string `json:"service"`
+	Secret    []byte `json:"secret"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
+type SyncConnection struct {
+	ID               int64         `json:"id"`
+	UserID           int64         `json:"userId"`
+	Service          string        `json:"service"`
+	Status           string        `json:"status"`
+	Secret           []byte        `json:"secret"`
+	TokenExpiresAt   sql.NullInt64 `json:"tokenExpiresAt"`
+	Account          string        `json:"account"`
+	RemoteID         string        `json:"remoteId"`
+	Features         string        `json:"features"`
+	Cursors          string        `json:"cursors"`
+	PendingSecret    []byte        `json:"pendingSecret"`
+	PendingUserCode  string        `json:"pendingUserCode"`
+	PendingUrl       string        `json:"pendingUrl"`
+	PendingExpiresAt sql.NullInt64 `json:"pendingExpiresAt"`
+	PendingInterval  int64         `json:"pendingInterval"`
+	PendingPolledAt  sql.NullInt64 `json:"pendingPolledAt"`
+	ConnectedAt      sql.NullInt64 `json:"connectedAt"`
+	LastSyncAt       sql.NullInt64 `json:"lastSyncAt"`
+	LastError        string        `json:"lastError"`
+	LastErrorAt      sql.NullInt64 `json:"lastErrorAt"`
+	CreatedAt        int64         `json:"createdAt"`
+	UpdatedAt        int64         `json:"updatedAt"`
+}
+
+type SyncEvent struct {
+	ID           int64         `json:"id"`
+	ConnectionID int64         `json:"connectionId"`
+	Kind         string        `json:"kind"`
+	Feature      string        `json:"feature"`
+	ItemID       sql.NullInt64 `json:"itemId"`
+	Winner       string        `json:"winner"`
+	Message      string        `json:"message"`
+	CreatedAt    int64         `json:"createdAt"`
+}
+
+type SyncState struct {
+	ConnectionID int64         `json:"connectionId"`
+	Feature      string        `json:"feature"`
+	ItemID       int64         `json:"itemId"`
+	Value        float64       `json:"value"`
+	RemoteAt     sql.NullInt64 `json:"remoteAt"`
+	RemoteRef    string        `json:"remoteRef"`
+}
+
 type User struct {
 	ID           int64         `json:"id"`
 	Name         string        `json:"name"`
@@ -246,18 +297,27 @@ type User struct {
 }
 
 type UserItemDatum struct {
-	UserID       int64           `json:"userId"`
-	ItemID       int64           `json:"itemId"`
-	PositionMs   int64           `json:"positionMs"`
-	Played       int64           `json:"played"`
-	PlayCount    int64           `json:"playCount"`
-	LastPlayedAt sql.NullInt64   `json:"lastPlayedAt"`
-	IsFavorite   int64           `json:"isFavorite"`
-	Rating       sql.NullFloat64 `json:"rating"`
-	UpdatedAt    int64           `json:"updatedAt"`
+	UserID          int64           `json:"userId"`
+	ItemID          int64           `json:"itemId"`
+	PositionMs      int64           `json:"positionMs"`
+	Played          int64           `json:"played"`
+	PlayCount       int64           `json:"playCount"`
+	LastPlayedAt    sql.NullInt64   `json:"lastPlayedAt"`
+	IsFavorite      int64           `json:"isFavorite"`
+	Rating          sql.NullFloat64 `json:"rating"`
+	UpdatedAt       int64           `json:"updatedAt"`
+	PlayedChangedAt sql.NullInt64   `json:"playedChangedAt"`
+	RatedAt         sql.NullInt64   `json:"ratedAt"`
 }
 
 type UserLibraryAccess struct {
 	UserID    int64 `json:"userId"`
 	LibraryID int64 `json:"libraryId"`
+}
+
+type UserWatchlist struct {
+	UserID    int64         `json:"userId"`
+	ItemID    int64         `json:"itemId"`
+	AddedAt   int64         `json:"addedAt"`
+	RemovedAt sql.NullInt64 `json:"removedAt"`
 }

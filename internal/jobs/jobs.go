@@ -33,6 +33,20 @@ type Handler func(ctx context.Context, j Job) error
 // ErrPermanent marks a failure that retrying will not fix.
 var ErrPermanent = errors.New("permanent failure")
 
+// RetryAfterError asks for the next attempt to wait at least After (e.g. a
+// remote service answered 429 with Retry-After). It still counts as an
+// attempt, so a job never retries forever.
+type RetryAfterError struct {
+	Err   error
+	After time.Duration
+}
+
+func (e *RetryAfterError) Error() string { return e.Err.Error() }
+func (e *RetryAfterError) Unwrap() error { return e.Err }
+
+// RetryAfter wraps err so the job is retried no sooner than d.
+func RetryAfter(err error, d time.Duration) error { return &RetryAfterError{Err: err, After: d} }
+
 const (
 	maxAttempts  = 3
 	pollInterval = 2 * time.Second
@@ -68,9 +82,20 @@ func (r *Runner) Enqueue(ctx context.Context, kind, key string, payload any, pri
 	return Enqueue(ctx, r.store.Queries, kind, key, payload, priority, r)
 }
 
+// EnqueueAfter is Enqueue for a job that may not start before delay has
+// elapsed. While it waits, further requests with the same key are merged
+// into it (debouncing).
+func (r *Runner) EnqueueAfter(ctx context.Context, kind, key string, payload any, priority int, delay time.Duration) (bool, error) {
+	return enqueue(ctx, r.store.Queries, kind, key, payload, priority, time.Now().Add(delay), r)
+}
+
 // Enqueue is usable inside a transaction (q from store.Tx). Pass the runner
 // to wake its workers, or nil.
 func Enqueue(ctx context.Context, q *db.Queries, kind, key string, payload any, priority int, r *Runner) (bool, error) {
+	return enqueue(ctx, q, kind, key, payload, priority, time.Now(), r)
+}
+
+func enqueue(ctx context.Context, q *db.Queries, kind, key string, payload any, priority int, at time.Time, r *Runner) (bool, error) {
 	data := []byte("{}")
 	if payload != nil {
 		var err error
@@ -79,7 +104,7 @@ func Enqueue(ctx context.Context, q *db.Queries, kind, key string, payload any, 
 		}
 	}
 	n, err := q.EnqueueJob(ctx, db.EnqueueJobParams{
-		Kind: kind, Key: key, Payload: string(data), Priority: int64(priority), RunAfter: time.Now().Unix(),
+		Kind: kind, Key: key, Payload: string(data), Priority: int64(priority), RunAfter: at.Unix(),
 	})
 	if err != nil {
 		return false, fmt.Errorf("enqueue %s/%s: %w", kind, key, err)
@@ -166,6 +191,9 @@ func (r *Runner) run(ctx context.Context, h Handler, row db.Job) {
 		err = r.store.FailJob(bg, db.FailJobParams{Error: err.Error(), ID: j.ID})
 	default:
 		backoff := time.Duration(1<<j.Attempts) * 30 * time.Second
+		if ra, ok := errors.AsType[*RetryAfterError](err); ok {
+			backoff = max(ra.After, time.Second)
+		}
 		r.log.Info("job réessayé", "kind", j.Kind, "key", j.Key, "in", backoff, "err", err)
 		err = r.store.RetryJob(bg, db.RetryJobParams{Error: err.Error(), RunAfter: time.Now().Add(backoff).Unix(), ID: j.ID})
 	}

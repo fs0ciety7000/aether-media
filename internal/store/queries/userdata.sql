@@ -9,30 +9,35 @@ ON CONFLICT (user_id, item_id) DO UPDATE SET
 
 -- name: MarkPlayed :exec
 -- A finished viewing: counts one more play.
-INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, updated_at)
-VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch())
+INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, played_changed_at, updated_at)
+VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch(), unixepoch())
 ON CONFLICT (user_id, item_id) DO UPDATE SET
     played = 1, play_count = user_item_data.play_count + 1, position_ms = 0,
-    last_played_at = unixepoch(), updated_at = unixepoch();
+    last_played_at = unixepoch(), played_changed_at = unixepoch(), updated_at = unixepoch();
 
 -- name: MarkWatched :exec
 -- "Mark as watched" by hand: no extra play counted.
-INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, updated_at)
-VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch())
+INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, played_changed_at, updated_at)
+VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch(), unixepoch())
 ON CONFLICT (user_id, item_id) DO UPDATE SET
     played = 1, play_count = max(user_item_data.play_count, 1), position_ms = 0,
-    last_played_at = COALESCE(user_item_data.last_played_at, unixepoch()), updated_at = unixepoch();
+    last_played_at = COALESCE(user_item_data.last_played_at, unixepoch()),
+    played_changed_at = CASE WHEN user_item_data.played = 1 THEN user_item_data.played_changed_at ELSE unixepoch() END,
+    updated_at = unixepoch();
 
 -- name: MarkUnplayed :exec
-UPDATE user_item_data SET played = 0, position_ms = 0, updated_at = unixepoch() WHERE user_id = ? AND item_id = ?;
+UPDATE user_item_data SET played = 0, position_ms = 0, updated_at = unixepoch(),
+    played_changed_at = CASE WHEN played = 1 THEN unixepoch() ELSE played_changed_at END
+WHERE user_id = ? AND item_id = ?;
 
 -- name: SetFavorite :exec
 INSERT INTO user_item_data (user_id, item_id, is_favorite) VALUES (?, ?, ?)
 ON CONFLICT (user_id, item_id) DO UPDATE SET is_favorite = excluded.is_favorite, updated_at = unixepoch();
 
 -- name: SetRating :exec
-INSERT INTO user_item_data (user_id, item_id, rating) VALUES (?, ?, ?)
-ON CONFLICT (user_id, item_id) DO UPDATE SET rating = excluded.rating, updated_at = unixepoch();
+-- A NULL rating clears it.
+INSERT INTO user_item_data (user_id, item_id, rating, rated_at) VALUES (?, ?, ?, unixepoch())
+ON CONFLICT (user_id, item_id) DO UPDATE SET rating = excluded.rating, rated_at = unixepoch(), updated_at = unixepoch();
 
 -- name: SetPosition :exec
 INSERT INTO user_item_data (user_id, item_id, position_ms) VALUES (?, ?, ?)

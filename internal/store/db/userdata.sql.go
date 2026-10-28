@@ -11,7 +11,7 @@ import (
 )
 
 const getUserData = `-- name: GetUserData :one
-SELECT user_id, item_id, position_ms, played, play_count, last_played_at, is_favorite, rating, updated_at FROM user_item_data WHERE user_id = ? AND item_id = ?
+SELECT user_id, item_id, position_ms, played, play_count, last_played_at, is_favorite, rating, updated_at, played_changed_at, rated_at FROM user_item_data WHERE user_id = ? AND item_id = ?
 `
 
 type GetUserDataParams struct {
@@ -32,6 +32,8 @@ func (q *Queries) GetUserData(ctx context.Context, arg GetUserDataParams) (UserI
 		&i.IsFavorite,
 		&i.Rating,
 		&i.UpdatedAt,
+		&i.PlayedChangedAt,
+		&i.RatedAt,
 	)
 	return i, err
 }
@@ -100,11 +102,11 @@ func (q *Queries) ListPlayableDescendants(ctx context.Context, id sql.NullInt64)
 }
 
 const markPlayed = `-- name: MarkPlayed :exec
-INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, updated_at)
-VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch())
+INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, played_changed_at, updated_at)
+VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch(), unixepoch())
 ON CONFLICT (user_id, item_id) DO UPDATE SET
     played = 1, play_count = user_item_data.play_count + 1, position_ms = 0,
-    last_played_at = unixepoch(), updated_at = unixepoch()
+    last_played_at = unixepoch(), played_changed_at = unixepoch(), updated_at = unixepoch()
 `
 
 type MarkPlayedParams struct {
@@ -119,7 +121,9 @@ func (q *Queries) MarkPlayed(ctx context.Context, arg MarkPlayedParams) error {
 }
 
 const markUnplayed = `-- name: MarkUnplayed :exec
-UPDATE user_item_data SET played = 0, position_ms = 0, updated_at = unixepoch() WHERE user_id = ? AND item_id = ?
+UPDATE user_item_data SET played = 0, position_ms = 0, updated_at = unixepoch(),
+    played_changed_at = CASE WHEN played = 1 THEN unixepoch() ELSE played_changed_at END
+WHERE user_id = ? AND item_id = ?
 `
 
 type MarkUnplayedParams struct {
@@ -133,11 +137,13 @@ func (q *Queries) MarkUnplayed(ctx context.Context, arg MarkUnplayedParams) erro
 }
 
 const markWatched = `-- name: MarkWatched :exec
-INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, updated_at)
-VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch())
+INSERT INTO user_item_data (user_id, item_id, played, play_count, position_ms, last_played_at, played_changed_at, updated_at)
+VALUES (?, ?, 1, 1, 0, unixepoch(), unixepoch(), unixepoch())
 ON CONFLICT (user_id, item_id) DO UPDATE SET
     played = 1, play_count = max(user_item_data.play_count, 1), position_ms = 0,
-    last_played_at = COALESCE(user_item_data.last_played_at, unixepoch()), updated_at = unixepoch()
+    last_played_at = COALESCE(user_item_data.last_played_at, unixepoch()),
+    played_changed_at = CASE WHEN user_item_data.played = 1 THEN user_item_data.played_changed_at ELSE unixepoch() END,
+    updated_at = unixepoch()
 `
 
 type MarkWatchedParams struct {
@@ -216,8 +222,8 @@ func (q *Queries) SetPosition(ctx context.Context, arg SetPositionParams) error 
 }
 
 const setRating = `-- name: SetRating :exec
-INSERT INTO user_item_data (user_id, item_id, rating) VALUES (?, ?, ?)
-ON CONFLICT (user_id, item_id) DO UPDATE SET rating = excluded.rating, updated_at = unixepoch()
+INSERT INTO user_item_data (user_id, item_id, rating, rated_at) VALUES (?, ?, ?, unixepoch())
+ON CONFLICT (user_id, item_id) DO UPDATE SET rating = excluded.rating, rated_at = unixepoch(), updated_at = unixepoch()
 `
 
 type SetRatingParams struct {
@@ -226,6 +232,7 @@ type SetRatingParams struct {
 	Rating sql.NullFloat64 `json:"rating"`
 }
 
+// A NULL rating clears it.
 func (q *Queries) SetRating(ctx context.Context, arg SetRatingParams) error {
 	_, err := q.db.ExecContext(ctx, setRating, arg.UserID, arg.ItemID, arg.Rating)
 	return err

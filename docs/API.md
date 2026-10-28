@@ -260,3 +260,78 @@ type Folder = { name: string; path: string }
 - `Source.agent` gagne `agentId`. SSE : `agent.status` `{ id, status, lastError? }`.
 
 Parcours UI recommandé pour « Agent Aether » : agents connus + « Rechercher sur le réseau » + « Saisir une adresse » → (si non appairé) code → navigateur de dossiers de l'agent → `POST /agents/{id}/shares` → source `{ kind: "agent", agent: { agentId, share }, root: "" }`.
+
+## Synchronisation Trakt / Simkl (M6b)
+
+Chaque utilisateur relie **son** compte Trakt et/ou Simkl. L'administrateur fournit les identifiants d'application (créés sur trakt.tv/oauth/applications et simkl.com/settings/developer) par configuration (`AETHER_TRAKT_CLIENT_ID`, `AETHER_TRAKT_CLIENT_SECRET`, `AETHER_SIMKL_CLIENT_ID`, ou `[sync]` dans le TOML) **ou** par l'API d'administration ci-dessous ; la configuration est prioritaire. Les jetons (et codes d'appareil) sont chiffrés en base et **ne sont jamais renvoyés** par l'API.
+
+```ts
+type SyncService = "trakt" | "simkl"
+type SyncFeature = "scrobble" | "history" | "progress" | "watchlist" | "ratings"
+
+type SyncConnection = {
+  service: SyncService
+  available: boolean            // identifiants d'application configurés par un admin
+  status: "disconnected"        // aucune connexion
+        | "pending"             // code affiché, en attente de validation par l'utilisateur
+        | "connected"
+        | "reauth_required"     // jeton refusé ou expiré : reconnecter (connect → poll)
+  account?: { username: string }
+  supported: SyncFeature[]      // trakt : les 5 ; simkl : scrobble (ajout à l'historique en fin de lecture), history, watchlist, ratings
+  features: Record<SyncFeature, boolean>   // options activées (défaut : toutes celles supportées)
+  syncing: boolean              // une synchronisation est en file ou en cours
+  connectedAt?: string; lastSyncAt?: string
+  lastError?: string; lastErrorAt?: string // dernière erreur (texte destiné à l'utilisateur, sans secret)
+  pending?: DeviceCode          // appairage en cours (status "pending", ou reconnexion d'un compte encore "connected"/"reauth_required")
+}
+type DeviceCode = {
+  userCode: string              // à afficher en grand (ex. "A1B2C3D4")
+  verificationUrl: string       // ex. https://trakt.tv/activate , https://simkl.com/pin
+  expiresAt: string             // ISO 8601
+  interval: number              // secondes minimales entre deux appels à /poll
+}
+type SyncEvent = {
+  id: number; time: string
+  kind: "conflict" | "error" | "import" | "export"
+  feature: SyncFeature
+  itemId?: number; itemTitle?: string
+  winner?: "local" | "remote"   // conflits : côté retenu (date la plus récente)
+  message: string
+}
+```
+
+### Utilisateur (sa propre connexion uniquement)
+- `GET /me/sync` → `SyncConnection[]` (toujours les deux services, dans l'ordre trakt, simkl ; `features` ne contient que les fonctions supportées).
+- `POST /me/sync/{service}/connect` → `DeviceCode` (lance l'appairage : Trakt *device code*, Simkl *PIN*). Remplace un appairage en attente ; une connexion existante n'est remplacée qu'une fois le nouveau code validé.
+  - 503 `sync_unavailable` (service non configuré par l'admin) · 502 `remote_error` (service injoignable) · 429 `rate_limited` (+ `Retry-After`).
+- `POST /me/sync/{service}/poll` → `{ status: "pending" | "slow_down" | "connected" | "expired" | "denied", interval: number, connection: SyncConnection }`
+  - à appeler toutes les `interval` secondes tant que `status` vaut `pending` ; `slow_down` = augmenter l'intervalle (la nouvelle valeur est renvoyée) ; un appel trop rapproché renvoie `pending` sans interroger le service.
+  - `connected` : l'import initial est lancé en tâche de fond (`syncing: true`). `expired` / `denied` : recommencer avec `/connect`.
+  - 404 `not_pending` si aucun appairage n'est en cours.
+- `PATCH /me/sync/{service}` `{ features: Partial<Record<SyncFeature, boolean>> }` → `SyncConnection` · 404 `not_connected` · 400 `unsupported_feature`.
+- `POST /me/sync/{service}/run` `{ full?: boolean }` → `202 { queued: boolean }` (« synchroniser maintenant » ; `full` ignore les curseurs et compare tout) · 404 `not_connected` · 409 `reauth_required`.
+- `DELETE /me/sync/{service}` → 204 : révoque le jeton chez le fournisseur (au mieux : Trakt `/oauth/revoke` ; Simkl n'a pas de révocation) et efface connexion, état et journal. Les données locales (vus, notes, watchlist) sont conservées.
+- `GET /me/sync/{service}/events?limit=50` → `SyncEvent[]` (du plus récent au plus ancien, ≤ 200 ; conservés 30 jours).
+
+### Administration
+- `GET /sync/apps` → `Record<SyncService, { configured: boolean; source: "config" | "database" | "none"; clientId?: string /* masqué : "abcd…wxyz" */ }>`
+- `PUT /sync/apps/{service}` `{ clientId: string, clientSecret?: string }` → même objet pour ce service (`clientSecret` requis pour Trakt) · 409 `managed_by_config` si la configuration fournit déjà ces identifiants · 400 `invalid_input`.
+- `DELETE /sync/apps/{service}` → 204 (les connexions existantes passent en erreur à la prochaine utilisation).
+- `GET /system/info` gagne `sync: { trakt: boolean, simkl: boolean }` (service utilisable).
+
+### Watchlist locale
+Liste « à voir » par utilisateur (films et séries), synchronisée avec la watchlist Trakt et la liste *Plan to Watch* de Simkl.
+- `UserData.inWatchlist: boolean` sur tous les éléments.
+- `GET /watchlist` → `Item[]` (ajouts les plus récents d'abord ; éléments visibles seulement).
+- `PUT /watchlist/{itemId}` → 204 · `DELETE /watchlist/{itemId}` → 204 · 400 `invalid_kind` (ni film ni série) · 404.
+- `GET /items` gagne `watchlist=true`.
+- `PUT /items/{id}/userdata` : `rating: null` efface la note (synchronisé aussi).
+
+### Comportement
+- **Scrobbling** (option `scrobble`) : `POST /playback/{id}` → *start* ; ping avec `paused` qui change → *pause* / *start* ; fin de lecture (règle « vu » ci-dessus) → *stop* (Trakt le compte comme vu) ; `DELETE` de session avant la fin → *pause* (Trakt garde la progression). Simkl : ajout à l'historique à la fin. Asynchrone (file de tâches) : la lecture n'attend jamais le service.
+- **Synchronisation** (options `history`, `progress`, `watchlist`, `ratings`) : import complet à la connexion, puis toutes les 30 minutes et ~1 minute après chaque changement local (vu/non vu, note, watchlist, progression). Comparaison à trois points (état local, état distant, dernier état synchronisé) : un changement d'un seul côté est recopié de l'autre ; s'il a changé des deux côtés, **la date la plus récente gagne** et un `SyncEvent` `conflict` est journalisé.
+- Correspondance par identifiants (`providerIds` tmdb / imdb / tvdb) : films et séries directement, épisodes par la série + numéros de saison et d'épisode. Les éléments absents de la bibliothèque (ou non visibles par l'utilisateur) sont ignorés.
+- Notes : Aether 0–10 (décimales) ↔ entiers 1–10 (arrondi, minimum 1).
+- Progression : pourcentage côté Trakt ↔ `positionMs` (durée de l'élément) ; écart < 2 % ignoré.
+- Limites de débit : requêtes espacées (Trakt : 1 écriture/s), 429 → nouvelle tentative après `Retry-After`, jamais de boucle (3 essais par tâche).
+- SSE : `sync.status` `{ userId, service, status, syncing, lastError? }` après chaque synchronisation ou changement d'état ; `userdata.changed` `{ userId, itemId }` pour chaque élément modifié par un import.

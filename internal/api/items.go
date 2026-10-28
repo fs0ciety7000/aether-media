@@ -154,6 +154,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	p.InProgress = q.Get("inProgress") == "true"
 	p.Favorite = q.Get("favorite") == "true"
+	p.Watchlist = q.Get("watchlist") == "true"
 	if p.Sort == "" {
 		p.Sort = "title"
 	}
@@ -221,11 +222,12 @@ type userDataDTO struct {
 	PlayCount    int64      `json:"playCount"`
 	LastPlayedAt *time.Time `json:"lastPlayedAt,omitempty"`
 	Favorite     bool       `json:"favorite"`
+	InWatchlist  bool       `json:"inWatchlist"`
 	Rating       *float64   `json:"rating,omitempty"`
 }
 
 func userDataOf(row store.BrowseRow) *userDataDTO {
-	ud := &userDataDTO{PositionMs: row.PositionMs, Played: row.Played, PlayCount: row.PlayCount, Favorite: row.Favorite}
+	ud := &userDataDTO{PositionMs: row.PositionMs, Played: row.Played, PlayCount: row.PlayCount, Favorite: row.Favorite, InWatchlist: row.InWatchlist}
 	if row.LastPlayedAt.Valid {
 		t := time.Unix(row.LastPlayedAt.Int64, 0).UTC()
 		ud.LastPlayedAt = &t

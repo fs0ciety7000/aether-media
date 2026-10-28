@@ -127,12 +127,18 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-076 Avatars d'utilisateurs (image) — aujourd'hui initiales colorées
 
 ## M6b — Synchronisation Trakt / Simkl
-- [ ] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement
-- [ ] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur)
-- [ ] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle
-- [ ] T-0C3 Progression de reprise (Trakt playback) bidirectionnelle
-- [ ] T-0C4 Watchlist et notes
-- [ ] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits
+- [x] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement, révocation ; identifiants d'application par config/env ou API admin (chiffrés)
+- [x] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur ; Simkl : ajout à l'historique en fin de lecture)
+- [x] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle (fusion à trois points, la date la plus récente gagne)
+- [x] T-0C3 Progression de reprise (Trakt playback) bidirectionnelle
+- [x] T-0C4 Watchlist (nouvelle, locale par utilisateur, API + `inWatchlist`) et notes
+- [ ] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits, watchlist, identifiants d'application (admin)
+- [ ] T-0C6 Valider contre les vrais api.trakt.tv / api.simkl.com avec de vrais identifiants (formes des réponses vérifiées seulement d'après la documentation, faux serveurs en test)
+- [ ] T-0C7 Simkl : progression de reprise (`/sync/playback`, scrobble start/pause) et notes d'épisodes — non pris en charge aujourd'hui
+- [ ] T-0C8 Budget de débit par utilisateur (aujourd'hui un seul budget par service pour tout le serveur : Trakt 1 écriture/s)
+- [ ] T-0C9 Import ciblé des éléments nouvellement ajoutés à la bibliothèque (aujourd'hui : récupération complète toutes les 24 h ou « synchroniser maintenant » avec `full`)
+- [ ] T-0CA Historique Trakt : visionnages multiples (plays, dates) — seuls vu / non vu et la dernière date sont synchronisés
+- [ ] T-0CB `stream.TestIntegrationIdleTimeout` instable sous `-race` quand toute la suite tourne (passe seul)
 
 ## M7 — Finition & distribution
 - [ ] T-080 Assistant de premier lancement

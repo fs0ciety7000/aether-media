@@ -33,3 +33,15 @@ language = "fr-FR"
 max_sessions = 2          # remux/transcodages FFmpeg simultanés
 hwaccel      = "none"     # none | auto | vaapi | qsv | nvenc | videotoolbox
 # vaapi_device = "/dev/dri/renderD128"
+
+[sync]
+# Identifiants d'application Trakt (https://trakt.tv/oauth/applications, redirect URI
+# « urn:ietf:wg:oauth:2.0:oob ») et Simkl (https://simkl.com/settings/developer/).
+# Sinon, un administrateur peut les saisir dans l'interface (stockés chiffrés).
+# Variables : AETHER_TRAKT_CLIENT_ID, AETHER_TRAKT_CLIENT_SECRET, AETHER_SIMKL_CLIENT_ID.
+# trakt_client_id     = ""
+# trakt_client_secret = ""
+# simkl_client_id     = ""
+interval = "30m"          # synchronisation périodique
+# Développement : serveur de test local (AETHER_TRAKT_API_URL, AETHER_SIMKL_API_URL).
+# trakt_api_url = "http://127.0.0.1:9999"

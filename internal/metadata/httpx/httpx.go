@@ -376,3 +376,23 @@ func snippet(b []byte) string {
 	}
 	return Redact(s)
 }
+
+// Limiter is the token bucket used by Client, exposed for callers that
+// need their own request logic (authenticated POST/DELETE APIs).
+type Limiter struct{ l limiter }
+
+// NewLimiter allows ratePerSec requests per second (burst max(1, rate)).
+func NewLimiter(ratePerSec float64) *Limiter {
+	return &Limiter{l: limiter{rate: ratePerSec, burst: float64(max(1, int(ratePerSec)))}}
+}
+
+// Wait blocks until a request may be sent, or ctx is done.
+func (l *Limiter) Wait(ctx context.Context) error {
+	if d := l.l.reserve(time.Now()); d > 0 {
+		return sleepCtx(ctx, d)
+	}
+	return ctx.Err()
+}
+
+// ParseRetryAfter reads a Retry-After header (delay-seconds or HTTP date).
+func ParseRetryAfter(v string, now time.Time) (time.Duration, bool) { return parseRetryAfter(v, now) }

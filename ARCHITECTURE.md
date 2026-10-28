@@ -198,8 +198,16 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 - **Agent** : même binaire en mode `aether agent`, sans base de données ni UI ; expose listing récursif (taille, mtime), lecture par plages, probe, sessions HLS ; pousse les changements de fichiers au serveur.
 - Source hors ligne : rien n'est supprimé (même règle que les racines indisponibles), les éléments sont marqués indisponibles.
 
-### 5.5 Synchronisation externe (M6b — conception)
-Module `internal/sync` par fournisseur (Trakt, Simkl) : jetons OAuth par utilisateur, scrobbling depuis les événements de lecture, jobs de synchronisation incrémentale (historique, progression, watchlist, notes), correspondance par `providerIds`.
+### 5.5 Synchronisation externe (M6b)
+> Implémenté en M6b : `internal/syncsvc` (contrat `docs/API.md` § Synchronisation).
+
+- **Fournisseurs** derrière une interface commune `Provider` (`trakt.go`, `simkl.go`) : appairage (Trakt *device code*, Simkl *PIN*), rafraîchissement / révocation des jetons, activité distante, lecture et écriture par fonction, scrobble. URL de base configurable (`AETHER_TRAKT_API_URL`, `AETHER_SIMKL_API_URL`) : les tests utilisent des faux serveurs `httptest`, jamais le réseau.
+- **Identifiants d'application** : configuration (TOML / env) prioritaire, sinon saisis par un admin et chiffrés (`sync_apps`, `internal/secret`). Jetons utilisateur chiffrés dans `sync_connections` ; rafraîchis une heure avant expiration ou après un 401 (verrou par connexion), refus → `reauth_required`.
+- **Scrobbling** : les événements du lecteur (`progress.go` : début, pause/reprise, fin selon `watchedEnough`, arrêt anticipé → pause) deviennent des tâches `sync.scrobble` (1 worker, ordre FIFO, événements périmés ignorés).
+- **Synchronisation** (`sync.run`, clé par connexion, donc jamais deux fois en parallèle) : import complet à la connexion, puis toutes les 30 min, ~1 min après un changement local (débounce via `EnqueueAfter`) et à la demande. Fusion **à trois points** par fonction (`merge.go`) : état local, état distant, dernier état synchronisé (`sync_state`) ; changement d'un seul côté recopié, des deux côtés → la date la plus récente gagne et un conflit est journalisé (`sync_events`). Si l'activité distante (`last_activities`) n'a pas bougé, l'état distant est celui de `sync_state` (aucun téléchargement) ; récupération complète au moins toutes les 24 h.
+- **Correspondance** par `providerIds` (films : tmdb → imdb → tvdb ; séries : tvdb → tmdb → imdb ; épisodes : série + saison + numéro, fichiers multi-épisodes compris), limitée aux éléments visibles par l'utilisateur.
+- **Débit** : client HTTP propre (POST/DELETE authentifiés) avec budgets lecture/écriture (`httpx.Limiter`), pause sur `X-Ratelimit` épuisé ou 429 → `jobs.RetryAfter` (prochaine tentative après `Retry-After`, 3 essais maximum, jamais de boucle).
+- **Watchlist locale** `user_watchlist` (retraits conservés pour dater les conflits) ; `user_item_data` gagne `played_changed_at` et `rated_at`.
 
 ## 6. API (aperçu)
 ```
