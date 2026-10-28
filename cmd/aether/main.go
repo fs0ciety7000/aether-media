@@ -30,6 +30,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/metadata/tmdb"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/stream"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 	"github.com/fs0ciety7000/aether-media/internal/webui"
 )
@@ -221,11 +222,25 @@ func runServe(args []string) error {
 		}
 	}()
 
+	streams := stream.NewManager(stream.Config{
+		FFmpeg:        cfg.Paths.FFmpeg,
+		FFprobe:       cfg.Paths.FFprobe,
+		TranscodeDir:  cfg.Paths.Transcode,
+		MaxTranscodes: cfg.Transcode.MaxSessions,
+		HWAccel:       cfg.Transcode.HWAccel,
+		VAAPIDevice:   cfg.Transcode.VAAPIDevice,
+		Logger:        log,
+	})
+	playback := &api.Playback{
+		Streams: streams, Prober: probe.New(cfg.Paths.FFprobe), FFmpeg: cfg.Paths.FFmpeg,
+		SubtitleDir: filepath.Join(cfg.Paths.Cache, "subtitles"),
+	}
+
 	srv := &http.Server{
 		Addr: cfg.Addr(),
 		Handler: api.New(api.Deps{
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
-			Refresher: svc.refresher, Images: svc.images, Features: svc.features,
+			Refresher: svc.refresher, Images: svc.images, Features: svc.features, Playback: playback,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -247,6 +262,7 @@ func runServe(args []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)
+	streams.Shutdown(shutdownCtx)
 	cancelBg()
 	svc.runner.Wait()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {

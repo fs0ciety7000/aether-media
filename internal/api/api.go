@@ -26,6 +26,7 @@ type Deps struct {
 	Refresher *refresh.Refresher
 	Images    ImageServer
 	Features  Features
+	Playback  *Playback
 }
 
 // Features reports optional capabilities to clients.
@@ -71,6 +72,12 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/v1/items/{id}/identify/search", s.identifySearch)
 	mux.HandleFunc("POST /api/v1/items/{id}/identify", s.identify)
 	mux.HandleFunc("GET /api/v1/items/{id}/images/{type}", s.itemImage)
+	mux.HandleFunc("POST /api/v1/playback/{id}", s.startPlayback)
+	mux.HandleFunc("POST /api/v1/playback/sessions/{sid}/ping", s.pingPlayback)
+	mux.HandleFunc("DELETE /api/v1/playback/sessions/{sid}", s.stopPlayback)
+	mux.HandleFunc("GET /api/v1/playback/sessions/{sid}/{name}", s.serveHLS)
+	mux.HandleFunc("GET /api/v1/media/{id}/stream", s.mediaStream)
+	mux.HandleFunc("GET /api/v1/media/{id}/subtitles/{file}", s.mediaSubtitle)
 	mux.HandleFunc("GET /api/v1/jobs", s.jobStats)
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
