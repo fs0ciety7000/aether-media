@@ -10,6 +10,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/library"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 )
@@ -27,6 +28,7 @@ type Deps struct {
 	Images    ImageServer
 	Features  Features
 	Playback  *Playback
+	Sources   *sources.Manager
 }
 
 // Features reports optional capabilities to clients.
@@ -61,6 +63,11 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/libraries/{id}", s.getLibrary)
 	mux.HandleFunc("DELETE /api/v1/libraries/{id}", s.deleteLibrary)
 	mux.HandleFunc("POST /api/v1/libraries/{id}/scan", s.scanLibrary)
+	mux.HandleFunc("POST /api/v1/libraries/{id}/sources", s.addSource)
+	mux.HandleFunc("PATCH /api/v1/libraries/{id}/sources/{sid}", s.patchSource)
+	mux.HandleFunc("DELETE /api/v1/libraries/{id}/sources/{sid}", s.deleteSource)
+	mux.HandleFunc("POST /api/v1/sources/test", s.testSource)
+	mux.HandleFunc("GET /internal/vfs/{id}/{exp}/{sig}/{path...}", s.vfsProxy)
 	mux.HandleFunc("GET /api/v1/items", s.listItems)
 	mux.HandleFunc("GET /api/v1/libraries/{id}/filters", s.libraryFilters)
 	mux.HandleFunc("GET /api/v1/home", s.home)

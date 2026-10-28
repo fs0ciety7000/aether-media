@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,27 +13,57 @@ import (
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
+
+type sourceDTO struct {
+	ID        int64                `json:"id"`
+	Kind      string               `json:"kind"`
+	Name      string               `json:"name"`
+	Root      string               `json:"root"`
+	Status    string               `json:"status"`
+	LastError string               `json:"lastError,omitempty"`
+	LastSeen  *time.Time           `json:"lastSeen,omitempty"`
+	Agent     *sources.AgentConfig `json:"agent,omitempty"`
+	SFTP      *sources.SFTPConfig  `json:"sftp,omitempty"`
+}
+
+func toSourceDTO(src db.LibrarySource) sourceDTO {
+	dto := sourceDTO{ID: src.ID, Kind: src.Kind, Name: src.Name, Root: src.Root, Status: src.Status, LastError: src.LastError}
+	if src.LastSeen.Valid {
+		t := time.Unix(src.LastSeen.Int64, 0).UTC()
+		dto.LastSeen = &t
+	}
+	var cfg sources.Config
+	if json.Unmarshal([]byte(src.Config), &cfg) == nil {
+		dto.Agent, dto.SFTP = cfg.Agent, cfg.SFTP
+	}
+	return dto
+}
 
 type libraryDTO struct {
 	ID        int64            `json:"id"`
 	Name      string           `json:"name"`
 	Kind      string           `json:"kind"`
 	Paths     []string         `json:"paths"`
+	Sources   []sourceDTO      `json:"sources"`
 	Counts    map[string]int64 `json:"counts"`
 	CreatedAt time.Time        `json:"createdAt"`
 }
 
 func (s *Server) libraryDTO(r *http.Request, l db.Library) (libraryDTO, error) {
-	dto := libraryDTO{ID: l.ID, Name: l.Name, Kind: l.Kind, Paths: []string{}, Counts: map[string]int64{},
+	dto := libraryDTO{ID: l.ID, Name: l.Name, Kind: l.Kind, Paths: []string{}, Sources: []sourceDTO{}, Counts: map[string]int64{},
 		CreatedAt: time.Unix(l.CreatedAt, 0).UTC()}
-	paths, err := s.store.ListLibraryPaths(r.Context(), l.ID)
+	srcs, err := s.store.ListSources(r.Context(), l.ID)
 	if err != nil {
 		return dto, err
 	}
-	for _, p := range paths {
-		dto.Paths = append(dto.Paths, p.Path)
+	for _, src := range srcs {
+		dto.Sources = append(dto.Sources, toSourceDTO(src))
+		if src.Kind == sources.KindLocal {
+			dto.Paths = append(dto.Paths, src.Root)
+		}
 	}
 	stats, err := s.store.LibraryStats(r.Context(), l.ID)
 	if err != nil {
@@ -76,18 +107,30 @@ func (s *Server) getLibrary(w http.ResponseWriter, r *http.Request) {
 }
 
 type createLibraryRequest struct {
-	Name  string   `json:"name"`
-	Kind  string   `json:"kind"`
-	Paths []string `json:"paths"`
+	Name    string          `json:"name"`
+	Kind    string          `json:"kind"`
+	Paths   []string        `json:"paths"`
+	Sources []sources.Input `json:"sources"`
 }
 
 var libraryKinds = map[string]bool{
 	library.KindMovies: true, library.KindShows: true, library.KindMusic: true, library.KindMixed: true,
 }
 
+func (s *Server) requireSources(w http.ResponseWriter) bool {
+	if s.Sources == nil {
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "gestion des sources indisponible")
+		return false
+	}
+	return true
+}
+
 func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSources(w) {
+		return
+	}
 	var req createLibraryRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<18)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
 		return
 	}
@@ -100,64 +143,36 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_kind", "type attendu : movies, shows, music ou mixed")
 		return
 	}
-	if len(req.Paths) == 0 {
-		writeError(w, http.StatusBadRequest, "invalid_paths", "au moins un dossier est requis")
-		return
-	}
-	existing, err := s.store.ListAllLibraryPaths(r.Context())
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
-	paths := make([]string, 0, len(req.Paths))
+	inputs := req.Sources
 	for _, p := range req.Paths {
-		clean := filepath.Clean(p)
-		if !filepath.IsAbs(clean) {
-			writeError(w, http.StatusBadRequest, "invalid_paths", "chemin absolu requis : "+p)
-			return
-		}
-		if st, err := os.Stat(clean); err != nil || !st.IsDir() {
-			writeError(w, http.StatusBadRequest, "invalid_paths", "dossier introuvable : "+p)
-			return
-		}
-		for _, e := range existing {
-			if overlaps(clean, e.Path) {
-				writeError(w, http.StatusConflict, "path_overlap", "dossier déjà couvert par une bibliothèque : "+e.Path)
-				return
-			}
-		}
-		for _, q := range paths {
-			if overlaps(clean, q) {
-				writeError(w, http.StatusBadRequest, "path_overlap", "dossiers imbriqués : "+q)
-				return
-			}
-		}
-		paths = append(paths, clean)
+		inputs = append(inputs, sources.Input{Kind: sources.KindLocal, Root: p})
+	}
+	if len(inputs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_sources", "au moins une source est requise")
+		return
+	}
+	if !s.checkLocalOverlap(w, r, inputs) {
+		return
 	}
 
 	var lib db.Library
-	err = s.store.Tx(r.Context(), func(q *db.Queries) error {
+	err := s.store.Tx(r.Context(), func(q *db.Queries) error {
 		var err error
 		if lib, err = q.CreateLibrary(r.Context(), db.CreateLibraryParams{Name: req.Name, Kind: req.Kind}); err != nil {
 			return err
 		}
-		for _, p := range paths {
-			if err := q.AddLibraryPath(r.Context(), db.AddLibraryPathParams{LibraryID: lib.ID, Path: p}); err != nil {
+		for _, in := range inputs {
+			if _, err := s.Sources.Create(r.Context(), q, lib.ID, in); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		s.internalError(w, err)
+	if s.sourceError(w, err) {
 		return
 	}
 	s.afterLibraryChange(r)
-	if s.Scanner != nil {
-		if _, err := s.Scanner.EnqueueScan(r.Context(), lib.ID, false); err != nil {
-			s.log.Error("enqueue scan", "err", err)
-		}
-	}
+	s.enqueueScan(r, lib.ID)
 	dto, err := s.libraryDTO(r, lib)
 	if err != nil {
 		s.internalError(w, err)
@@ -166,14 +181,73 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, dto)
 }
 
+// checkLocalOverlap refuses local folders already covered by a library or
+// nested within the request.
+func (s *Server) checkLocalOverlap(w http.ResponseWriter, r *http.Request, inputs []sources.Input) bool {
+	all, err := s.store.ListAllSources(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return false
+	}
+	var seen []string
+	for _, in := range inputs {
+		if in.Kind != sources.KindLocal {
+			continue
+		}
+		clean := filepath.Clean(strings.TrimSpace(in.Root))
+		for _, e := range all {
+			if e.Kind == sources.KindLocal && overlaps(clean, e.Root) {
+				writeError(w, http.StatusConflict, "path_overlap", "dossier déjà couvert par une bibliothèque : "+e.Root)
+				return false
+			}
+		}
+		for _, q := range seen {
+			if overlaps(clean, q) {
+				writeError(w, http.StatusBadRequest, "path_overlap", "dossiers imbriqués : "+q)
+				return false
+			}
+		}
+		seen = append(seen, clean)
+	}
+	return true
+}
+
+// sourceError writes validation errors as 400 and reports whether err was handled.
+func (s *Server) sourceError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	var ve *sources.ValidationError
+	if errors.As(err, &ve) {
+		writeError(w, http.StatusBadRequest, "invalid_source", ve.Msg)
+		return true
+	}
+	s.internalError(w, err)
+	return true
+}
+
+func (s *Server) enqueueScan(r *http.Request, libID int64) {
+	if s.Scanner != nil {
+		if _, err := s.Scanner.EnqueueScan(r.Context(), libID, false); err != nil {
+			s.log.Error("enqueue scan", "err", err)
+		}
+	}
+}
+
 func (s *Server) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 	l, ok := s.loadLibrary(w, r)
 	if !ok {
 		return
 	}
+	srcs, _ := s.store.ListSources(r.Context(), l.ID)
 	if _, err := s.store.DeleteLibrary(r.Context(), l.ID); err != nil {
 		s.internalError(w, err)
 		return
+	}
+	if s.Sources != nil {
+		for _, src := range srcs {
+			s.Sources.Forget(src.ID)
+		}
 	}
 	s.afterLibraryChange(r)
 	w.WriteHeader(http.StatusNoContent)
@@ -195,6 +269,154 @@ func (s *Server) scanLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]bool{"queued": queued})
+}
+
+// testSource: POST /api/v1/sources/test
+func (s *Server) testSource(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSources(w) {
+		return
+	}
+	var in sources.Input
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<17)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
+		return
+	}
+	res, err := s.Sources.Test(r.Context(), in)
+	if s.sourceError(w, err) {
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// addSource: POST /api/v1/libraries/{id}/sources
+func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
+	l, ok := s.loadLibrary(w, r)
+	if !ok || !s.requireSources(w) {
+		return
+	}
+	var in sources.Input
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<17)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
+		return
+	}
+	if !s.checkLocalOverlap(w, r, []sources.Input{in}) {
+		return
+	}
+	src, err := s.Sources.Create(r.Context(), s.store.Queries, l.ID, in)
+	if s.sourceError(w, err) {
+		return
+	}
+	s.afterLibraryChange(r)
+	s.enqueueScan(r, l.ID)
+	writeJSON(w, http.StatusCreated, toSourceDTO(src))
+}
+
+func (s *Server) loadSource(w http.ResponseWriter, r *http.Request) (db.LibrarySource, bool) {
+	l, ok := s.loadLibrary(w, r)
+	if !ok || !s.requireSources(w) {
+		return db.LibrarySource{}, false
+	}
+	sid, err := strconv.ParseInt(r.PathValue("sid"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_id", "identifiant invalide")
+		return db.LibrarySource{}, false
+	}
+	src, err := s.store.GetSource(r.Context(), sid)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && src.LibraryID != l.ID) {
+		writeError(w, http.StatusNotFound, "not_found", "source introuvable")
+		return src, false
+	}
+	if err != nil {
+		s.internalError(w, err)
+		return src, false
+	}
+	return src, true
+}
+
+// patchSource: PATCH /api/v1/libraries/{id}/sources/{sid}
+func (s *Server) patchSource(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.loadSource(w, r)
+	if !ok {
+		return
+	}
+	// Start from the stored settings so partial updates work.
+	var cfg sources.Config
+	_ = json.Unmarshal([]byte(src.Config), &cfg)
+	in := sources.Input{Kind: src.Kind, Name: src.Name, Root: src.Root}
+	if cfg.Agent != nil {
+		in.Agent = &sources.AgentIn{URL: cfg.Agent.URL, Share: cfg.Agent.Share}
+	}
+	if cfg.SFTP != nil {
+		in.SFTP = &sources.SFTPInput{Host: cfg.SFTP.Host, Port: cfg.SFTP.Port, User: cfg.SFTP.User, HostKey: cfg.SFTP.HostKey}
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<17)).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
+		return
+	}
+	updated, err := s.Sources.Update(r.Context(), src, in)
+	if s.sourceError(w, err) {
+		return
+	}
+	s.afterLibraryChange(r)
+	s.enqueueScan(r, src.LibraryID)
+	writeJSON(w, http.StatusOK, toSourceDTO(updated))
+}
+
+// deleteSource: DELETE /api/v1/libraries/{id}/sources/{sid}
+func (s *Server) deleteSource(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.loadSource(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.store.DeleteSource(r.Context(), db.DeleteSourceParams{ID: src.ID, LibraryID: src.LibraryID}); err != nil {
+		s.internalError(w, err)
+		return
+	}
+	s.Sources.Forget(src.ID)
+	s.afterLibraryChange(r)
+	s.enqueueScan(r, src.LibraryID) // flags items left without files as missing
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// vfsProxy: GET /internal/vfs/{id}/{exp}/{sig}/{path...} — serves files of
+// remote sources to the server's own FFmpeg/ffprobe/image fetcher. Signed,
+// expiring and restricted to loopback clients.
+func (s *Server) vfsProxy(w http.ResponseWriter, r *http.Request) {
+	if s.Sources == nil || !isLoopback(r.RemoteAddr) {
+		http.NotFound(w, r)
+		return
+	}
+	id, err1 := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	exp, err2 := strconv.ParseInt(r.PathValue("exp"), 10, 64)
+	if err1 != nil || err2 != nil {
+		http.NotFound(w, r)
+		return
+	}
+	loc, ok := s.Sources.VerifyProxy(id, exp, r.PathValue("sig"), r.PathValue("path"))
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	f, err := s.Sources.Open(r.Context(), loc, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = f.Close() }()
+	http.ServeContent(w, r, "", f.ModTime(), f)
+}
+
+func isLoopback(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Server) afterLibraryChange(r *http.Request) {

@@ -14,6 +14,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/library"
 	"github.com/fs0ciety7000/aether-media/internal/metadata"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
@@ -81,8 +82,9 @@ func setup(t *testing.T, kind string, files ...string) *env {
 	runner := jobs.NewRunner(st, log)
 	hub := events.NewHub()
 	lib, _ := st.CreateLibrary(ctx, db.CreateLibraryParams{Name: "L", Kind: kind})
-	st.AddLibraryPath(ctx, db.AddLibraryPathParams{LibraryID: lib.ID, Path: root})
-	if _, err := library.NewScanner(st, runner, hub, log).Scan(ctx, lib.ID, false); err != nil {
+	st.AddLocalSource(ctx, lib.ID, root)
+	srcs, _ := sources.NewForTests(st, t.TempDir(), hub, log)
+	if _, err := library.NewScanner(st, runner, hub, log, srcs).Scan(ctx, lib.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	remote := &fakeRemote{enabled: true, cands: map[string][]metadata.Candidate{}, results: map[string]*metadata.Result{}}

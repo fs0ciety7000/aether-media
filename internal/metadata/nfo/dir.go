@@ -1,7 +1,6 @@
 package nfo
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -25,27 +24,21 @@ func readDir(dir string) *dirIndex {
 	if dir == "" {
 		return nil
 	}
-	entries, err := os.ReadDir(dir)
+	entries, err := files.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
 	idx := &dirIndex{dir: dir, files: map[string]string{}, dirs: map[string]string{}}
 	for _, e := range entries {
-		l := strings.ToLower(e.Name())
-		isDir := e.IsDir()
-		if e.Type()&os.ModeSymlink != 0 {
-			if fi, err := os.Stat(filepath.Join(dir, e.Name())); err == nil {
-				isDir = fi.IsDir()
-			}
-		}
-		if isDir {
+		l := strings.ToLower(e.Name)
+		if e.IsDir {
 			if _, ok := idx.dirs[l]; !ok {
-				idx.dirs[l] = e.Name()
+				idx.dirs[l] = e.Name
 			}
 			continue
 		}
 		if _, ok := idx.files[l]; !ok {
-			idx.files[l] = e.Name()
+			idx.files[l] = e.Name
 			idx.lower = append(idx.lower, l)
 		}
 	}
@@ -120,12 +113,12 @@ type movieGroup struct {
 
 // resolveMovie inspects a movie path (its folder, or one of its video files).
 func resolveMovie(path, title string, year int) *movieDir {
-	fi, err := os.Stat(path)
+	isDir, err := files.IsDir(path)
 	if err != nil {
 		return nil
 	}
 	dir, file := path, ""
-	if !fi.IsDir() {
+	if !isDir {
 		dir, file = filepath.Dir(path), path
 	}
 	idx := readDir(dir)

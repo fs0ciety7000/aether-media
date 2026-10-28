@@ -2,13 +2,14 @@ package library
 
 import (
 	"context"
-	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
 // externalSubIndexBase keeps side-car subtitle indexes clear of ffprobe's.
@@ -24,19 +25,16 @@ type sidecar struct {
 
 // findSidecars lists subtitle files named after the video:
 // "Movie.srt", "Movie.fr.srt", "Movie.fre.forced.srt", "Movie.en.sdh.srt"...
-func findSidecars(videoPath string) []sidecar {
+// entries is the listing of the video's directory.
+func findSidecars(videoPath string, entries []vfs.Entry) []sidecar {
 	dir := filepath.Dir(videoPath)
 	base := strings.ToLower(strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath)))
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
 	var out []sidecar
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir {
 			continue
 		}
-		name := e.Name()
+		name := path.Base(e.Path)
 		ext := strings.ToLower(filepath.Ext(name))
 		codec, ok := subtitleCodecs[ext]
 		if !ok {
@@ -71,11 +69,11 @@ func findSidecars(videoPath string) []sidecar {
 }
 
 // saveSidecars replaces a media file's external subtitle streams.
-func saveSidecars(ctx context.Context, q *db.Queries, mediaFileID int64, videoPath string) error {
+func saveSidecars(ctx context.Context, q *db.Queries, mediaFileID int64, subs []sidecar) error {
 	if err := q.DeleteExternalStreams(ctx, mediaFileID); err != nil {
 		return err
 	}
-	for i, s := range findSidecars(videoPath) {
+	for i, s := range subs {
 		err := q.InsertExternalStream(ctx, db.InsertExternalStreamParams{
 			MediaFileID: mediaFileID, Idx: int64(externalSubIndexBase + i), Codec: s.codec,
 			Language: s.language, Title: s.title, IsForced: b2i(s.forced),

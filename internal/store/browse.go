@@ -26,7 +26,10 @@ const browseExtras = `,
 	COALESCE((SELECT max(ms.height) FROM media_files mf JOIN media_streams ms ON ms.media_file_id = mf.id
 	          WHERE mf.item_id = i.id AND ms.type = 'video'), 0),
 	COALESCE((SELECT max(ms.hdr) FROM media_files mf JOIN media_streams ms ON ms.media_file_id = mf.id
-	          WHERE mf.item_id = i.id AND ms.type = 'video'), '')`
+	          WHERE mf.item_id = i.id AND ms.type = 'video'), ''),
+	(NOT EXISTS (SELECT 1 FROM media_files mf WHERE mf.item_id = i.id)
+	 OR EXISTS (SELECT 1 FROM media_files mf LEFT JOIN library_sources ls ON ls.id = mf.source_id
+	            WHERE mf.item_id = i.id AND COALESCE(ls.status, 'online') != 'offline'))`
 
 // Video width thresholds for resolution classes (width is robust to
 // letterboxing, height is a fallback for narrow/portrait encodes).
@@ -68,6 +71,7 @@ type BrowseRow struct {
 	VideoWidth  int64
 	VideoHeight int64
 	HDR         string
+	Available   bool // false when every file sits on an offline source
 }
 
 // Browse lists items with dynamic filters and ordering, and the total
@@ -175,7 +179,7 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	var out []BrowseRow
 	for rows.Next() {
 		var r BrowseRow
-		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR)...); err != nil {
+		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available)...); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, r)

@@ -18,7 +18,7 @@ func TestOpenMigratesAndQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AddLibraryPath(ctx, AddLibraryPathParams{LibraryID: lib.ID, Path: "/media/films"}); err != nil {
+	if _, err := s.AddLocalSource(ctx, lib.ID, "/media/films"); err != nil {
 		t.Fatal(err)
 	}
 	libs, err := s.ListLibraries(ctx)

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 )
 
 // Watcher triggers incremental scans when library folders change, and on a
@@ -19,15 +21,16 @@ type Watcher struct {
 	debounce time.Duration
 	interval time.Duration
 
-	mu    sync.Mutex
-	fsw   *fsnotify.Watcher
-	roots map[string]int64 // library root → library id
-	dirty map[int64]*time.Timer
-	ctx   context.Context
+	mu     sync.Mutex
+	fsw    *fsnotify.Watcher
+	roots  map[string]int64 // local source root → library id
+	dirty  map[int64]*time.Timer
+	ctx    context.Context
+	agents map[int64]context.CancelFunc // agent source id → event subscription
 }
 
 func NewWatcher(s *Scanner, debounce, interval time.Duration) *Watcher {
-	return &Watcher{scanner: s, debounce: debounce, interval: interval, dirty: map[int64]*time.Timer{}}
+	return &Watcher{scanner: s, debounce: debounce, interval: interval, dirty: map[int64]*time.Timer{}, agents: map[int64]context.CancelFunc{}}
 }
 
 // Run watches until ctx is cancelled. Call Sync after libraries change.
@@ -66,9 +69,10 @@ func (w *Watcher) Run(ctx context.Context) error {
 	}
 }
 
-// Sync (re)loads library roots and their directory watches.
+// Sync (re)loads local roots and their directory watches, and (re)subscribes
+// to change events of remote agents. SFTP sources rely on periodic scans.
 func (w *Watcher) Sync(ctx context.Context) error {
-	paths, err := w.scanner.store.ListAllLibraryPaths(ctx)
+	srcs, err := w.scanner.store.ListAllSources(ctx)
 	if err != nil {
 		return err
 	}
@@ -80,14 +84,39 @@ func (w *Watcher) Sync(ctx context.Context) error {
 	for _, p := range w.fsw.WatchList() {
 		_ = w.fsw.Remove(p)
 	}
-	w.roots = make(map[string]int64, len(paths))
-	dirs := 0
-	for _, p := range paths {
-		w.roots[p.Path] = p.LibraryID
-		dirs += w.addTree(p.Path)
+	for id, cancel := range w.agents {
+		cancel()
+		delete(w.agents, id)
 	}
-	w.scanner.log.Debug("surveillance active", "roots", len(paths), "dirs", dirs)
+	w.roots = map[string]int64{}
+	dirs := 0
+	for _, src := range srcs {
+		switch src.Kind {
+		case sources.KindLocal:
+			w.roots[src.Root] = src.LibraryID
+			dirs += w.addTree(src.Root)
+		case sources.KindAgent:
+			subCtx, cancel := context.WithCancel(w.ctx)
+			w.agents[src.ID] = cancel
+			go w.followAgent(subCtx, src.ID, src.LibraryID)
+		}
+	}
+	w.scanner.log.Debug("surveillance active", "local", len(w.roots), "dirs", dirs, "agents", len(w.agents))
 	return nil
+}
+
+// followAgent turns an agent's change events into debounced scans.
+func (w *Watcher) followAgent(ctx context.Context, sourceID, libID int64) {
+	ch, err := w.scanner.Sources.Changes(ctx, sourceID)
+	if err != nil {
+		w.scanner.log.Warn("abonnement aux changements de l'agent impossible", "source", sourceID, "err", err)
+		return
+	}
+	for range ch {
+		w.mu.Lock()
+		w.markDirty(libID)
+		w.mu.Unlock()
+	}
 }
 
 // addTree watches root and its sub-directories (inotify is not recursive).
@@ -124,6 +153,11 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 			w.addTree(ev.Name)
 		}
 	}
+	w.markDirty(libID)
+}
+
+// markDirty schedules a debounced scan of a library. Callers hold w.mu.
+func (w *Watcher) markDirty(libID int64) {
 	// Debounce: a copy in progress emits many writes; scan once it settles.
 	if t, ok := w.dirty[libID]; ok {
 		t.Reset(w.debounce)

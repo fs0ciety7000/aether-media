@@ -1,22 +1,27 @@
 package library
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/fs0ciety7000/aether-media/internal/naming"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
+	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
-// file is a media file found on disk.
+// file is a media file found in a source.
 type file struct {
-	path  string
-	rel   string // relative to the library root, '/'-separated
-	root  string
-	size  int64
-	mtime int64
+	path     string // stored location (absolute path or "src:<id>:/<rel>")
+	rel      string // relative to the source root, '/'-separated
+	root     string // location of the source root
+	sourceID int64
+	size     int64
+	mtime    int64
 }
 
 // Directories never worth descending into (NAS metadata, trash, OS folders).
@@ -27,59 +32,67 @@ var skipDirs = map[string]bool{
 }
 
 // Marker files that exclude their directory (and everything below).
-var ignoreMarkers = []string{".aetherignore", ".ignore", ".plexignore", ".nomedia"}
+var ignoreMarkers = map[string]bool{".aetherignore": true, ".ignore": true, ".plexignore": true, ".nomedia": true}
 
-// ErrRootUnavailable means a library root could not be read. The scanner must
-// not treat its files as deleted (unmounted network share, unplugged disk).
+// ErrRootUnavailable means a source could not be listed. The scanner must
+// not treat its files as deleted (offline agent, unmounted share...).
 var ErrRootUnavailable = errors.New("library root unavailable")
 
-// walk lists media files under root accepted by keep. A root that is missing
-// or empty is reported as unavailable rather than as "no files".
-func walk(root string, keep func(path string) bool) ([]file, error) {
-	entries, err := os.ReadDir(root)
-	if err != nil || len(entries) == 0 {
-		return nil, ErrRootUnavailable
-	}
-	var files []file
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if path == root {
-				return err
-			}
-			// Unreadable sub-directory: skip it, keep scanning the rest.
-			return fs.SkipDir
+// walk lists the media files of a source accepted by keep. A source that
+// cannot be listed, or lists nothing at all, is reported as unavailable
+// rather than as "no files".
+func walk(ctx context.Context, fsys vfs.FS, src db.LibrarySource, keep func(name string) bool) ([]file, error) {
+	var found []file
+	var ignored []string // directories holding an ignore marker
+	sawAny := false
+	err := fsys.Walk(ctx, "", func(e vfs.Entry) error {
+		if e.Path == "" {
+			return nil
 		}
-		name := d.Name()
-		if d.IsDir() {
-			if path != root && (strings.HasPrefix(name, ".") || skipDirs[strings.ToLower(name)]) {
+		sawAny = true
+		name := path.Base(e.Path)
+		if e.IsDir {
+			if strings.HasPrefix(name, ".") || skipDirs[strings.ToLower(name)] {
 				return fs.SkipDir
 			}
-			for _, m := range ignoreMarkers {
-				if _, err := os.Stat(filepath.Join(path, m)); err == nil {
-					return fs.SkipDir
-				}
-			}
 			return nil
 		}
-		if strings.HasPrefix(name, ".") || !d.Type().IsRegular() && d.Type()&fs.ModeSymlink == 0 {
+		if ignoreMarkers[strings.ToLower(name)] {
+			ignored = append(ignored, path.Dir(e.Path))
 			return nil
 		}
-		if !keep(path) || naming.ClassifyExtra(path) == "sample" {
+		if strings.HasPrefix(name, ".") || !keep(name) || naming.ClassifyExtra(e.Path) == "sample" {
 			return nil
 		}
-		info, err := os.Stat(path) // follows symlinks
-		if err != nil || !info.Mode().IsRegular() {
-			return nil
-		}
-		rel, _ := filepath.Rel(root, path)
-		files = append(files, file{
-			path: path, rel: filepath.ToSlash(rel), root: root,
-			size: info.Size(), mtime: info.ModTime().Unix(),
+		found = append(found, file{
+			path: sources.Location(src, e.Path), rel: e.Path, root: sources.RootLocation(src),
+			sourceID: src.ID, size: e.Size, mtime: e.ModTime.Unix(),
 		})
 		return nil
 	})
 	if err != nil {
-		return nil, ErrRootUnavailable
+		return nil, fmt.Errorf("%w: %w", ErrRootUnavailable, err)
 	}
-	return files, nil
+	if !sawAny {
+		return nil, fmt.Errorf("%w: dossier vide", ErrRootUnavailable)
+	}
+	if len(ignored) == 0 {
+		return found, nil
+	}
+	out := found[:0]
+	for _, f := range found {
+		if !underIgnored(f.rel, ignored) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+func underIgnored(rel string, dirs []string) bool {
+	for _, d := range dirs {
+		if d == "." || rel == d || strings.HasPrefix(rel, d+"/") {
+			return true
+		}
+	}
+	return false
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
@@ -45,7 +46,12 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { st.Close() })
 	log := slog.New(slog.DiscardHandler)
-	return &fixture{t: t, ctx: ctx, store: st, scanner: NewScanner(st, jobs.NewRunner(st, log), events.NewHub(), log)}
+	hub := events.NewHub()
+	srcs, err := sources.NewForTests(st, t.TempDir(), hub, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &fixture{t: t, ctx: ctx, store: st, scanner: NewScanner(st, jobs.NewRunner(st, log), hub, log, srcs)}
 }
 
 func (f *fixture) library(kind string, roots ...string) int64 {
@@ -55,7 +61,7 @@ func (f *fixture) library(kind string, roots ...string) int64 {
 		f.t.Fatal(err)
 	}
 	for _, r := range roots {
-		if err := f.store.AddLibraryPath(f.ctx, db.AddLibraryPathParams{LibraryID: lib.ID, Path: r}); err != nil {
+		if _, err := f.store.AddLocalSource(f.ctx, lib.ID, r); err != nil {
 			f.t.Fatal(err)
 		}
 	}

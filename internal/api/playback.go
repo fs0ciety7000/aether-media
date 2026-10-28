@@ -15,6 +15,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/stream"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
 // Playback groups the services needed to stream media.
@@ -74,7 +75,7 @@ type playbackRequest struct {
 }
 
 func (s *Server) requirePlayback(w http.ResponseWriter) bool {
-	if s.Playback == nil || s.Playback.Streams == nil {
+	if s.Playback == nil || s.Playback.Streams == nil || s.Sources == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "lecture indisponible")
 		return false
 	}
@@ -112,9 +113,18 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no_media", "aucun fichier lisible pour cet élément")
 		return
 	}
-	info, err := s.Playback.Prober.Probe(ctx, mf.Path)
+	info, err := s.Sources.Probe(ctx, s.Playback.Prober, mf.Path)
+	if errors.Is(err, vfs.ErrOffline) {
+		writeError(w, http.StatusServiceUnavailable, "source_offline", "la source de ce fichier est hors ligne")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "unreadable", "fichier illisible : "+err.Error())
+		return
+	}
+	input, err := s.Sources.InputURL(ctx, mf.Path)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "source_offline", "source indisponible : "+err.Error())
 		return
 	}
 	streams, err := s.store.ListMediaStreams(ctx, mf.ID)
@@ -129,7 +139,7 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sreq := stream.Request{Info: info, Path: mf.Path, AudioIndex: -1, SubtitleIndex: -1, Profile: req.Profile, StartMs: max(0, req.StartMs)}
+	sreq := stream.Request{Info: info, Path: input, AudioIndex: -1, SubtitleIndex: -1, Profile: req.Profile, StartMs: max(0, req.StartMs)}
 	if req.AudioIndex != nil {
 		sreq.AudioIndex = *req.AudioIndex
 	}
@@ -250,17 +260,19 @@ func (s *Server) mediaStream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	f, err := os.Open(mf.Path)
+	if !s.requirePlayback(w) {
+		return
+	}
+	f, err := s.Sources.Open(r.Context(), mf.Path, mf.SourceID.Int64)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "file_missing", "fichier introuvable sur le disque")
+		if errors.Is(err, vfs.ErrOffline) {
+			writeError(w, http.StatusServiceUnavailable, "source_offline", "la source de ce fichier est hors ligne")
+			return
+		}
+		writeError(w, http.StatusNotFound, "file_missing", "fichier introuvable")
 		return
 	}
 	defer func() { _ = f.Close() }()
-	st, err := f.Stat()
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
 	ext := strings.ToLower(filepath.Ext(mf.Path))
 	ctype := mediaTypes[ext]
 	if ctype == "" {
@@ -270,7 +282,7 @@ func (s *Server) mediaStream(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", ctype)
 	}
 	w.Header().Set("Cache-Control", "private, max-age=3600")
-	http.ServeContent(w, r, "", st.ModTime(), f)
+	http.ServeContent(w, r, "", f.ModTime(), f)
 }
 
 // mediaSubtitle: GET /api/v1/media/{id}/subtitles/{n}.vtt — text subtitle as WebVTT (cached).
@@ -296,18 +308,23 @@ func (s *Server) mediaSubtitle(w http.ResponseWriter, r *http.Request) {
 	if st.IsExternal == 1 {
 		src, srcIdx = st.ExternalPath, 0
 	}
-	fi, err := os.Stat(src)
+	fi, err := s.Sources.Stat(r.Context(), src)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	out := filepath.Join(s.Playback.SubtitleDir, fmt.Sprintf("%d-%d-%d.vtt", mf.ID, idx, fi.ModTime().Unix()))
+	out := filepath.Join(s.Playback.SubtitleDir, fmt.Sprintf("%d-%d-%d.vtt", mf.ID, idx, fi.ModTime.Unix()))
 	if _, err := os.Stat(out); err != nil {
 		if err := os.MkdirAll(s.Playback.SubtitleDir, 0o750); err != nil {
 			s.internalError(w, err)
 			return
 		}
-		if err := stream.ExtractSubtitle(r.Context(), s.Playback.FFmpeg, src, srcIdx, out); err != nil {
+		input, err := s.Sources.InputURL(r.Context(), src)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if err := stream.ExtractSubtitle(r.Context(), s.Playback.FFmpeg, input, srcIdx, out); err != nil {
 			s.log.Warn("conversion de sous-titre", "file", src, "index", idx, "err", err)
 			writeError(w, http.StatusUnprocessableEntity, "subtitle_failed", "sous-titre illisible")
 			return

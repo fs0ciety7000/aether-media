@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fs0ciety7000/aether-media/internal/events"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 )
 
@@ -23,7 +25,12 @@ func newTestServer(t *testing.T) *httptest.Server {
 	}
 	t.Cleanup(func() { st.Close() })
 	web := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "spa") })
-	ts := httptest.NewServer(New(Deps{Store: st, Log: slog.New(slog.DiscardHandler)}).Handler(web))
+	log := slog.New(slog.DiscardHandler)
+	srcs, err := sources.NewForTests(st, t.TempDir(), events.NewHub(), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(New(Deps{Store: st, Log: log, Sources: srcs}).Handler(web))
 	t.Cleanup(ts.Close)
 	return ts
 }
@@ -81,7 +88,7 @@ func TestCreateLibraryValidation(t *testing.T) {
 	}{
 		{`{"name":"Films","kind":"movies","paths":[` + q(dir) + `]}`, 201},
 		{`{"name":"Encore","kind":"movies","paths":[` + q(dir) + `]}`, 409},                     // same folder
-		{`{"name":"Sous","kind":"movies","paths":[` + q(filepath.Join(dir, "sub")) + `]}`, 400}, // missing dir
+		{`{"name":"Sous","kind":"movies","paths":[` + q(filepath.Join(dir, "sub")) + `]}`, 409}, // nested in an existing library
 		{`{"name":"Rel","kind":"movies","paths":["relative/path"]}`, 400},                       // not absolute
 		{`{"name":"Photos","kind":"photos","paths":[` + q(t.TempDir()) + `]}`, 400},             // kind not supported yet
 		{`{"name":"","kind":"movies","paths":[` + q(t.TempDir()) + `]}`, 400},                   // empty name

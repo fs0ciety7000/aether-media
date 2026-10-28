@@ -1,11 +1,12 @@
 -- name: ListLibraryMediaFiles :many
-SELECT id, item_id, path, size, mtime FROM media_files WHERE library_id = ?;
+SELECT id, item_id, path, size, mtime, source_id FROM media_files WHERE library_id = ?;
 
 -- name: UpsertMediaFile :one
-INSERT INTO media_files (item_id, library_id, path, size, mtime, part)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO media_files (item_id, library_id, source_id, path, size, mtime, part)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (path) DO UPDATE SET
     item_id = excluded.item_id,
+    source_id = excluded.source_id,
     size    = excluded.size,
     mtime   = excluded.mtime,
     part    = excluded.part,

@@ -7,14 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/fs0ciety7000/aether-media/internal/agent"
 	"github.com/fs0ciety7000/aether-media/internal/api"
 	"github.com/fs0ciety7000/aether-media/internal/config"
 	"github.com/fs0ciety7000/aether-media/internal/events"
@@ -28,6 +31,8 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/metadata/nfo"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/tmdb"
+	"github.com/fs0ciety7000/aether-media/internal/secret"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/stream"
@@ -45,6 +50,8 @@ Usage :
   aether library list                     liste les bibliothèques
   aether scan [-library id] [-full]       scanne (toutes les bibliothèques par défaut)
                                           et analyse les fichiers avec ffprobe
+  aether agent [-config agent.toml]       mode agent : partage les médias de cette machine
+                                          avec un serveur Aether distant
   aether healthcheck [-addr url]          vérifie qu'un serveur répond (Docker)
   aether version                          affiche la version
 `
@@ -65,6 +72,8 @@ func main() {
 		err = runScan(args)
 	case "library":
 		err = runLibrary(args)
+	case "agent":
+		err = runAgent(args)
 	case "healthcheck":
 		err = runHealthcheck(args)
 	case "version":
@@ -125,6 +134,7 @@ type services struct {
 	refresher *refresh.Refresher
 	images    *images.Cache
 	features  api.Features
+	sources   *sources.Manager
 }
 
 func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
@@ -134,7 +144,13 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	}
 	hub := events.NewHub()
 	runner := jobs.NewRunner(st, log)
-	scanner := library.NewScanner(st, runner, hub, log)
+	box, err := secret.Open(cfg.Paths.Data)
+	if err != nil {
+		return nil, err
+	}
+	srcs := sources.New(st, box, sources.DefaultFactory{UserAgent: userAgent()}, hub, log)
+	nfo.SetFileSystem(srcs.NFOFileSystem())
+	scanner := library.NewScanner(st, runner, hub, log, srcs)
 	prober := probe.New(cfg.Paths.FFprobe)
 	if v, err := prober.Version(ctx); err != nil {
 		log.Warn("ffprobe introuvable : l'analyse des médias est désactivée", "ffprobe", cfg.Paths.FFprobe, "err", err)
@@ -148,7 +164,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	if err != nil {
 		return nil, err
 	}
-	refresher, features := newRefresher(cfg, st, runner, hub, log, imgs)
+	refresher, features := newRefresher(cfg, st, runner, hub, log, imgs, srcs)
 	runner.Register(refresh.JobRefresh, 2, refresher.HandleRefresh)
 	runner.Register(refresh.JobImage, 4, refresher.HandleImage)
 	scanner.AfterScan = func(ctx context.Context, libID int64) {
@@ -156,7 +172,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 			log.Error("planification des métadonnées", "library", libID, "err", err)
 		}
 	}
-	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features}, nil
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features, sources: srcs}, nil
 }
 
 func userAgent() string {
@@ -165,7 +181,7 @@ func userAgent() string {
 
 // newRefresher assembles metadata providers: local NFO/artwork first, then
 // TMDB (films, séries; needs an API key) and MusicBrainz (musique).
-func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache) (*refresh.Refresher, api.Features) {
+func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache, srcs *sources.Manager) (*refresh.Refresher, api.Features) {
 	httpCache := filepath.Join(cfg.Paths.Cache, "http")
 	var remote []metadata.RemoteProvider
 	tm := tmdb.New(tmdb.Config{APIKey: cfg.Metadata.TMDBAPIKey, Language: cfg.Metadata.Language},
@@ -181,6 +197,13 @@ func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *
 			httpx.New(httpx.Options{UserAgent: userAgent(), RatePerSec: 1, CacheDir: filepath.Join(httpCache, "musicbrainz")})))
 	}
 	ingest := func(ctx context.Context, src string) (refresh.ImageInfo, error) {
+		if sources.IsRemote(src) { // artwork stored next to remote media
+			u, err := srcs.InputURL(ctx, src)
+			if err != nil {
+				return refresh.ImageInfo{}, err
+			}
+			src = u
+		}
 		s, err := imgs.Ingest(ctx, src)
 		if errors.Is(err, images.ErrNotFound) || errors.Is(err, images.ErrNotImage) ||
 			errors.Is(err, images.ErrTooLarge) || errors.Is(err, images.ErrBadSource) {
@@ -209,12 +232,15 @@ func runServe(args []string) error {
 		return err
 	}
 	defer func() { _ = svc.store.Close() }()
+	defer svc.sources.Close()
+	svc.sources.ProxyBase = loopbackBase(cfg)
 
 	bgCtx, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()
 	if err := svc.runner.Start(bgCtx); err != nil {
 		return err
 	}
+	go svc.sources.Monitor(bgCtx, time.Minute)
 	watcher := library.NewWatcher(svc.scanner, cfg.Library.WatchDebounce.Duration, cfg.Library.ScanInterval.Duration)
 	go func() {
 		if err := watcher.Run(bgCtx); err != nil {
@@ -241,6 +267,7 @@ func runServe(args []string) error {
 		Handler: api.New(api.Deps{
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
 			Refresher: svc.refresher, Images: svc.images, Features: svc.features, Playback: playback,
+			Sources: svc.sources,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -288,6 +315,17 @@ func runScan(args []string) error {
 		return err
 	}
 	defer func() { _ = svc.store.Close() }()
+	defer svc.sources.Close()
+	// SFTP files reach ffprobe through the internal proxy: serve it on a
+	// loopback port for the duration of the scan.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	proxy := &http.Server{Handler: api.New(api.Deps{Store: svc.store, Log: log, Sources: svc.sources}).Handler(http.NotFoundHandler()), ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = proxy.Serve(ln) }()
+	defer func() { _ = proxy.Close() }()
+	svc.sources.ProxyBase = "http://" + ln.Addr().String()
 
 	libs, err := svc.store.ListLibraries(ctx)
 	if err != nil {
@@ -361,10 +399,10 @@ func runLibrary(args []string) error {
 			return err
 		}
 		for _, l := range libs {
-			ps, _ := st.ListLibraryPaths(ctx, l.ID)
+			ps, _ := st.ListSources(ctx, l.ID)
 			fmt.Printf("%d\t%s\t%s\n", l.ID, l.Kind, l.Name)
 			for _, p := range ps {
-				fmt.Printf("\t%s\n", p.Path)
+				fmt.Printf("\t[%s] %s (%s)\n", p.Kind, p.Name, p.Status)
 			}
 		}
 		return nil
@@ -383,7 +421,7 @@ func runLibrary(args []string) error {
 				if err != nil {
 					return err
 				}
-				if err := q.AddLibraryPath(ctx, db.AddLibraryPathParams{LibraryID: lib.ID, Path: abs}); err != nil {
+				if _, err := q.CreateSource(ctx, db.CreateSourceParams{LibraryID: lib.ID, Kind: "local", Name: abs, Root: abs, Config: "{}"}); err != nil {
 					return err
 				}
 			}
@@ -418,4 +456,34 @@ func runHealthcheck(args []string) error {
 		return fmt.Errorf("healthz: statut %d", res.StatusCode)
 	}
 	return nil
+}
+
+// loopbackBase is how the server reaches itself (internal proxy for FFmpeg).
+func loopbackBase(cfg config.Config) string {
+	host := cfg.Server.Host
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(cfg.Server.Port))
+}
+
+func runAgent(args []string) error {
+	fs := flag.NewFlagSet("agent", flag.ExitOnError)
+	path := fs.String("config", "", "chemin du fichier agent.toml")
+	_ = fs.Parse(args) // ExitOnError: never returns an error
+
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(log)
+	cfg, err := agent.LoadConfig(*path)
+	if err != nil {
+		return err
+	}
+	cfg.Logger = log
+	srv, err := agent.New(cfg, version.Version)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return srv.Run(ctx)
 }

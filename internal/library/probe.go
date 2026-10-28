@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -35,7 +36,7 @@ func (s *Scanner) ProbeHandler(p *probe.Prober) jobs.Handler {
 			return err
 		}
 
-		info, err := p.Probe(ctx, mf.Path)
+		info, err := s.Sources.Probe(ctx, p, mf.Path)
 		if errors.Is(err, probe.ErrNotMedia) {
 			s.log.Warn("fichier illisible", "path", mf.Path, "err", err)
 			return s.store.SetProbeError(ctx, db.SetProbeErrorParams{ProbeError: nullStr(err.Error()), ID: mf.ID})
@@ -46,11 +47,18 @@ func (s *Scanner) ProbeHandler(p *probe.Prober) jobs.Handler {
 			}
 			return err
 		}
-		return s.store.Tx(ctx, func(q *db.Queries) error { return saveProbe(ctx, q, mf, info) })
+		var subs []sidecar
+		if mf.ItemKind != "track" {
+			// Listed outside the transaction: remote directories may be slow.
+			if entries, err := s.Sources.ReadDir(ctx, filepath.Dir(mf.Path)); err == nil {
+				subs = findSidecars(mf.Path, entries)
+			}
+		}
+		return s.store.Tx(ctx, func(q *db.Queries) error { return saveProbe(ctx, q, mf, info, subs) })
 	}
 }
 
-func saveProbe(ctx context.Context, q *db.Queries, mf db.GetMediaFileRow, info *probe.Info) error {
+func saveProbe(ctx context.Context, q *db.Queries, mf db.GetMediaFileRow, info *probe.Info, subs []sidecar) error {
 	err := q.SetProbeResult(ctx, db.SetProbeResultParams{
 		Container:  nullStr(info.Container),
 		DurationMs: sql.NullInt64{Int64: info.DurationMs, Valid: info.DurationMs > 0},
@@ -91,7 +99,7 @@ func saveProbe(ctx context.Context, q *db.Queries, mf db.GetMediaFileRow, info *
 		}
 	}
 	if mf.ItemKind != "track" {
-		if err := saveSidecars(ctx, q, mf.ID, mf.Path); err != nil {
+		if err := saveSidecars(ctx, q, mf.ID, subs); err != nil {
 			return err
 		}
 	}

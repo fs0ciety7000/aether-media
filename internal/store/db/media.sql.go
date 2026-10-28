@@ -47,7 +47,7 @@ func (q *Queries) DeleteMediaStreams(ctx context.Context, mediaFileID int64) err
 }
 
 const getMediaFile = `-- name: GetMediaFile :one
-SELECT mf.id, mf.item_id, mf.library_id, mf.path, mf.size, mf.mtime, mf.part, mf.container, mf.duration_ms, mf.bitrate, mf.probed_at, mf.probe_error, i.kind AS item_kind FROM media_files mf JOIN items i ON i.id = mf.item_id WHERE mf.id = ?
+SELECT mf.id, mf.item_id, mf.library_id, mf.path, mf.size, mf.mtime, mf.part, mf.container, mf.duration_ms, mf.bitrate, mf.probed_at, mf.probe_error, mf.source_id, i.kind AS item_kind FROM media_files mf JOIN items i ON i.id = mf.item_id WHERE mf.id = ?
 `
 
 type GetMediaFileRow struct {
@@ -63,6 +63,7 @@ type GetMediaFileRow struct {
 	Bitrate    sql.NullInt64  `json:"bitrate"`
 	ProbedAt   sql.NullInt64  `json:"probedAt"`
 	ProbeError sql.NullString `json:"probeError"`
+	SourceID   sql.NullInt64  `json:"sourceId"`
 	ItemKind   string         `json:"itemKind"`
 }
 
@@ -82,6 +83,7 @@ func (q *Queries) GetMediaFile(ctx context.Context, id int64) (GetMediaFileRow, 
 		&i.Bitrate,
 		&i.ProbedAt,
 		&i.ProbeError,
+		&i.SourceID,
 		&i.ItemKind,
 	)
 	return i, err
@@ -241,7 +243,7 @@ func (q *Queries) InsertMediaStream(ctx context.Context, arg InsertMediaStreamPa
 }
 
 const listItemMediaFiles = `-- name: ListItemMediaFiles :many
-SELECT id, item_id, library_id, path, size, mtime, part, container, duration_ms, bitrate, probed_at, probe_error FROM media_files WHERE item_id = ? ORDER BY part, path
+SELECT id, item_id, library_id, path, size, mtime, part, container, duration_ms, bitrate, probed_at, probe_error, source_id FROM media_files WHERE item_id = ? ORDER BY part, path
 `
 
 func (q *Queries) ListItemMediaFiles(ctx context.Context, itemID int64) ([]MediaFile, error) {
@@ -266,6 +268,7 @@ func (q *Queries) ListItemMediaFiles(ctx context.Context, itemID int64) ([]Media
 			&i.Bitrate,
 			&i.ProbedAt,
 			&i.ProbeError,
+			&i.SourceID,
 		); err != nil {
 			return nil, err
 		}
@@ -281,15 +284,16 @@ func (q *Queries) ListItemMediaFiles(ctx context.Context, itemID int64) ([]Media
 }
 
 const listLibraryMediaFiles = `-- name: ListLibraryMediaFiles :many
-SELECT id, item_id, path, size, mtime FROM media_files WHERE library_id = ?
+SELECT id, item_id, path, size, mtime, source_id FROM media_files WHERE library_id = ?
 `
 
 type ListLibraryMediaFilesRow struct {
-	ID     int64  `json:"id"`
-	ItemID int64  `json:"itemId"`
-	Path   string `json:"path"`
-	Size   int64  `json:"size"`
-	Mtime  int64  `json:"mtime"`
+	ID       int64         `json:"id"`
+	ItemID   int64         `json:"itemId"`
+	Path     string        `json:"path"`
+	Size     int64         `json:"size"`
+	Mtime    int64         `json:"mtime"`
+	SourceID sql.NullInt64 `json:"sourceId"`
 }
 
 func (q *Queries) ListLibraryMediaFiles(ctx context.Context, libraryID int64) ([]ListLibraryMediaFilesRow, error) {
@@ -307,6 +311,7 @@ func (q *Queries) ListLibraryMediaFiles(ctx context.Context, libraryID int64) ([
 			&i.Path,
 			&i.Size,
 			&i.Mtime,
+			&i.SourceID,
 		); err != nil {
 			return nil, err
 		}
@@ -409,10 +414,11 @@ func (q *Queries) SetProbeResult(ctx context.Context, arg SetProbeResultParams) 
 }
 
 const upsertMediaFile = `-- name: UpsertMediaFile :one
-INSERT INTO media_files (item_id, library_id, path, size, mtime, part)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO media_files (item_id, library_id, source_id, path, size, mtime, part)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (path) DO UPDATE SET
     item_id = excluded.item_id,
+    source_id = excluded.source_id,
     size    = excluded.size,
     mtime   = excluded.mtime,
     part    = excluded.part,
@@ -422,12 +428,13 @@ RETURNING id, probed_at
 `
 
 type UpsertMediaFileParams struct {
-	ItemID    int64  `json:"itemId"`
-	LibraryID int64  `json:"libraryId"`
-	Path      string `json:"path"`
-	Size      int64  `json:"size"`
-	Mtime     int64  `json:"mtime"`
-	Part      int64  `json:"part"`
+	ItemID    int64         `json:"itemId"`
+	LibraryID int64         `json:"libraryId"`
+	SourceID  sql.NullInt64 `json:"sourceId"`
+	Path      string        `json:"path"`
+	Size      int64         `json:"size"`
+	Mtime     int64         `json:"mtime"`
+	Part      int64         `json:"part"`
 }
 
 type UpsertMediaFileRow struct {
@@ -439,6 +446,7 @@ func (q *Queries) UpsertMediaFile(ctx context.Context, arg UpsertMediaFileParams
 	row := q.db.QueryRowContext(ctx, upsertMediaFile,
 		arg.ItemID,
 		arg.LibraryID,
+		arg.SourceID,
 		arg.Path,
 		arg.Size,
 		arg.Mtime,

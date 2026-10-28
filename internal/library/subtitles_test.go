@@ -1,20 +1,22 @@
 package library
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
 func TestFindSidecars(t *testing.T) {
 	dir := t.TempDir()
+	var entries []vfs.Entry
 	for _, n := range []string{
 		"Heat (1995).mkv", "Heat (1995).srt", "Heat (1995).fr.srt", "Heat (1995).fre.forced.srt",
 		"Heat (1995).en.sdh.ass", "Heat (1995).director commentary.vtt", "Other.fr.srt", "Heat (1995).nfo",
 	} {
-		os.WriteFile(filepath.Join(dir, n), nil, 0o644)
+		entries = append(entries, vfs.Entry{Path: n})
 	}
-	got := findSidecars(filepath.Join(dir, "Heat (1995).mkv"))
+	got := findSidecars(filepath.Join(dir, "Heat (1995).mkv"), entries)
 	if len(got) != 5 {
 		t.Fatalf("got %d sidecars: %+v", len(got), got)
 	}

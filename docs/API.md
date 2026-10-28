@@ -151,3 +151,35 @@ Précisions :
 - La playlist HLS couvre **tout le fichier** (horodatage absolu) ; `startMs` indique où commencer la lecture.
 - `video.codec` décrit la source ; `copied: false` signifie qu'elle est réencodée en H.264.
 - Une même liste de codecs sert à la lecture directe et au remux : le lecteur n'y déclare que les codecs lisibles dans les deux cas (fMP4/HLS).
+
+## Sources (M5b)
+
+Une bibliothèque regroupe une ou plusieurs **sources** : dossier local, Agent Aether (machine distante que l'on contrôle, voir `docs/AGENT_PROTOCOL.md`) ou serveur SFTP (seedbox).
+
+```ts
+type Source = {
+  id: number; kind: "local" | "agent" | "sftp"
+  name: string                 // libellé affiché (défaut : hôte + dossier)
+  root: string                 // local : chemin absolu · agent : sous-dossier du partage ("" = racine) · sftp : chemin distant absolu
+  status: "online" | "offline" | "unknown"; lastError?: string; lastSeen?: string
+  agent?: { url: string; share: string; hostname?: string; version?: string }
+  sftp?: { host: string; port: number; user: string; auth: "password" | "key"; hostKey: string }  // empreinte SHA256:...
+}
+// Les secrets (jeton, mot de passe, clé privée) ne sont jamais renvoyés.
+
+type SourceInput = {
+  kind: "local" | "agent" | "sftp"; name?: string; root: string
+  agent?: { url: string; token: string; share: string }
+  sftp?: { host: string; port?: number; user: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string }
+}
+```
+
+- `Library` gagne `sources: Source[]` (le champ `paths` reste présent : chemins des sources locales).
+- `POST /libraries` `{ name, kind, sources: SourceInput[] }` (`paths: string[]` reste accepté comme raccourci pour des sources locales).
+- `POST /sources/test` `SourceInput` → `{ ok: boolean, error?: string, hostKey?: string, agent?: { hostname, version, shares: string[] } }`
+  - SFTP : sans `hostKey`, la connexion renvoie l'empreinte de l'hôte (`ok: false`, `error: "host_key_unknown"`, `hostKey`) que l'utilisateur confirme ; elle est ensuite exigée (protection contre l'usurpation).
+- `POST /libraries/{id}/sources` `SourceInput` → `201 Source` (scan lancé)
+- `PATCH /libraries/{id}/sources/{sid}` `Partial<SourceInput>` → `Source` (ex. nouveau jeton / mot de passe)
+- `DELETE /libraries/{id}/sources/{sid}` → 204 (les éléments de cette source disparaissent au prochain scan)
+- `Item.available` : `false` quand tous les fichiers de l'élément sont sur des sources hors ligne (affichage grisé, lecture désactivée).
+- SSE : `source.status` `{ id, libraryId, status, lastError? }`.

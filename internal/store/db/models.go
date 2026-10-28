@@ -119,10 +119,18 @@ type Library struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-type LibraryPath struct {
-	ID        int64  `json:"id"`
-	LibraryID int64  `json:"libraryId"`
-	Path      string `json:"path"`
+type LibrarySource struct {
+	ID        int64         `json:"id"`
+	LibraryID int64         `json:"libraryId"`
+	Kind      string        `json:"kind"`
+	Name      string        `json:"name"`
+	Root      string        `json:"root"`
+	Config    string        `json:"config"`
+	Secret    []byte        `json:"secret"`
+	Status    string        `json:"status"`
+	LastError string        `json:"lastError"`
+	LastSeen  sql.NullInt64 `json:"lastSeen"`
+	CreatedAt int64         `json:"createdAt"`
 }
 
 type MediaFile struct {
@@ -138,6 +146,7 @@ type MediaFile struct {
 	Bitrate    sql.NullInt64  `json:"bitrate"`
 	ProbedAt   sql.NullInt64  `json:"probedAt"`
 	ProbeError sql.NullString `json:"probeError"`
+	SourceID   sql.NullInt64  `json:"sourceId"`
 }
 
 type MediaStream struct {

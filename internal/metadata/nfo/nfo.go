@@ -11,8 +11,8 @@ package nfo
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/fs0ciety7000/aether-media/internal/metadata"
@@ -76,12 +76,12 @@ func (p *Provider) Local(ctx context.Context, q metadata.Query) (*metadata.Resul
 }
 
 func parseFile(path, kind string) (*metadata.Result, error) {
-	f, err := os.Open(path)
+	f, err := files.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	return ParseNFO(f, kind)
+	return ParseNFO(io.LimitReader(f, 4<<20), kind)
 }
 
 // FindNFO returns the NFO file of an item, "" if none:

@@ -1,0 +1,312 @@
+package sources
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
+)
+
+// Input is what clients send to create or update a source (see docs/API.md).
+type Input struct {
+	Kind  string     `json:"kind"`
+	Name  string     `json:"name"`
+	Root  string     `json:"root"`
+	Agent *AgentIn   `json:"agent,omitempty"`
+	SFTP  *SFTPInput `json:"sftp,omitempty"`
+}
+
+type AgentIn struct {
+	URL   string `json:"url"`
+	Token string `json:"token"`
+	Share string `json:"share"`
+}
+
+type SFTPInput struct {
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	User       string `json:"user"`
+	Password   string `json:"password"`
+	PrivateKey string `json:"privateKey"`
+	Passphrase string `json:"passphrase"`
+	HostKey    string `json:"hostKey"`
+}
+
+// ValidationError is a user-facing input problem (HTTP 400).
+type ValidationError struct{ Msg string }
+
+func (e *ValidationError) Error() string { return e.Msg }
+
+func invalid(format string, a ...any) error { return &ValidationError{Msg: fmt.Sprintf(format, a...)} }
+
+// prepared is a validated input ready to be stored.
+type prepared struct {
+	kind, name, root string
+	cfg              Config
+	sec              Secrets
+}
+
+// prepare validates an input. prev, when updating, provides the secrets to
+// keep when the client leaves them empty.
+func prepare(in Input, prev *Secrets) (prepared, error) {
+	p := prepared{kind: in.Kind, name: strings.TrimSpace(in.Name)}
+	if prev != nil {
+		p.sec = *prev
+	}
+	switch in.Kind {
+	case KindLocal:
+		root := filepath.Clean(strings.TrimSpace(in.Root))
+		if !filepath.IsAbs(root) {
+			return p, invalid("chemin absolu requis : %s", in.Root)
+		}
+		if st, err := os.Stat(root); err != nil || !st.IsDir() {
+			return p, invalid("dossier introuvable sur le serveur : %s", in.Root)
+		}
+		p.root = root
+		if p.name == "" {
+			p.name = root
+		}
+	case KindAgent:
+		a := in.Agent
+		if a == nil {
+			return p, invalid("paramètres de l'agent manquants")
+		}
+		u, err := url.Parse(strings.TrimSpace(a.URL))
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return p, invalid("URL de l'agent invalide (ex. http://nas.local:8097)")
+		}
+		if strings.TrimSpace(a.Share) == "" {
+			return p, invalid("partage de l'agent requis")
+		}
+		if a.Token != "" {
+			p.sec.Token = strings.TrimSpace(a.Token)
+		}
+		if p.sec.Token == "" {
+			return p, invalid("jeton d'appairage de l'agent requis")
+		}
+		root, err := cleanRemote(in.Root, false)
+		if err != nil {
+			return p, err
+		}
+		p.root = root
+		p.cfg.Agent = &AgentConfig{URL: strings.TrimSuffix(u.String(), "/"), Share: strings.TrimSpace(a.Share)}
+		if p.name == "" {
+			p.name = u.Host + " · " + path.Join(a.Share, root)
+		}
+	case KindSFTP:
+		sf := in.SFTP
+		if sf == nil {
+			return p, invalid("paramètres SFTP manquants")
+		}
+		if strings.TrimSpace(sf.Host) == "" || strings.TrimSpace(sf.User) == "" {
+			return p, invalid("hôte et utilisateur SFTP requis")
+		}
+		port := sf.Port
+		if port == 0 {
+			port = 22
+		}
+		if port < 1 || port > 65535 {
+			return p, invalid("port SFTP invalide")
+		}
+		if sf.Password != "" {
+			p.sec.Password, p.sec.PrivateKey, p.sec.Passphrase = sf.Password, "", ""
+		}
+		if sf.PrivateKey != "" {
+			p.sec.PrivateKey, p.sec.Passphrase, p.sec.Password = sf.PrivateKey, sf.Passphrase, ""
+		}
+		auth := "password"
+		if p.sec.PrivateKey != "" {
+			auth = "key"
+		} else if p.sec.Password == "" {
+			return p, invalid("mot de passe ou clé privée SFTP requis")
+		}
+		root, err := cleanRemote(in.Root, true)
+		if err != nil {
+			return p, err
+		}
+		p.root = root
+		p.cfg.SFTP = &SFTPConfig{Host: strings.TrimSpace(sf.Host), Port: port, User: strings.TrimSpace(sf.User), Auth: auth, HostKey: strings.TrimSpace(sf.HostKey)}
+		if p.name == "" {
+			p.name = fmt.Sprintf("%s@%s:%s", p.cfg.SFTP.User, p.cfg.SFTP.Host, root)
+		}
+	default:
+		return p, invalid("type de source attendu : local, agent ou sftp")
+	}
+	if len(p.name) > 200 {
+		p.name = p.name[:200]
+	}
+	return p, nil
+}
+
+// cleanRemote normalises a remote root ("" or "/" allowed for agents).
+func cleanRemote(root string, absolute bool) (string, error) {
+	root = strings.TrimSpace(root)
+	if strings.ContainsRune(root, 0) {
+		return "", invalid("chemin invalide")
+	}
+	if absolute {
+		if !strings.HasPrefix(root, "/") {
+			return "", invalid("chemin distant absolu requis (ex. /home/user/media)")
+		}
+		return path.Clean(root), nil
+	}
+	c := strings.TrimPrefix(path.Clean("/"+root), "/")
+	for _, seg := range strings.Split(root, "/") {
+		if seg == ".." {
+			return "", invalid("chemin invalide : %s", root)
+		}
+	}
+	return c, nil
+}
+
+// TestResult is returned by the connection test.
+type TestResult struct {
+	OK      bool       `json:"ok"`
+	Error   string     `json:"error,omitempty"`
+	HostKey string     `json:"hostKey,omitempty"`
+	Agent   *AgentInfo `json:"agent,omitempty"`
+}
+
+// Test checks that a source can be reached and listed.
+func (m *Manager) Test(ctx context.Context, in Input) (TestResult, error) {
+	p, err := prepare(in, nil)
+	if err != nil {
+		return TestResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	res := TestResult{}
+	switch p.kind {
+	case KindAgent:
+		info, err := m.factory.AgentInfo(ctx, p.cfg.Agent.URL, p.sec.Token)
+		if err != nil {
+			return TestResult{Error: err.Error()}, nil
+		}
+		res.Agent = &info
+		found := false
+		for _, s := range info.Shares {
+			found = found || s == p.cfg.Agent.Share
+		}
+		if !found {
+			return TestResult{Error: fmt.Sprintf("partage %q inconnu de l'agent", p.cfg.Agent.Share), Agent: &info}, nil
+		}
+	case KindSFTP:
+		fp, err := m.factory.SFTPHostKey(ctx, *p.cfg.SFTP)
+		if err != nil {
+			return TestResult{Error: err.Error()}, nil
+		}
+		res.HostKey = fp
+		if p.cfg.SFTP.HostKey == "" {
+			return TestResult{Error: "host_key_unknown", HostKey: fp}, nil
+		}
+		if p.cfg.SFTP.HostKey != fp {
+			return TestResult{Error: "host_key_mismatch", HostKey: fp}, nil
+		}
+	}
+	fsys, err := m.openPrepared(ctx, p)
+	if err != nil {
+		res.Error = err.Error()
+		return res, nil
+	}
+	defer func() { _ = fsys.Close() }()
+	if err := fsys.Ping(ctx); err != nil {
+		res.Error = err.Error()
+		return res, nil
+	}
+	res.OK = true
+	return res, nil
+}
+
+func (m *Manager) openPrepared(ctx context.Context, p prepared) (vfs.FS, error) {
+	switch p.kind {
+	case KindLocal:
+		return m.factory.Local(p.root)
+	case KindAgent:
+		return m.factory.Agent(ctx, *p.cfg.Agent, p.sec, p.root)
+	case KindSFTP:
+		return m.factory.SFTP(ctx, *p.cfg.SFTP, p.sec, p.root)
+	}
+	return nil, errors.New("unknown kind")
+}
+
+// Create validates and stores a new source of a library. Remote sources
+// must pass a connection test first.
+func (m *Manager) Create(ctx context.Context, q *db.Queries, libID int64, in Input) (db.LibrarySource, error) {
+	p, err := prepare(in, nil)
+	if err != nil {
+		return db.LibrarySource{}, err
+	}
+	if p.kind != KindLocal {
+		res, err := m.Test(ctx, in)
+		if err != nil {
+			return db.LibrarySource{}, err
+		}
+		if !res.OK {
+			return db.LibrarySource{}, invalid("connexion impossible : %s", res.Error)
+		}
+		if res.Agent != nil {
+			p.cfg.Agent.Hostname, p.cfg.Agent.Version = res.Agent.Hostname, res.Agent.Version
+		}
+	}
+	return m.insert(ctx, q, libID, p)
+}
+
+func (m *Manager) insert(ctx context.Context, q *db.Queries, libID int64, p prepared) (db.LibrarySource, error) {
+	cfg, _ := json.Marshal(p.cfg)
+	var sealed []byte
+	if p.sec != (Secrets{}) {
+		var err error
+		if sealed, err = m.box.SealJSON(p.sec); err != nil {
+			return db.LibrarySource{}, err
+		}
+	}
+	return q.CreateSource(ctx, db.CreateSourceParams{LibraryID: libID, Kind: p.kind, Name: p.name, Root: p.root, Config: string(cfg), Secret: sealed})
+}
+
+// Update changes a source; empty secrets keep the stored ones.
+func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (db.LibrarySource, error) {
+	_, prevSec, err := m.Decode(src)
+	if err != nil {
+		return src, err
+	}
+	in.Kind = src.Kind
+	p, err := prepare(in, &prevSec)
+	if err != nil {
+		return src, err
+	}
+	if p.kind != KindLocal {
+		test := in
+		if test.Agent != nil && test.Agent.Token == "" {
+			test.Agent.Token = prevSec.Token
+		}
+		if test.SFTP != nil && test.SFTP.Password == "" && test.SFTP.PrivateKey == "" {
+			test.SFTP.Password, test.SFTP.PrivateKey, test.SFTP.Passphrase = prevSec.Password, prevSec.PrivateKey, prevSec.Passphrase
+		}
+		res, err := m.Test(ctx, test)
+		if err != nil {
+			return src, err
+		}
+		if !res.OK {
+			return src, invalid("connexion impossible : %s", res.Error)
+		}
+	}
+	cfg, _ := json.Marshal(p.cfg)
+	sealed, err := m.box.SealJSON(p.sec)
+	if err != nil {
+		return src, err
+	}
+	out, err := m.store.UpdateSource(ctx, db.UpdateSourceParams{Name: p.name, Root: p.root, Config: string(cfg), Secret: sealed, ID: src.ID, LibraryID: src.LibraryID})
+	if err == nil {
+		m.Forget(src.ID)
+	}
+	return out, err
+}

@@ -48,6 +48,7 @@ type itemDTO struct {
 	LockedFields      []string              `json:"lockedFields"`
 	Images            map[string][]imageDTO `json:"images"`
 	ChildCount        *int64                `json:"childCount,omitempty"`
+	Available         bool                  `json:"available"`
 	Video             *videoDTO             `json:"video,omitempty"`
 }
 
@@ -203,6 +204,7 @@ func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, e
 		dto.Images = imageDTOs(row.ID, imgs[row.ID])
 		cc := row.ChildCount
 		dto.ChildCount = &cc
+		dto.Available = row.Available
 		if res := store.Resolution(row.VideoWidth, row.VideoHeight); res != "" {
 			dto.Video = &videoDTO{Resolution: res, HDR: row.HDR}
 		}

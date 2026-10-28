@@ -5,7 +5,6 @@ import (
 	"image"
 	_ "image/jpeg" // register decoders for DecodeConfig
 	_ "image/png"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -109,7 +108,7 @@ func hasImageExt(name string) bool {
 
 // imageSize reads the dimensions of a JPEG or PNG; 0, 0 otherwise.
 func imageSize(path string) (int, int) {
-	f, err := os.Open(path)
+	f, err := files.Open(path)
 	if err != nil {
 		return 0, 0
 	}
@@ -130,8 +129,8 @@ func suffixed(bases []string, suffix string) []string {
 }
 
 func isDir(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && fi.IsDir()
+	d, err := files.IsDir(path)
+	return err == nil && d
 }
 
 // FindImages returns the local artwork of an item (Kodi / Jellyfin / Plex

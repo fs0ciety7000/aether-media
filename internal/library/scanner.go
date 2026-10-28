@@ -10,13 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/naming"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
@@ -39,13 +38,15 @@ type Scanner struct {
 	jobs  *jobs.Runner
 	hub   *events.Hub
 	log   *slog.Logger
+	// Sources resolves where library files live (local, agent, SFTP).
+	Sources *sources.Manager
 	// AfterScan, when set, runs after each successful scan (e.g. to queue
 	// metadata refreshes for new items).
 	AfterScan func(ctx context.Context, libID int64)
 }
 
-func NewScanner(s *store.Store, r *jobs.Runner, hub *events.Hub, log *slog.Logger) *Scanner {
-	return &Scanner{store: s, jobs: r, hub: hub, log: log}
+func NewScanner(s *store.Store, r *jobs.Runner, hub *events.Hub, log *slog.Logger, src *sources.Manager) *Scanner {
+	return &Scanner{store: s, jobs: r, hub: hub, log: log, Sources: src}
 }
 
 // Result summarises a scan.
@@ -94,7 +95,7 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 	if err != nil {
 		return res, err
 	}
-	paths, err := s.store.ListLibraryPaths(ctx, libID)
+	srcs, err := s.store.ListSources(ctx, libID)
 	if err != nil {
 		return res, err
 	}
@@ -112,13 +113,25 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 
 	var files []file
 	var unavailable []string
-	for _, p := range paths {
-		found, err := walk(p.Path, func(path string) bool { return accepts(lib.Kind, path) })
+	offline := map[int64]bool{}
+	for _, src := range srcs {
+		fsys, _, err := s.Sources.FS(ctx, src.ID)
+		var found []file
+		if err == nil {
+			found, err = walk(ctx, fsys, src, func(name string) bool { return accepts(lib.Kind, name) })
+		}
 		if err != nil {
-			s.log.Warn("racine de bibliothèque inaccessible, ignorée", "path", p.Path)
-			unavailable = append(unavailable, p.Path)
+			if ctx.Err() != nil {
+				return res, ctx.Err()
+			}
+			s.log.Warn("source inaccessible, ses fichiers sont conservés", "source", src.Name, "err", err)
+			unavailable = append(unavailable, src.Name)
+			offline[src.ID] = true
+			s.Sources.Forget(src.ID)
+			s.Sources.SetStatus(ctx, src, err)
 			continue
 		}
+		s.Sources.SetStatus(ctx, src, nil)
 		files = append(files, found...)
 	}
 	res.Files = len(files)
@@ -162,7 +175,7 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 		})
 	}
 
-	removed, err := s.removeVanished(ctx, libID, existing, seen, unavailable)
+	removed, err := s.removeVanished(ctx, libID, existing, seen, offline)
 	if err != nil {
 		return res, err
 	}
@@ -197,7 +210,8 @@ func (s *Scanner) upsertFile(ctx context.Context, q *db.Queries, libID int64, f 
 		parent = sql.NullInt64{Int64: id, Valid: true}
 	}
 	mf, err := q.UpsertMediaFile(ctx, db.UpsertMediaFileParams{
-		ItemID: parent.Int64, LibraryID: libID, Path: f.path, Size: f.size, Mtime: f.mtime, Part: int64(r.part),
+		ItemID: parent.Int64, LibraryID: libID, SourceID: sql.NullInt64{Int64: f.sourceID, Valid: f.sourceID != 0},
+		Path: f.path, Size: f.size, Mtime: f.mtime, Part: int64(r.part),
 	})
 	if err != nil {
 		return err
@@ -264,11 +278,11 @@ func sortKey(n node) string {
 // removeVanished deletes media files no longer on disk (except under
 // unavailable roots), flags items left without files as missing, and purges
 // items missing for longer than the grace period.
-func (s *Scanner) removeVanished(ctx context.Context, libID int64, existing map[string]db.ListLibraryMediaFilesRow, seen map[string]bool, unavailable []string) (int, error) {
+func (s *Scanner) removeVanished(ctx context.Context, libID int64, existing map[string]db.ListLibraryMediaFilesRow, seen map[string]bool, offline map[int64]bool) (int, error) {
 	removed := 0
 	err := s.store.Tx(ctx, func(q *db.Queries) error {
 		for p, k := range existing {
-			if seen[p] || underAny(p, unavailable) {
+			if seen[p] || offline[k.SourceID.Int64] {
 				continue
 			}
 			if err := q.DeleteMediaFile(ctx, k.ID); err != nil {
@@ -293,15 +307,6 @@ func (s *Scanner) removeVanished(ctx context.Context, libID int64, existing map[
 		return err
 	})
 	return removed, err
-}
-
-func underAny(p string, roots []string) bool {
-	for _, r := range roots {
-		if p == r || strings.HasPrefix(p, strings.TrimSuffix(r, string(filepath.Separator))+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
 }
 
 func nullStr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }

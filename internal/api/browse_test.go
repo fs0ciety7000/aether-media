@@ -16,6 +16,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
@@ -44,8 +45,9 @@ func browseServer(t *testing.T) *httptest.Server {
 	log := slog.New(slog.DiscardHandler)
 	runner := jobs.NewRunner(st, log)
 	lib, _ := st.CreateLibrary(ctx, db.CreateLibraryParams{Name: "Films", Kind: "movies"})
-	st.AddLibraryPath(ctx, db.AddLibraryPathParams{LibraryID: lib.ID, Path: root})
-	if _, err := library.NewScanner(st, runner, events.NewHub(), log).Scan(ctx, lib.ID, false); err != nil {
+	st.AddLocalSource(ctx, lib.ID, root)
+	srcs, _ := sources.NewForTests(st, t.TempDir(), events.NewHub(), log)
+	if _, err := library.NewScanner(st, runner, events.NewHub(), log, srcs).Scan(ctx, lib.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	byTitle := map[string]db.Item{}

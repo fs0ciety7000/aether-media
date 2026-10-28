@@ -9,20 +9,6 @@ import (
 	"context"
 )
 
-const addLibraryPath = `-- name: AddLibraryPath :exec
-INSERT INTO library_paths (library_id, path) VALUES (?, ?)
-`
-
-type AddLibraryPathParams struct {
-	LibraryID int64  `json:"libraryId"`
-	Path      string `json:"path"`
-}
-
-func (q *Queries) AddLibraryPath(ctx context.Context, arg AddLibraryPathParams) error {
-	_, err := q.db.ExecContext(ctx, addLibraryPath, arg.LibraryID, arg.Path)
-	return err
-}
-
 const createLibrary = `-- name: CreateLibrary :one
 INSERT INTO libraries (name, kind) VALUES (?, ?) RETURNING id, name, kind, settings, created_at
 `
@@ -45,12 +31,69 @@ func (q *Queries) CreateLibrary(ctx context.Context, arg CreateLibraryParams) (L
 	return i, err
 }
 
+const createSource = `-- name: CreateSource :one
+INSERT INTO library_sources (library_id, kind, name, root, config, secret)
+VALUES (?, ?, ?, ?, ?, ?) RETURNING id, library_id, kind, name, root, config, secret, status, last_error, last_seen, created_at
+`
+
+type CreateSourceParams struct {
+	LibraryID int64  `json:"libraryId"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Root      string `json:"root"`
+	Config    string `json:"config"`
+	Secret    []byte `json:"secret"`
+}
+
+func (q *Queries) CreateSource(ctx context.Context, arg CreateSourceParams) (LibrarySource, error) {
+	row := q.db.QueryRowContext(ctx, createSource,
+		arg.LibraryID,
+		arg.Kind,
+		arg.Name,
+		arg.Root,
+		arg.Config,
+		arg.Secret,
+	)
+	var i LibrarySource
+	err := row.Scan(
+		&i.ID,
+		&i.LibraryID,
+		&i.Kind,
+		&i.Name,
+		&i.Root,
+		&i.Config,
+		&i.Secret,
+		&i.Status,
+		&i.LastError,
+		&i.LastSeen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deleteLibrary = `-- name: DeleteLibrary :execrows
 DELETE FROM libraries WHERE id = ?
 `
 
 func (q *Queries) DeleteLibrary(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteLibrary, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteSource = `-- name: DeleteSource :execrows
+DELETE FROM library_sources WHERE id = ? AND library_id = ?
+`
+
+type DeleteSourceParams struct {
+	ID        int64 `json:"id"`
+	LibraryID int64 `json:"libraryId"`
+}
+
+func (q *Queries) DeleteSource(ctx context.Context, arg DeleteSourceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteSource, arg.ID, arg.LibraryID)
 	if err != nil {
 		return 0, err
 	}
@@ -74,20 +117,55 @@ func (q *Queries) GetLibrary(ctx context.Context, id int64) (Library, error) {
 	return i, err
 }
 
-const listAllLibraryPaths = `-- name: ListAllLibraryPaths :many
-SELECT id, library_id, path FROM library_paths ORDER BY library_id, path
+const getSource = `-- name: GetSource :one
+SELECT id, library_id, kind, name, root, config, secret, status, last_error, last_seen, created_at FROM library_sources WHERE id = ?
 `
 
-func (q *Queries) ListAllLibraryPaths(ctx context.Context) ([]LibraryPath, error) {
-	rows, err := q.db.QueryContext(ctx, listAllLibraryPaths)
+func (q *Queries) GetSource(ctx context.Context, id int64) (LibrarySource, error) {
+	row := q.db.QueryRowContext(ctx, getSource, id)
+	var i LibrarySource
+	err := row.Scan(
+		&i.ID,
+		&i.LibraryID,
+		&i.Kind,
+		&i.Name,
+		&i.Root,
+		&i.Config,
+		&i.Secret,
+		&i.Status,
+		&i.LastError,
+		&i.LastSeen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAllSources = `-- name: ListAllSources :many
+SELECT id, library_id, kind, name, root, config, secret, status, last_error, last_seen, created_at FROM library_sources ORDER BY library_id, id
+`
+
+func (q *Queries) ListAllSources(ctx context.Context) ([]LibrarySource, error) {
+	rows, err := q.db.QueryContext(ctx, listAllSources)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LibraryPath
+	var items []LibrarySource
 	for rows.Next() {
-		var i LibraryPath
-		if err := rows.Scan(&i.ID, &i.LibraryID, &i.Path); err != nil {
+		var i LibrarySource
+		if err := rows.Scan(
+			&i.ID,
+			&i.LibraryID,
+			&i.Kind,
+			&i.Name,
+			&i.Root,
+			&i.Config,
+			&i.Secret,
+			&i.Status,
+			&i.LastError,
+			&i.LastSeen,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -134,20 +212,32 @@ func (q *Queries) ListLibraries(ctx context.Context) ([]Library, error) {
 	return items, nil
 }
 
-const listLibraryPaths = `-- name: ListLibraryPaths :many
-SELECT id, library_id, path FROM library_paths WHERE library_id = ? ORDER BY path
+const listSources = `-- name: ListSources :many
+SELECT id, library_id, kind, name, root, config, secret, status, last_error, last_seen, created_at FROM library_sources WHERE library_id = ? ORDER BY id
 `
 
-func (q *Queries) ListLibraryPaths(ctx context.Context, libraryID int64) ([]LibraryPath, error) {
-	rows, err := q.db.QueryContext(ctx, listLibraryPaths, libraryID)
+func (q *Queries) ListSources(ctx context.Context, libraryID int64) ([]LibrarySource, error) {
+	rows, err := q.db.QueryContext(ctx, listSources, libraryID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LibraryPath
+	var items []LibrarySource
 	for rows.Next() {
-		var i LibraryPath
-		if err := rows.Scan(&i.ID, &i.LibraryID, &i.Path); err != nil {
+		var i LibrarySource
+		if err := rows.Scan(
+			&i.ID,
+			&i.LibraryID,
+			&i.Kind,
+			&i.Name,
+			&i.Root,
+			&i.Config,
+			&i.Secret,
+			&i.Status,
+			&i.LastError,
+			&i.LastSeen,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -159,4 +249,67 @@ func (q *Queries) ListLibraryPaths(ctx context.Context, libraryID int64) ([]Libr
 		return nil, err
 	}
 	return items, nil
+}
+
+const setSourceStatus = `-- name: SetSourceStatus :exec
+UPDATE library_sources SET status = ?, last_error = ?,
+    last_seen = CASE WHEN ? = 'online' THEN unixepoch() ELSE last_seen END
+WHERE id = ?
+`
+
+type SetSourceStatusParams struct {
+	Status    string      `json:"status"`
+	LastError string      `json:"lastError"`
+	Column3   interface{} `json:"column3"`
+	ID        int64       `json:"id"`
+}
+
+func (q *Queries) SetSourceStatus(ctx context.Context, arg SetSourceStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setSourceStatus,
+		arg.Status,
+		arg.LastError,
+		arg.Column3,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSource = `-- name: UpdateSource :one
+UPDATE library_sources SET name = ?, root = ?, config = ?, secret = ?, status = 'unknown', last_error = ''
+WHERE id = ? AND library_id = ? RETURNING id, library_id, kind, name, root, config, secret, status, last_error, last_seen, created_at
+`
+
+type UpdateSourceParams struct {
+	Name      string `json:"name"`
+	Root      string `json:"root"`
+	Config    string `json:"config"`
+	Secret    []byte `json:"secret"`
+	ID        int64  `json:"id"`
+	LibraryID int64  `json:"libraryId"`
+}
+
+func (q *Queries) UpdateSource(ctx context.Context, arg UpdateSourceParams) (LibrarySource, error) {
+	row := q.db.QueryRowContext(ctx, updateSource,
+		arg.Name,
+		arg.Root,
+		arg.Config,
+		arg.Secret,
+		arg.ID,
+		arg.LibraryID,
+	)
+	var i LibrarySource
+	err := row.Scan(
+		&i.ID,
+		&i.LibraryID,
+		&i.Kind,
+		&i.Name,
+		&i.Root,
+		&i.Config,
+		&i.Secret,
+		&i.Status,
+		&i.LastError,
+		&i.LastSeen,
+		&i.CreatedAt,
+	)
+	return i, err
 }
