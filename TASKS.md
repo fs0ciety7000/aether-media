@@ -36,16 +36,20 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-02A Accueil : hero en carte, panneau Catégories, mosaïque « Reprendre », rangées
 - [ ] T-02B Validation visuelle M1b par le PO
 
-## M2 — Scan & indexation
-- [ ] T-030 `naming` : films (titre, année, edition, ids *arr)
-- [ ] T-031 `naming` : séries (SxxEyy, multi-épisodes, par date, specials)
-- [ ] T-032 `naming` : musique (artiste / album / piste, disques)
-- [ ] T-033 Corpus de tests de noms (≥ 300 cas)
-- [ ] T-034 Walker + règles d'ignore + fingerprint incrémental
-- [ ] T-035 Resolvers movie / series / season / episode / album / track
-- [ ] T-036 ffprobe → MediaInfo normalisé (streams, chapitres)
-- [ ] T-037 Job runner persistant + SSE de progression
-- [ ] T-038 Watcher fsnotify + scan périodique de secours
+## M2 — Scan & indexation ✅
+- [x] T-030 `naming` : films (titre, année, edition, ids *arr)
+- [x] T-031 `naming` : séries (SxxEyy, multi-épisodes, par date, specials)
+- [x] T-032 `naming` : musique (artiste / album / piste, disques)
+- [x] T-033 Corpus de tests de noms (≥ 300 cas → ~600 cas + fuzzing)
+- [x] T-034 Walker + règles d'ignore + fingerprint incrémental
+- [x] T-035 Resolvers movie / series / season / episode / album / track
+- [x] T-036 ffprobe → MediaInfo normalisé (streams, chapitres)
+- [x] T-037 Job runner persistant + SSE de progression
+- [x] T-038 Watcher fsnotify + scan périodique de secours
+- [ ] T-039 Extras (bandes-annonces, making-of) rattachés à leur film/série
+- [ ] T-03A Bibliothèques « mixed » : structure séries mal reconnue si pas à la racine
+- [ ] T-03B Sous-titres externes (.srt/.ass à côté de la vidéo) → media_streams is_external
+- [ ] T-03C API : restreindre chemins disque et endpoints d'admin quand l'auth arrive (M6)
 
 ## M3 — Métadonnées
 - [ ] T-040 Interface Provider + orchestrateur (ordre, fusion, verrous)

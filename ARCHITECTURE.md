@@ -150,6 +150,8 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 ## 5. Pipelines clés
 
 ### 5.1 Scan
+> Implémenté en M2 : `internal/naming` (parseurs purs), `internal/library` (walker, resolvers, scanner, watcher, job de probe), `internal/jobs` (file SQLite), `internal/events` (SSE). Identité stable des items via `items.key` (`movie:<dossier>|<titre>|<année>|<édition>`, `series:<dossier>`, `season:<dossier>#<n>`, `episode:<fichier>`, `artist:<lib>:<nom>`, `album:<dossier>|<titre>`, `track:<fichier>`). Mesuré : 2000 fichiers → premier scan 0,7 s, rescan inchangé 40 ms.
+
 1. **Walk** des chemins de la bibliothèque, application des règles d'ignore.
 2. **Fingerprint** rapide (taille + mtime + inode, avec un hash partiel en option) : on ne retraite que ce qui a changé.
 3. **Resolve** : `naming` parse le chemin (titre, année, SxxEyy, multi-épisodes, date, disque, edition `{edition-…}`, ids `{tmdb-123}` / `[imdbid-tt…]` façon *arr) et le resolver construit ou met à jour l'arbre.

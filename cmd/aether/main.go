@@ -10,12 +10,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/api"
 	"github.com/fs0ciety7000/aether-media/internal/config"
+	"github.com/fs0ciety7000/aether-media/internal/events"
+	"github.com/fs0ciety7000/aether-media/internal/jobs"
+	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 	"github.com/fs0ciety7000/aether-media/internal/store"
+	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 	"github.com/fs0ciety7000/aether-media/internal/webui"
 )
@@ -25,6 +32,11 @@ const usage = `Aether — serveur multimédia self-hosted
 Usage :
   aether [serve] [-config fichier.toml]   démarre le serveur (défaut)
   aether migrate [-config fichier.toml]   applique les migrations et quitte
+  aether library add -name N -kind K -path P [-path P2]
+                                          crée une bibliothèque (movies|shows|music|mixed)
+  aether library list                     liste les bibliothèques
+  aether scan [-library id] [-full]       scanne (toutes les bibliothèques par défaut)
+                                          et analyse les fichiers avec ffprobe
   aether healthcheck [-addr url]          vérifie qu'un serveur répond (Docker)
   aether version                          affiche la version
 `
@@ -41,6 +53,10 @@ func main() {
 		err = runServe(args)
 	case "migrate":
 		err = runMigrate(args)
+	case "scan":
+		err = runScan(args)
+	case "library":
+		err = runLibrary(args)
 	case "healthcheck":
 		err = runHealthcheck(args)
 	case "version":
@@ -57,9 +73,12 @@ func main() {
 	}
 }
 
-func setup(name string, args []string) (config.Config, *slog.Logger, error) {
+func setup(name string, args []string, extra ...func(*flag.FlagSet)) (config.Config, *slog.Logger, error) {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	path := fs.String("config", "", "chemin du fichier de configuration TOML")
+	for _, f := range extra {
+		f(fs)
+	}
 	_ = fs.Parse(args) // ExitOnError: never returns an error
 
 	cfg, err := config.Load(*path)
@@ -89,6 +108,33 @@ func runMigrate(args []string) error {
 	return st.Close()
 }
 
+// services are the long-lived components shared by serve and scan.
+type services struct {
+	store   *store.Store
+	hub     *events.Hub
+	runner  *jobs.Runner
+	scanner *library.Scanner
+}
+
+func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
+	st, err := store.Open(ctx, cfg.DatabasePath())
+	if err != nil {
+		return nil, err
+	}
+	hub := events.NewHub()
+	runner := jobs.NewRunner(st, log)
+	scanner := library.NewScanner(st, runner, hub, log)
+	prober := probe.New(cfg.Paths.FFprobe)
+	if v, err := prober.Version(ctx); err != nil {
+		log.Warn("ffprobe introuvable : l'analyse des médias est désactivée", "ffprobe", cfg.Paths.FFprobe, "err", err)
+	} else {
+		log.Info("ffprobe détecté", "version", v)
+	}
+	runner.Register(library.JobScan, 1, scanner.HandleScanJob)
+	runner.Register(library.JobProbe, cfg.Library.ProbeWorkers, scanner.ProbeHandler(prober))
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner}, nil
+}
+
 func runServe(args []string) error {
 	cfg, log, err := setup("serve", args)
 	if err != nil {
@@ -97,15 +143,29 @@ func runServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	st, err := store.Open(ctx, cfg.DatabasePath())
+	svc, err := newServices(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = st.Close() }()
+	defer func() { _ = svc.store.Close() }()
+
+	bgCtx, cancelBg := context.WithCancel(context.Background())
+	defer cancelBg()
+	if err := svc.runner.Start(bgCtx); err != nil {
+		return err
+	}
+	watcher := library.NewWatcher(svc.scanner, cfg.Library.WatchDebounce.Duration, cfg.Library.ScanInterval.Duration)
+	go func() {
+		if err := watcher.Run(bgCtx); err != nil {
+			log.Error("surveillance des bibliothèques arrêtée", "err", err)
+		}
+	}()
 
 	srv := &http.Server{
-		Addr:              cfg.Addr(),
-		Handler:           api.New(st, log).Handler(webui.Handler()),
+		Addr: cfg.Addr(),
+		Handler: api.New(api.Deps{
+			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
+		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		// No WriteTimeout: media streams are long-lived responses.
@@ -125,11 +185,146 @@ func runServe(args []string) error {
 	log.Info("arrêt en cours")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err = srv.Shutdown(shutdownCtx)
+	cancelBg()
+	svc.runner.Wait()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
 }
+
+func runScan(args []string) error {
+	var libID int64
+	var full bool
+	cfg, log, err := setup("scan", args, func(fs *flag.FlagSet) {
+		fs.Int64Var(&libID, "library", 0, "identifiant de la bibliothèque (0 = toutes)")
+		fs.BoolVar(&full, "full", false, "réanalyse aussi les fichiers inchangés")
+	})
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	svc, err := newServices(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = svc.store.Close() }()
+
+	libs, err := svc.store.ListLibraries(ctx)
+	if err != nil {
+		return err
+	}
+	for _, l := range libs {
+		if libID != 0 && l.ID != libID {
+			continue
+		}
+		if _, err := svc.scanner.Scan(ctx, l.ID, full); err != nil {
+			return err
+		}
+	}
+	// Drain probe jobs, then stop.
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if err := svc.runner.Start(runCtx); err != nil {
+		return err
+	}
+	for ctx.Err() == nil {
+		stats, err := svc.store.JobStats(ctx)
+		if err != nil {
+			return err
+		}
+		pending := int64(0)
+		for _, st := range stats {
+			if st.Kind == library.JobProbe && st.Status != "failed" {
+				pending += st.N
+			}
+		}
+		if pending == 0 {
+			break
+		}
+		log.Info("analyse des médias", "restants", pending)
+		select {
+		case <-ctx.Done():
+		case <-time.After(2 * time.Second):
+		}
+	}
+	cancel()
+	svc.runner.Wait()
+	return ctx.Err()
+}
+
+func runLibrary(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage : aether library add|list")
+	}
+	sub, args := args[0], args[1:]
+	var name, kind string
+	var paths stringList
+	cfg, _, err := setup("library "+sub, args, func(fs *flag.FlagSet) {
+		fs.StringVar(&name, "name", "", "nom")
+		fs.StringVar(&kind, "kind", "", "movies | shows | music | mixed")
+		fs.Var(&paths, "path", "dossier (répétable)")
+	})
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	st, err := store.Open(ctx, cfg.DatabasePath())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+
+	switch sub {
+	case "list":
+		libs, err := st.ListLibraries(ctx)
+		if err != nil {
+			return err
+		}
+		for _, l := range libs {
+			ps, _ := st.ListLibraryPaths(ctx, l.ID)
+			fmt.Printf("%d\t%s\t%s\n", l.ID, l.Kind, l.Name)
+			for _, p := range ps {
+				fmt.Printf("\t%s\n", p.Path)
+			}
+		}
+		return nil
+	case "add":
+		if name == "" || kind == "" || len(paths) == 0 {
+			return errors.New("-name, -kind et au moins un -path sont requis")
+		}
+		var lib db.Library
+		err := st.Tx(ctx, func(q *db.Queries) error {
+			var err error
+			if lib, err = q.CreateLibrary(ctx, db.CreateLibraryParams{Name: name, Kind: kind}); err != nil {
+				return err
+			}
+			for _, p := range paths {
+				abs, err := filepath.Abs(p)
+				if err != nil {
+					return err
+				}
+				if err := q.AddLibraryPath(ctx, db.AddLibraryPathParams{LibraryID: lib.ID, Path: abs}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("bibliothèque %d créée\n", lib.ID)
+		return nil
+	}
+	return fmt.Errorf("sous-commande inconnue : %q", sub)
+}
+
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, ",") }
+func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
 func runHealthcheck(args []string) error {
 	fs := flag.NewFlagSet("healthcheck", flag.ExitOnError)

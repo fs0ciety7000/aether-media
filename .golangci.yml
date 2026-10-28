@@ -13,6 +13,8 @@ linters:
         - (*encoding/json.Encoder).Encode
         - (*database/sql.DB).Close
         - io.WriteString
+        - fmt.Fprint
+        - fmt.Fprintf
   exclusions:
     generated: strict
     rules:
