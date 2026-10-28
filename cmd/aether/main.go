@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -220,14 +221,22 @@ func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *
 			httpx.New(httpx.Options{UserAgent: userAgent(), RatePerSec: 1, CacheDir: filepath.Join(httpCache, "musicbrainz")})))
 	}
 	ingest := func(ctx context.Context, src string) (refresh.ImageInfo, error) {
-		if sources.IsRemote(src) { // artwork stored next to remote media
-			u, err := srcs.InputURL(ctx, src)
-			if err != nil {
-				return refresh.ImageInfo{}, err
+		var s images.Source
+		var err error
+		if sources.IsRemote(src) {
+			// Artwork stored next to remote media: read through the source's
+			// file system (pinned agent, SFTP), not over HTTP (the image
+			// fetcher only reaches public addresses).
+			var f io.ReadCloser
+			if f, err = srcs.Open(ctx, src, 0); err == nil {
+				s, err = imgs.IngestReader(ctx, f)
+				_ = f.Close()
+			} else if errors.Is(err, os.ErrNotExist) {
+				err = fmt.Errorf("%w: %w", images.ErrNotFound, err)
 			}
-			src = u
+		} else {
+			s, err = imgs.Ingest(ctx, src)
 		}
-		s, err := imgs.Ingest(ctx, src)
 		if errors.Is(err, images.ErrNotFound) || errors.Is(err, images.ErrNotImage) ||
 			errors.Is(err, images.ErrTooLarge) || errors.Is(err, images.ErrBadSource) {
 			return refresh.ImageInfo{}, fmt.Errorf("%w: %w", jobs.ErrPermanent, err)

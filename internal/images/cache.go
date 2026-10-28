@@ -111,6 +111,23 @@ func (c *Cache) Ingest(ctx context.Context, src string) (Source, error) {
 	if err != nil {
 		return Source{}, err
 	}
+	return c.ingest(ctx, data)
+}
+
+// IngestReader is Ingest for an image read from r (artwork of a remote
+// source, read through its file system rather than over HTTP).
+func (c *Cache) IngestReader(ctx context.Context, r io.Reader) (Source, error) {
+	data, err := io.ReadAll(io.LimitReader(r, c.maxBytes+1))
+	if err != nil {
+		return Source{}, err
+	}
+	if int64(len(data)) > c.maxBytes {
+		return Source{}, fmt.Errorf("%w: more than %d bytes", ErrTooLarge, c.maxBytes)
+	}
+	return c.ingest(ctx, data)
+}
+
+func (c *Cache) ingest(ctx context.Context, data []byte) (Source, error) {
 	hdr, err := readHeader(data)
 	if err != nil {
 		return Source{}, err
