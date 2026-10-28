@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/metadata"
@@ -38,6 +39,9 @@ type Config struct {
 	APIKey string
 	// Language for texts, e.g. "fr-FR" (default). Query.Language overrides it.
 	Language string
+	// Country for age ratings and release dates ("FR"); default: the
+	// language's region.
+	Country string
 	// ImageLanguages ordered by preference ("null" = no text); default is
 	// Language's ISO 639-1 code, "en", "null".
 	ImageLanguages []string
@@ -47,9 +51,9 @@ type Config struct {
 
 // Provider implements metadata.RemoteProvider.
 type Provider struct {
-	cfg    Config
-	c      *httpx.Client
-	bearer bool
+	cfg  Config
+	c    *httpx.Client
+	live atomic.Pointer[liveSettings]
 
 	mu      sync.Mutex
 	seasons map[string]seasonEntry
@@ -80,20 +84,89 @@ func New(cfg Config, c *httpx.Client) *Provider {
 	if !strings.HasSuffix(cfg.ImageBaseURL, "/") {
 		cfg.ImageBaseURL += "/"
 	}
-	return &Provider{
+	p := &Provider{
 		cfg:     cfg,
 		c:       c,
-		bearer:  strings.HasPrefix(cfg.APIKey, "eyJ"),
 		seasons: map[string]seasonEntry{},
 		now:     time.Now,
 	}
+	p.live.Store(&liveSettings{apiKey: cfg.APIKey, bearer: isBearer(cfg.APIKey), language: cfg.Language, country: strings.ToUpper(cfg.Country)})
+	return p
+}
+
+// liveSettings can change while the server runs (admin settings).
+type liveSettings struct {
+	apiKey   string
+	bearer   bool
+	language string
+	country  string
+}
+
+func isBearer(key string) bool { return strings.HasPrefix(key, "eyJ") }
+
+func (p *Provider) cur() *liveSettings { return p.live.Load() }
+
+// SetAPIKey replaces the API key (empty disables the provider).
+func (p *Provider) SetAPIKey(key string) {
+	old := p.cur()
+	key = strings.TrimSpace(key)
+	p.live.Store(&liveSettings{apiKey: key, bearer: isBearer(key), language: old.language, country: old.country})
+}
+
+// SetLocale changes the default language and the country used for age
+// ratings and release dates ("" = the language's region).
+func (p *Provider) SetLocale(language, country string) {
+	old := p.cur()
+	if language == "" {
+		language = defaultLanguage
+	}
+	p.live.Store(&liveSettings{apiKey: old.apiKey, bearer: old.bearer, language: language, country: strings.ToUpper(country)})
+}
+
+// ErrInvalidKey is returned by CheckKey when TMDB refuses the key.
+var ErrInvalidKey = errors.New("tmdb: invalid API key")
+
+// CheckKey asks TMDB whether key is valid, without caching nor affecting
+// the provider. ErrInvalidKey when refused; any other error means TMDB
+// could not be reached.
+func (p *Provider) CheckKey(ctx context.Context, key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ErrInvalidKey
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	u := p.cfg.BaseURL + "/authentication"
+	if !isBearer(key) {
+		u += "?api_key=" + url.QueryEscape(key)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if isBearer(key) {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("tmdb: %s", httpx.Redact(err.Error()))
+	}
+	_ = res.Body.Close()
+	switch res.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return ErrInvalidKey
+	}
+	return fmt.Errorf("tmdb: status %d", res.StatusCode)
 }
 
 // Name implements metadata.RemoteProvider.
 func (p *Provider) Name() string { return "tmdb" }
 
 // Enabled reports whether an API key is configured.
-func (p *Provider) Enabled() bool { return p.cfg.APIKey != "" }
+func (p *Provider) Enabled() bool { return p.cur().apiKey != "" }
 
 // Supports implements metadata.RemoteProvider.
 func (p *Provider) Supports(kind string) bool {
@@ -160,10 +233,10 @@ func (p *Provider) get(ctx context.Context, path string, params url.Values, out 
 		params = url.Values{}
 	}
 	var h http.Header
-	if p.bearer {
-		h = http.Header{"Authorization": {"Bearer " + p.cfg.APIKey}}
+	if cur := p.cur(); cur.bearer {
+		h = http.Header{"Authorization": {"Bearer " + cur.apiKey}}
 	} else {
-		params.Set("api_key", p.cfg.APIKey)
+		params.Set("api_key", cur.apiKey)
 	}
 	u := p.cfg.BaseURL + path
 	if len(params) > 0 {
@@ -179,7 +252,7 @@ func (p *Provider) lang(q metadata.Query) string {
 	if q.Language != "" {
 		return q.Language
 	}
-	return p.cfg.Language
+	return p.cur().language
 }
 
 // imageLangs returns the preference order of image languages for q, using

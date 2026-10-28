@@ -30,8 +30,15 @@ func Handler() http.Handler {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name != "" && name != "index.html" {
 			if st, err := fs.Stat(root, name); err == nil && !st.IsDir() {
-				if strings.HasPrefix(name, "_app/immutable/") {
+				switch {
+				case strings.HasPrefix(name, "_app/immutable/"):
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				case name == "service-worker.js" || name == "manifest.webmanifest" || name == "offline.html":
+					// PWA: always revalidated, so a new version is picked up at once.
+					w.Header().Set("Cache-Control", "no-cache")
+				}
+				if path.Ext(name) == ".webmanifest" {
+					w.Header().Set("Content-Type", "application/manifest+json")
 				}
 				files.ServeHTTP(w, r)
 				return

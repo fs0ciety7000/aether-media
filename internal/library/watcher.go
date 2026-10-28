@@ -27,11 +27,32 @@ type Watcher struct {
 	dirty  map[int64]*time.Timer
 	ctx    context.Context
 	agents map[int64]context.CancelFunc // agent source id → event subscription
+	reset  chan time.Duration
 }
 
 func NewWatcher(s *Scanner, debounce, interval time.Duration) *Watcher {
-	return &Watcher{scanner: s, debounce: debounce, interval: interval, dirty: map[int64]*time.Timer{}, agents: map[int64]context.CancelFunc{}}
+	return &Watcher{scanner: s, debounce: debounce, interval: interval, dirty: map[int64]*time.Timer{}, agents: map[int64]context.CancelFunc{},
+		reset: make(chan time.Duration, 1)}
 }
+
+// SetInterval changes the periodic rescan interval while running; 0
+// disables periodic rescans (file-system events still trigger scans).
+func (w *Watcher) SetInterval(d time.Duration) {
+	for {
+		select {
+		case w.reset <- d:
+			return
+		default:
+			select { // replace a pending, not yet applied value
+			case <-w.reset:
+			default:
+			}
+		}
+	}
+}
+
+// never is a ticker interval long enough to mean "disabled".
+const never = 100 * 365 * 24 * time.Hour
 
 // Run watches until ctx is cancelled. Call Sync after libraries change.
 func (w *Watcher) Run(ctx context.Context) error {
@@ -47,12 +68,21 @@ func (w *Watcher) Run(ctx context.Context) error {
 		return err
 	}
 
-	ticker := time.NewTicker(w.interval)
+	every := w.interval
+	if every <= 0 {
+		every = never
+	}
+	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case d := <-w.reset:
+			if d <= 0 {
+				d = never
+			}
+			ticker.Reset(d)
 		case ev, ok := <-fsw.Events:
 			if !ok {
 				return nil

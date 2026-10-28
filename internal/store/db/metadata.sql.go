@@ -468,6 +468,37 @@ func (q *Queries) ListItemsNeedingRefresh(ctx context.Context, libraryID int64) 
 	return items, nil
 }
 
+const listRefreshRoots = `-- name: ListRefreshRoots :many
+SELECT i.id FROM items i
+WHERE i.library_id = ? AND i.missing = 0 AND i.parent_id IS NULL
+  AND i.kind IN ('movie', 'series', 'artist', 'album')
+ORDER BY i.id
+`
+
+// Every top-level item of a library (a refresh cascades to its children).
+func (q *Queries) ListRefreshRoots(ctx context.Context, libraryID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listRefreshRoots, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setIdentify = `-- name: SetIdentify :exec
 UPDATE items SET provider_ids = ?, identify_status = ?, date_updated = unixepoch() WHERE id = ?
 `

@@ -25,6 +25,32 @@ type Config struct {
 	Metadata  MetadataConfig  `toml:"metadata"`
 	Transcode TranscodeConfig `toml:"transcode"`
 	Sync      SyncConfig      `toml:"sync"`
+
+	// origins records which settings were given explicitly, by the TOML
+	// file ("file") or an AETHER_* variable ("env"), keyed "section.key".
+	origins map[string]string
+}
+
+// Origin reports where an explicitly set value comes from: "file", "env",
+// or "" when it is a default (the admin UI may then override it).
+func (c *Config) Origin(key string) string { return c.origins[key] }
+
+// TrackedKeys are the settings whose origin is recorded (they can also be
+// edited from the admin UI when the configuration leaves them unset).
+var TrackedKeys = []string{
+	"server.name", "metadata.language", "metadata.country", "metadata.tmdb_api_key",
+	"transcode.hwaccel", "transcode.vaapi_device", "transcode.max_sessions", "library.scan_interval",
+}
+
+var envKeys = map[string]string{
+	"AETHER_SERVER_NAME":      "server.name",
+	"AETHER_LANGUAGE":         "metadata.language",
+	"AETHER_METADATA_COUNTRY": "metadata.country",
+	"AETHER_TMDB_API_KEY":     "metadata.tmdb_api_key",
+	"AETHER_HWACCEL":          "transcode.hwaccel",
+	"AETHER_VAAPI_DEVICE":     "transcode.vaapi_device",
+	"AETHER_MAX_TRANSCODES":   "transcode.max_sessions",
+	"AETHER_SCAN_INTERVAL":    "library.scan_interval",
 }
 
 // SyncConfig holds Trakt / Simkl application credentials. They take
@@ -52,6 +78,9 @@ type MetadataConfig struct {
 	TMDBAPIKey string `toml:"tmdb_api_key"`
 	// Preferred metadata language (BCP-47), default "fr-FR".
 	Language string `toml:"language"`
+	// Country (ISO 3166-1, e.g. "FR") for age ratings and release dates;
+	// empty = the language's region.
+	Country string `toml:"country"`
 	// Disable MusicBrainz lookups (on by default; no key needed).
 	DisableMusicBrainz bool `toml:"disable_musicbrainz"`
 }
@@ -75,6 +104,8 @@ func (d *Duration) UnmarshalText(b []byte) error {
 }
 
 type ServerConfig struct {
+	// Display name (admin UI, agent pairing); default "Aether".
+	Name string `toml:"name"`
 	Host string `toml:"host"`
 	Port int    `toml:"port"`
 }
@@ -101,7 +132,7 @@ func (c *Config) DatabasePath() string { return filepath.Join(c.Paths.Data, "aet
 
 func Default() Config {
 	return Config{
-		Server: ServerConfig{Host: "0.0.0.0", Port: 8096},
+		Server: ServerConfig{Name: "Aether", Host: "0.0.0.0", Port: 8096},
 		Paths:  PathsConfig{Data: defaultDataDir(), FFmpeg: "ffmpeg", FFprobe: "ffprobe"},
 		Log:    LogConfig{Level: "info", Format: "text"},
 		Library: LibraryConfig{
@@ -131,9 +162,17 @@ func Load(path string) (Config, error) {
 	if !explicit {
 		path = filepath.Join(cfg.Paths.Data, "aether.toml")
 	}
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+	cfg.origins = map[string]string{}
+	md, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
 		if explicit || !errors.Is(err, fs.ErrNotExist) {
 			return cfg, fmt.Errorf("config %s: %w", path, err)
+		}
+	}
+	for _, k := range TrackedKeys {
+		section, key, _ := strings.Cut(k, ".")
+		if md.IsDefined(section, key) {
+			cfg.origins[k] = "file"
 		}
 	}
 
@@ -152,6 +191,9 @@ func Load(path string) (Config, error) {
 func applyEnv(cfg *Config) error {
 	str := map[string]*string{
 		"AETHER_HOST":                &cfg.Server.Host,
+		"AETHER_SERVER_NAME":         &cfg.Server.Name,
+		"AETHER_METADATA_COUNTRY":    &cfg.Metadata.Country,
+		"AETHER_VAAPI_DEVICE":        &cfg.Transcode.VAAPIDevice,
 		"AETHER_DATA_DIR":            &cfg.Paths.Data,
 		"AETHER_CACHE_DIR":           &cfg.Paths.Cache,
 		"AETHER_TRANSCODE_DIR":       &cfg.Paths.Transcode,
@@ -172,6 +214,25 @@ func applyEnv(cfg *Config) error {
 		if v := os.Getenv(k); v != "" {
 			*dst = v
 		}
+	}
+	for env, key := range envKeys {
+		if os.Getenv(env) != "" && cfg.origins != nil {
+			cfg.origins[key] = "env"
+		}
+	}
+	if v := os.Getenv("AETHER_MAX_TRANSCODES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("AETHER_MAX_TRANSCODES: %w", err)
+		}
+		cfg.Transcode.MaxSessions = n
+	}
+	if v := os.Getenv("AETHER_SCAN_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return fmt.Errorf("AETHER_SCAN_INTERVAL: %w", err)
+		}
+		cfg.Library.ScanInterval = Duration{d}
 	}
 	if v := os.Getenv("AETHER_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
@@ -211,6 +272,9 @@ func (c *Config) validate() error {
 		if u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 			return fmt.Errorf("%s: %q (URL http(s) attendue)", k, u)
 		}
+	}
+	if cc := c.Metadata.Country; cc != "" && (len(cc) != 2 || strings.ToUpper(cc) != cc) {
+		return fmt.Errorf("metadata.country: %q (code pays ISO à deux lettres majuscules, ex. FR)", cc)
 	}
 	if f := c.Log.Format; f != "text" && f != "json" {
 		return fmt.Errorf("log.format: %q (expected text or json)", f)

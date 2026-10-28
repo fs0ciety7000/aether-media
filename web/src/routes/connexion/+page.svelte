@@ -40,7 +40,7 @@
 		error = null;
 		try {
 			await session.login(name.trim(), password);
-			goto(target, { replaceState: true });
+			goto(session.wizardPending ? '/bienvenue' : target, { replaceState: true });
 		} catch (err) {
 			password = '';
 			if (err instanceof ApiError && err.status === 429) {

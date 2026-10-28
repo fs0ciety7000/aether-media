@@ -107,21 +107,28 @@ func (s *Service) Run(ctx context.Context) {
 	}
 }
 
-// EnqueueAll queues a synchronisation of every active link.
-func (s *Service) EnqueueAll(ctx context.Context) {
+// EnqueueAll queues a synchronisation of every active link and returns
+// the number of synchronisations queued.
+func (s *Service) EnqueueAll(ctx context.Context) int {
 	conns, err := s.store.ListActiveSyncConnections(ctx)
 	if err != nil {
 		s.log.Error("synchronisation périodique", "err", err)
-		return
+		return 0
 	}
+	n := 0
 	for _, c := range conns {
-		if _, err := s.enqueueRun(ctx, c.ID, false, 0); err != nil {
+		ok, err := s.enqueueRun(ctx, c.ID, false, 0)
+		if err != nil {
 			s.log.Error("synchronisation périodique", "connection", c.ID, "err", err)
+		}
+		if ok {
+			n++
 		}
 	}
 	if _, err := s.store.PurgeSyncEvents(ctx, s.now().Add(-30*24*time.Hour).Unix()); err != nil {
 		s.log.Warn("purge du journal de synchronisation", "err", err)
 	}
+	return n
 }
 
 func (s *Service) provider(service string) (Provider, error) {

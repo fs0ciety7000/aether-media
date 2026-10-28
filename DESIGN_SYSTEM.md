@@ -114,7 +114,7 @@ Barre d'onglets en bas : Accueil, Explorer, Recherche, Favoris, Profil. Le hero 
 4. **Vous aimerez aussi** et **Récemment ajoutés** : rangées horizontales.
 
 ### Inventaire
-`Logo`, `Button` (pilule : primaire, secondaire, tertiaire), `IconButton`, `Avatar`, `UserChip`, `Tag`, `Chip`, `Input`, `SearchField`, `SectionHeader`, `Hero`, `CategoryTile`, `CategoriesPanel`, `ContinueTile`, `ContinueBento`, `PosterCard`, `ThumbCard`, `Row`, `ProgressLine`, `Skeleton`, `Toaster`, `ThemeSwitcher`, `Stepper` (parcours guidés), `FolderPicker` (explorateur de dossiers : fil d'Ariane, dossiers seulement), `SubNav` (onglets de section en pilules : Réglages, Profil), `ServiceMark` (pastille d'un service tiers : initiale sur tuile sobre, jamais le logo ni la couleur de la marque), `CopyCode` (code court affiché en grand, copiable), `DeviceCodePanel` (appairage par code avec compte à rebours), `SyncJournal` (journal compact filtrable), ainsi que le shell (`Sidebar`, `AppHeader`, `TabBar`).
+`Logo`, `Button` (pilule : primaire, secondaire, tertiaire), `IconButton`, `Avatar`, `UserChip`, `Tag`, `Chip`, `Input`, `SearchField`, `SectionHeader`, `Hero`, `CategoryTile`, `CategoriesPanel`, `ContinueTile`, `ContinueBento`, `PosterCard`, `ThumbCard`, `Row`, `ProgressLine`, `Skeleton`, `Toaster`, `ThemeSwitcher`, `Stepper` (parcours guidés), `FolderPicker` (explorateur de dossiers : fil d'Ariane, dossiers seulement), `SubNav` (onglets de section en pilules : Réglages, Profil), `ServiceMark` (pastille d'un service tiers : initiale sur tuile sobre, jamais le logo ni la couleur de la marque), `CopyCode` (code court affiché en grand, copiable), `DeviceCodePanel` (appairage par code avec compte à rebours), `SyncJournal` (journal compact filtrable), `SegmentedControl` (un choix parmi quelques-uns : niveau de journal, filtre), `StatTile` (chiffre clé et son libellé), `SettingMeta` (origine d’un réglage : configuration, réglé ici, par défaut ; appliqué tout de suite ou au redémarrage), `LocaleFields` (langue et pays des métadonnées), `TmdbKeyField` (clé vérifiée en direct, jamais réaffichée), `JobRow` (tâche de la file et ses actions), `LogViewer` (journal en chasse fixe, surlignage de la recherche, suivi de la fin), `SessionCard` (lecture en cours), `InstallPrompt` (invitation discrète à installer l’application), ainsi que le shell (`Sidebar`, `AppHeader`, `TabBar`).
 
 ## 9. Écrans v1
 1. Connexion / assistant de premier lancement
@@ -126,6 +126,9 @@ Barre d'onglets en bas : Accueil, Explorer, Recherche, Favoris, Profil. Le hero 
 7. Collections, favoris
 8. Profil et préférences
 9. Administration
+
+### PWA (M7)
+Icônes générées depuis le monogramme (`web/scripts/generate-icons.mjs`) : 192 et 512 px à coins arrondis, variantes *maskable* pleine page (monogramme dans la zone sûre de 80 %), `apple-touch-icon` 180 px. Couleurs du manifeste : fond et thème `#04121D`. Installée sur iOS, la barre d’état est translucide (`black-translucent`) : l’en-tête, les pages sans shell et le lecteur tiennent compte de `safe-area-inset-top`. Hors ligne : écran sobre « Vous êtes hors ligne » (icône, texte, « Réessayer »), jamais de contenu en cache.
 
 ## 10. Implémentation
 - Tokens : `web/src/lib/styles/tokens.css` ; thèmes via `[data-theme]` sur `<html>`, appliqués avant le premier rendu pour éviter le flash.

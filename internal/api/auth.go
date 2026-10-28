@@ -238,6 +238,11 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.Settings != nil { // the assistant continues with the metadata step
+		if err := s.Settings.StartWizard(r.Context()); err != nil {
+			s.log.Warn("assistant de premier lancement", "err", err)
+		}
+	}
 	s.startSession(w, r, u, c.Device, http.StatusCreated)
 }
 

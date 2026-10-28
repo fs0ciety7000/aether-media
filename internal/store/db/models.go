@@ -227,6 +227,13 @@ type Session struct {
 	ID         sql.NullInt64 `json:"id"`
 }
 
+type Setting struct {
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	Secret    []byte `json:"secret"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
 type Studio struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`

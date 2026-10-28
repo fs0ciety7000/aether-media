@@ -167,6 +167,7 @@ type Session struct {
 	dir        string
 	plan       *plan
 	lastActive atomic.Int64 // unix nanos
+	started    time.Time
 
 	mu      sync.Mutex
 	run     *run   // current process (nil when none)
@@ -216,6 +217,7 @@ func (m *Manager) Start(ctx context.Context, r Request) (*Session, error) {
 		Info:       r.Info,
 		m:          m,
 		profile:    r.Profile,
+		started:    time.Now(),
 	}
 	s.touch()
 
@@ -252,6 +254,9 @@ func (m *Manager) Start(ctx context.Context, r Request) (*Session, error) {
 		m.releaseSlot(s)
 		return nil, errors.New("stream: manager is shut down")
 	}
+	// Idle time counts from registration: preparing (keyframe scan, first
+	// FFmpeg run) may take longer than IdleTimeout on a slow machine.
+	s.touch()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
 	m.log.Info("playback session started", "session", s.ID, "method", d.Method, "reasons", d.Reasons,

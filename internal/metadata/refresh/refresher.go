@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
@@ -68,6 +69,36 @@ type Refresher struct {
 	local  []metadata.LocalProvider
 	remote []metadata.RemoteProvider
 	ingest Ingester
+	lang   atomic.Pointer[string]
+}
+
+// SetLanguage changes the metadata language of future refreshes.
+func (r *Refresher) SetLanguage(lang string) { r.lang.Store(&lang) }
+
+// RefreshAll schedules every top-level item of every library (a refresh
+// cascades to seasons, episodes and tracks). It returns the number queued.
+func (r *Refresher) RefreshAll(ctx context.Context) (int, error) {
+	libs, err := r.store.ListLibraries(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, l := range libs {
+		ids, err := r.store.ListRefreshRoots(ctx, l.ID)
+		if err != nil {
+			return n, err
+		}
+		for _, id := range ids {
+			ok, err := r.Enqueue(ctx, id, false)
+			if err != nil {
+				return n, err
+			}
+			if ok {
+				n++
+			}
+		}
+	}
+	return n, nil
 }
 
 func New(s *store.Store, r *jobs.Runner, hub *events.Hub, log *slog.Logger, cfg Config,
@@ -78,7 +109,9 @@ func New(s *store.Store, r *jobs.Runner, hub *events.Hub, log *slog.Logger, cfg 
 	if cfg.MinMargin == 0 {
 		cfg.MinMargin = 0.03
 	}
-	return &Refresher{store: s, jobs: r, hub: hub, log: log, cfg: cfg, local: local, remote: remote, ingest: ingest}
+	rf := &Refresher{store: s, jobs: r, hub: hub, log: log, cfg: cfg, local: local, remote: remote, ingest: ingest}
+	rf.SetLanguage(cfg.Language)
+	return rf
 }
 
 type refreshPayload struct {
@@ -315,7 +348,7 @@ func (r *Refresher) refreshEpisodes(ctx context.Context, season db.Item, sq meta
 func (r *Refresher) query(ctx context.Context, it db.Item) (metadata.Query, error) {
 	q := metadata.Query{
 		Kind: it.Kind, Title: it.Title, Year: int(it.Year.Int64), Path: it.Path.String,
-		Language: r.cfg.Language, ProviderIDs: parseIDs(it.ProviderIds),
+		Language: *r.lang.Load(), ProviderIDs: parseIDs(it.ProviderIds),
 		IndexNumber: int(it.IndexNumber.Int64), ParentIndex: int(it.ParentIndexNumber.Int64),
 	}
 	if !it.ParentID.Valid {

@@ -47,3 +47,26 @@ func TestValidate(t *testing.T) {
 		t.Fatal("expected invalid log level error")
 	}
 }
+
+func TestOrigins(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "aether.toml"), []byte("[metadata]\nlanguage = \"en-US\"\n[transcode]\nmax_sessions = 3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AETHER_DATA_DIR", dir)
+	t.Setenv("AETHER_TMDB_API_KEY", "k")
+	t.Setenv("AETHER_MAX_TRANSCODES", "5")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"metadata.language": "file", "metadata.tmdb_api_key": "env", "transcode.max_sessions": "env", "server.name": "", "transcode.hwaccel": ""}
+	for k, v := range want {
+		if got := cfg.Origin(k); got != v {
+			t.Errorf("Origin(%s) = %q, want %q", k, got, v)
+		}
+	}
+	if cfg.Transcode.MaxSessions != 5 || cfg.Server.Name != "Aether" {
+		t.Errorf("cfg = %+v", cfg)
+	}
+}

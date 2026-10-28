@@ -142,16 +142,23 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0C8 Budget de débit par utilisateur (aujourd'hui un seul budget par service pour tout le serveur : Trakt 1 écriture/s)
 - [ ] T-0C9 Import ciblé des éléments nouvellement ajoutés à la bibliothèque (aujourd'hui : récupération complète toutes les 24 h ou « synchroniser maintenant » avec `full`)
 - [ ] T-0CA Historique Trakt : visionnages multiples (plays, dates) — seuls vu / non vu et la dernière date sont synchronisés
-- [ ] T-0CB `stream.TestIntegrationIdleTimeout` instable sous `-race` quand toute la suite tourne (passe seul)
+- [x] T-0CB `stream.TestIntegrationIdleTimeout` instable : l’inactivité était comptée depuis la création de la session et non depuis son enregistrement (préparation lente = session récoltée avant le premier ping) ; corrigé en M7
 - [x] T-0CE SSE filtré par destinataire (événements de synchro et de progression réservés à l'utilisateur concerné ; scans, sources et agents aux admins)
 - [ ] T-0CF Publier `sync.status syncing:true` dès qu'un changement local met une synchro en file ; journal : retirer le préfixe de fonction redondant des messages
 - [ ] T-0CG Membres : état hors ligne d'une source mis à jour en direct (aujourd'hui au rechargement ou à la fin d'un scan, `source.status` étant réservé aux admins)
 - [ ] T-0CH Annulation explicite d'un appairage Trakt/Simkl en cours côté serveur ; action « Ma liste » dans un menu des cartes
 
 ## M7 — Finition & distribution
-- [ ] T-080 Assistant de premier lancement
-- [ ] T-081 Admin : bibliothèques, utilisateurs, tâches, journaux
-- [ ] T-082 PWA (manifest, service worker)
+- [x] T-080 Assistant de premier lancement : compte admin → langue et pays des métadonnées → clé TMDB (vérifiée en direct, lien d’aide, lecture seule si définie par la configuration) → première bibliothèque (AddLibraryDialog : dossier + sélecteur, agent, SFTP) → récapitulatif ; étapes passables, reprise côté serveur (`settings.wizard`, `system/info.setupWizardPending`)
+- [x] T-086 Réglages serveur persistants : `GET/PATCH /settings` (nom, langue, pays, clé TMDB chiffrée et masquée, accélération matérielle, limite de transcodages, rescan périodique), priorité configuration/env > base > défaut avec la source de chaque valeur, application à chaud sauf l’accélération (« effectif au redémarrage »), migration 00009
+- [x] T-081 Admin : Réglages › Serveur (réglages, version, chemins, FFmpeg, accélération détectée), Tâches (file en direct via `jobs.changed` admin, relancer / annuler / retirer, scan complet, métadonnées, synchro), Journaux (tampon slog de 2 000 entrées, secrets masqués, filtre, recherche, suivi SSE admin, téléchargement), Lectures en cours (méthode, raisons, débit, arrêt par l’admin) ; Bibliothèques et Utilisateurs existaient déjà
+- [x] T-082 PWA : manifest, icônes générées (192, 512, maskable, apple-touch-icon), service worker (app shell + assets versionnés, jamais /api ni flux), écran et page hors ligne, invitation discrète à installer, métadonnées iOS et zones sûres
+- [ ] T-087 Valider l’ajout à l’écran d’accueil sur un vrai iPhone / iPad (vérifié en émulation iPhone sous Chromium : métadonnées Apple, manifest, zones sûres ; pas d’appareil iOS ni de WebKit dans l’environnement de dev)
+- [ ] T-088 Accélération matérielle appliquée à chaud (aujourd’hui au redémarrage) et test sur vrai GPU (voir T-06A)
+- [ ] T-089 Contention SQLite (`database is locked`) pendant un rafraîchissement complet des métadonnées en parallèle d’un scan : les tâches sont réessayées et finissent, mais à étudier (pool d’écriture unique, `busy_timeout` plus long)
+- [ ] T-08A Garde SSRF des images d’NFO (T-049) : une URL `http://127.0.0.1/…` est encore suivie (vu dans l’E2E M7)
+- [ ] T-08B Changer la langue des métadonnées ne retraduit pas les titres déjà identifiés tant qu’on ne lance pas « Rafraîchir les métadonnées » (proposer de le lancer après l’enregistrement)
+- [ ] T-08C Nom du serveur utilisé aussi pour l’appairage des agents (aujourd’hui « Aether · nom d’hôte ») et dans le titre des pages
 - [x] T-083 Paquets : GoReleaser (linux amd64/arm64/armv7, darwin, windows ; tar.gz/zip ; .deb/.rpm avec compte `aether`, unités systemd, /var/lib/aether ; cask Homebrew ; images ghcr.io multi-arch via dockers_v2 ; SBOM ; checksums), workflow `release.yml` sur tag `v*`, docs/INSTALL.md
 - [ ] T-085 (LICENSE AGPL-3.0 ajoutée) Première release : créer le dépôt `homebrew-tap` (puis `skip_upload: false` + secret `HOMEBREW_TAP_TOKEN`), vérifier le workflow sur un tag de test, signature/notarisation macOS et Windows
 - [ ] T-084 Docs utilisateur + audit a11y / perfs → release v0.1.0

@@ -254,6 +254,10 @@ export interface SystemInfo {
 	metadata?: { tmdb: boolean; musicbrainz: boolean };
 	/** M6b: synchronisation service usable (application credentials configured). */
 	sync?: { trakt: boolean; simkl: boolean };
+	/** M7: name chosen by the administrator (Réglages › Serveur). */
+	serverName?: string;
+	/** M7, administrators only: the first-run assistant was left before its end. */
+	setupWizardPending?: boolean;
 }
 
 export interface LibraryFilters {
@@ -607,4 +611,154 @@ export interface SyncStatusEvent {
 export interface UserDataChangedEvent {
 	userId: number;
 	itemId: number;
+}
+
+// ——— Administration (M7) ———
+
+/** Where a setting comes from: configuration file, AETHER_* variable, this UI, or the default. */
+export type SettingSource = 'file' | 'env' | 'database' | 'default';
+
+export interface SettingField<T> {
+	value: T;
+	source: SettingSource;
+	/** Defined by the configuration: shown, never editable here. */
+	readOnly: boolean;
+	/** When a change takes effect. */
+	applies: 'live' | 'restart';
+	/** Saved, but the server still runs with the previous value. */
+	restartRequired?: boolean;
+}
+
+export interface SecretSetting {
+	set: boolean;
+	/** "…ab12": never the full value. */
+	masked?: string;
+	source: SettingSource;
+	readOnly: boolean;
+	applies: 'live' | 'restart';
+}
+
+export type HWAccelMode = 'none' | 'auto' | 'vaapi' | 'qsv' | 'nvenc' | 'videotoolbox';
+export interface HWAccel {
+	mode: HWAccelMode;
+	device?: string;
+}
+
+export type WizardStep = 'account' | 'metadata' | 'tmdb' | 'library' | 'summary' | 'done';
+export interface WizardState {
+	step: WizardStep;
+	completed: boolean;
+	skipped?: WizardStep[];
+}
+
+export interface ServerSettings {
+	serverName: SettingField<string>;
+	metadataLanguage: SettingField<string>;
+	/** "" = deduced from the language. */
+	metadataCountry: SettingField<string>;
+	tmdbApiKey: SecretSetting;
+	hwAccel: SettingField<HWAccel>;
+	maxTranscodes: SettingField<number>;
+	/** 0 = periodic rescans disabled. */
+	scanIntervalMinutes: SettingField<number>;
+	wizard: WizardState;
+}
+
+export interface SettingsPatch {
+	serverName?: string;
+	metadataLanguage?: string;
+	metadataCountry?: string;
+	/** "" removes the stored key. */
+	tmdbApiKey?: string;
+	hwAccel?: HWAccel;
+	maxTranscodes?: number;
+	scanIntervalMinutes?: number;
+	wizard?: { step?: WizardStep; completed?: boolean; skipped?: WizardStep[] };
+}
+
+export interface TmdbCheck {
+	valid: boolean;
+	error?: 'invalid_key' | 'unreachable' | 'missing';
+	message?: string;
+}
+
+export interface BinaryStatus {
+	path: string;
+	ok: boolean;
+	version?: string;
+	error?: string;
+}
+
+export interface SystemStatus {
+	name: string;
+	version: string;
+	commit: string;
+	goVersion: string;
+	os: string;
+	arch: string;
+	startedAt: string;
+	paths: { data: string; cache: string; transcode: string; database: string; databaseSize: number };
+	ffmpeg: BinaryStatus;
+	ffprobe: BinaryStatus;
+	hwAccel: { configured: HWAccelMode; device?: string; active: string; detected: string[]; checkedAt: string };
+	transcodes: { max: number; active: number };
+	logs: { capacity: number; held: number };
+}
+
+export type JobStatus = 'running' | 'queued' | 'failed';
+export interface Job {
+	id: number;
+	kind: string;
+	key: string;
+	label?: string;
+	status: JobStatus;
+	priority: number;
+	attempts: number;
+	error?: string;
+	runAfter: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface JobQueue {
+	running: Job[];
+	queued: Job[];
+	failed: Job[];
+	counts: Record<JobStatus, number>;
+	byKind: Record<string, Partial<Record<JobStatus, number>>>;
+}
+
+export type AdminTask = 'scan' | 'metadata' | 'sync';
+
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+export interface LogEntry {
+	seq: number;
+	time: string;
+	level: LogLevel;
+	msg: string;
+	attrs?: { k: string; v: string }[];
+}
+
+export interface LogPage {
+	entries: LogEntry[];
+	held: number;
+	capacity: number;
+}
+
+export interface ActiveSession {
+	id: string;
+	user?: { id: number; name: string };
+	item?: { id: number; kind: Kind; title: string; seriesTitle?: string; season?: number; episode?: number; year?: number };
+	method: 'direct' | 'remux' | 'transcode';
+	reasons: string[];
+	positionMs: number;
+	durationMs: number;
+	paused: boolean;
+	/** bits/s (estimate). */
+	bitrate: number;
+	video?: { codec: string; copied: boolean; width?: number; height?: number };
+	audio?: { codec: string; copied: boolean };
+	hwAccel?: string;
+	startedAt: string;
+	lastActive: string;
 }

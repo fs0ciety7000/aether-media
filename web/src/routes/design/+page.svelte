@@ -53,6 +53,15 @@
 	import SyncJournal from '$lib/components/sync/SyncJournal.svelte';
 	import SubNav from '$lib/components/shell/SubNav.svelte';
 	import type { SyncEvent } from '$lib/api/types';
+	import type { ActiveSession, Job, LogEntry } from '$lib/api/types';
+	import SegmentedControl from '$lib/components/SegmentedControl.svelte';
+	import StatTile from '$lib/components/StatTile.svelte';
+	import SettingMeta from '$lib/components/admin/SettingMeta.svelte';
+	import JobRow from '$lib/components/admin/JobRow.svelte';
+	import LogViewer from '$lib/components/admin/LogViewer.svelte';
+	import SessionCard from '$lib/components/admin/SessionCard.svelte';
+	import LocaleFields from '$lib/components/admin/LocaleFields.svelte';
+	import InstallPrompt from '$lib/components/pwa/InstallPrompt.svelte';
 
 	const colorTokens = [
 		['--bg', 'Fond de l’application'],
@@ -198,6 +207,53 @@
 		return { path, parent, dirs };
 	}
 	let demoFolder = $state('');
+
+	// ——— M7 : administration ———
+	let segDemo = $state('info');
+	let localeLang = $state('fr-FR');
+	let localeCountry = $state('');
+	const m7Now = Date.parse('2026-10-28T20:30:00Z');
+	const m7Iso = (min: number) => new Date(m7Now - min * 60_000).toISOString();
+	const demoJobs: Job[] = [
+		{ id: 1, kind: 'library.scan', key: '1', label: 'Films', status: 'running', priority: 10, attempts: 1, runAfter: m7Iso(2), createdAt: m7Iso(2), updatedAt: m7Iso(1) },
+		{ id: 2, kind: 'metadata.refresh', key: '42', label: 'Marée basse', status: 'queued', priority: 5, attempts: 0, runAfter: m7Iso(1), createdAt: m7Iso(1), updatedAt: m7Iso(1) },
+		{
+			id: 3,
+			kind: 'image.fetch',
+			key: '77',
+			label: 'Les Veilleurs',
+			status: 'failed',
+			priority: 3,
+			attempts: 3,
+			error: 'metadata unavailable: GET https://image.tmdb.org/t/p/original/x.jpg: status 503',
+			runAfter: m7Iso(30),
+			createdAt: m7Iso(40),
+			updatedAt: m7Iso(12)
+		}
+	];
+	const demoLogs: LogEntry[] = [
+		{ seq: 1, time: m7Iso(6), level: 'INFO', msg: 'aether démarré', attrs: [{ k: 'addr', v: '0.0.0.0:8096' }, { k: 'version', v: 'v0.1.0' }] },
+		{ seq: 2, time: m7Iso(5), level: 'DEBUG', msg: 'ffmpeg started', attrs: [{ k: 'session', v: '9f2c…' }, { k: 'args', v: '-i http://127.0.0.1:8096/internal/vfs/3/1767225600/[masqué]/a.mkv' }] },
+		{ seq: 3, time: m7Iso(4), level: 'WARN', msg: 'source hors ligne', attrs: [{ k: 'source', v: '3' }, { k: 'name', v: 'Seedbox' }] },
+		{ seq: 4, time: m7Iso(3), level: 'ERROR', msg: 'job en échec', attrs: [{ k: 'kind', v: 'image.fetch' }, { k: 'err', v: 'GET …?api_key=[masqué]: status 503' }] },
+		{ seq: 5, time: m7Iso(1), level: 'INFO', msg: 'http', attrs: [{ k: 'method', v: 'GET' }, { k: 'path', v: '/api/v1/home' }, { k: 'status', v: '200' }] }
+	];
+	const demoSession: ActiveSession = {
+		id: 'demo',
+		user: { id: 2, name: 'Léa' },
+		item: { id: 0, kind: 'movie', title: 'Marée basse', year: 2023 },
+		method: 'transcode',
+		reasons: ['videoCodec', 'subtitleBurn'],
+		positionMs: 2_412_000,
+		durationMs: 6_540_000,
+		paused: false,
+		bitrate: 8_192_000,
+		video: { codec: 'h264', copied: false, width: 1920, height: 1080 },
+		audio: { codec: 'aac', copied: false },
+		hwAccel: 'none',
+		startedAt: m7Iso(40),
+		lastActive: m7Iso(0)
+	};
 </script>
 
 <svelte:head>
@@ -787,6 +843,56 @@
 		</div>
 	</section>
 
+	<!-- M7 : administration et PWA -->
+	<section class="block" aria-labelledby="s-m7">
+		<div class="heading">
+			<span class="num tabular">16</span>
+			<h2 id="s-m7">Administration et installation (M7)</h2>
+			<p>
+				Choix segmenté (niveau de journal, filtre), chiffre clé, origine d’un réglage (configuration, réglé ici, par défaut ; appliqué tout de suite ou au
+				redémarrage), ligne de tâche, journal en police à chasse fixe, carte de lecture en cours, langue et pays des métadonnées, invitation à installer l’application.
+			</p>
+		</div>
+		<div class="m5b-grid">
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">SegmentedControl</p>
+				<SegmentedControl options={[{ value: 'debug', label: 'Tout' }, { value: 'info', label: 'Infos' }, { value: 'warn', label: 'Avertissements', count: 3 }, { value: 'error', label: 'Erreurs', count: 1 }]} bind:value={segDemo} label="Exemple de choix" />
+				<p class="micro m5b-cap">StatTile</p>
+				<div class="m7-stats">
+					<StatTile label="En cours" value={1} icon="activity" tone="accent" />
+					<StatTile label="En attente" value={128} icon="clock" />
+					<StatTile label="En échec" value={2} icon="alert" tone="danger" />
+				</div>
+				<p class="micro m5b-cap">SettingMeta</p>
+				<SettingMeta source="database" />
+				<SettingMeta source="default" applies="restart" />
+				<SettingMeta source="database" applies="restart" restartRequired />
+				<SettingMeta source="env" readOnly env="AETHER_TMDB_API_KEY" />
+			</div>
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">LocaleFields</p>
+				<LocaleFields bind:language={localeLang} bind:country={localeCountry} />
+				<p class="micro m5b-cap">InstallPrompt (navigateur compatible, puis iPhone)</p>
+				<InstallPrompt variant="prompt" />
+				<InstallPrompt variant="ios" />
+			</div>
+		</div>
+		<div class="m5b-panel panel">
+			<p class="micro m5b-cap">JobRow (en cours, en attente, en échec)</p>
+			<ul class="m7-jobs" role="list">
+				{#each demoJobs as job (job.id)}<JobRow {job} now={m7Now} onretry={() => toasts.show('Tâche relancée')} oncancel={() => toasts.show('Tâche annulée')} />{/each}
+			</ul>
+		</div>
+		<div class="m5b-panel panel">
+			<p class="micro m5b-cap">LogViewer (recherche « source » surlignée)</p>
+			<LogViewer entries={demoLogs} highlight="source" label="Journal d’exemple" />
+		</div>
+		<div class="m5b-panel panel">
+			<p class="micro m5b-cap">SessionCard</p>
+			<SessionCard session={demoSession} onstop={() => toasts.show('Lecture arrêtée')} />
+		</div>
+	</section>
+
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
@@ -810,6 +916,17 @@
 </div>
 
 <style>
+	.m7-stats {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+		gap: var(--sp-3);
+	}
+
+	.m7-jobs {
+		display: grid;
+		gap: var(--sp-2);
+	}
+
 	.m6-grid {
 		display: grid;
 		grid-template-columns: minmax(0, 400px) minmax(0, 1fr);

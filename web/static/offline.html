@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#04121D" />
+		<title>Hors ligne — Aether</title>
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<style>
+			:root {
+				color-scheme: dark;
+			}
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+				background: #04121d;
+				color: #f6ffff;
+				font: 15px/1.55 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+			}
+			main {
+				display: grid;
+				place-content: center;
+				justify-items: center;
+				gap: 18px;
+				min-height: 100vh;
+				min-height: 100dvh;
+				padding: calc(24px + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px));
+				box-sizing: border-box;
+				text-align: center;
+				background: radial-gradient(60% 50% at 20% 10%, rgba(94, 196, 192, 0.12), transparent 70%);
+			}
+			h1 {
+				margin: 6px 0 0;
+				font-size: 22px;
+				font-weight: 800;
+			}
+			p {
+				margin: 0;
+				max-width: 38ch;
+				color: #8a9fa7;
+			}
+			button {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				height: 44px;
+				margin-top: 8px;
+				padding: 0 22px;
+				border: 0;
+				border-radius: 999px;
+				background: #5ec4c0;
+				color: #04121d;
+				font: inherit;
+				font-weight: 800;
+				cursor: pointer;
+			}
+			button:focus-visible {
+				outline: 2px solid #5ec4c0;
+				outline-offset: 3px;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<svg width="48" height="48" viewBox="0 0 32 32" aria-hidden="true">
+				<path d="M13 4h6l10 24h-6Z" fill="#38797B" />
+				<path d="M13 4h6L9 28H3Z" fill="#5EC4C0" />
+				<path d="M12.54 19.5h6.92l1.25 3H11.29Z" fill="#38797B" />
+			</svg>
+			<h1>Vous êtes hors ligne</h1>
+			<p>Aether a besoin d’une connexion à votre serveur pour afficher la médiathèque. Vérifiez le réseau, puis réessayez.</p>
+			<button type="button" onclick="location.reload()">Réessayer</button>
+		</main>
+	</body>
+</html>
