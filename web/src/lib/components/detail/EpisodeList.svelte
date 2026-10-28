@@ -2,6 +2,9 @@
 	import { firstImage } from '$lib/api/images';
 	import type { Item } from '$lib/api/types';
 	import { formatDate, formatRuntime, metaLine } from '$lib/format';
+	import { episodeCode } from '$lib/media';
+	import { resumeFor } from '$lib/player/resume';
+	import { playerHref } from '$lib/player/target';
 	import Artwork from '../Artwork.svelte';
 	import Icon from '../Icon.svelte';
 	import Skeleton from '../Skeleton.svelte';
@@ -25,21 +28,24 @@
 		{/each}
 	{:else}
 		{#each episodes as ep (ep.id)}
-			<li>
-				<a class="ep" href="/item/{ep.id}">
-					<span class="thumb">
-						<Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} />
-						<span class="play" aria-hidden="true"><Icon name="play" size={16} filled /></span>
+			{@const resume = resumeFor(ep.id)}
+			{@const code = episodeCode(ep)}
+			<li class="ep">
+				<a class="thumb" href={playerHref(ep.id)} aria-label="{resume ? 'Reprendre' : 'Lire'} {code ? `${code} — ` : ''}{ep.title}">
+					<Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} />
+					<span class="play" class:shown={!!resume} aria-hidden="true"><Icon name="play" size={16} filled /></span>
+					{#if resume && resume.durationMs}
+						<span class="progress" aria-hidden="true"><span style:width="{Math.min(100, (resume.positionMs / resume.durationMs) * 100)}%"></span></span>
+					{/if}
+				</a>
+				<a class="body" href="/item/{ep.id}">
+					<span class="top">
+						<span class="num tabular">{ep.indexNumber ?? '–'}</span>
+						<span class="title">{ep.title}</span>
+						<span class="dur tabular">{formatRuntime(ep.runtimeMs) ?? ''}</span>
 					</span>
-					<span class="body">
-						<span class="top">
-							<span class="num tabular">{ep.indexNumber ?? '–'}</span>
-							<span class="title">{ep.title}</span>
-							<span class="dur tabular">{formatRuntime(ep.runtimeMs) ?? ''}</span>
-						</span>
-						{#if ep.airDate || ep.premiereDate}<span class="date">{metaLine(formatDate(ep.airDate ?? ep.premiereDate))}</span>{/if}
-						{#if ep.overview}<span class="overview">{ep.overview}</span>{/if}
-					</span>
+					{#if ep.airDate || ep.premiereDate}<span class="date">{metaLine(formatDate(ep.airDate ?? ep.premiereDate))}</span>{/if}
+					{#if ep.overview}<span class="overview">{ep.overview}</span>{/if}
 				</a>
 			</li>
 		{/each}
@@ -62,7 +68,7 @@
 		transition: background-color var(--dur-fast) var(--ease);
 	}
 
-	a.ep:hover {
+	li.ep:hover {
 		background: var(--surface);
 	}
 
@@ -91,9 +97,27 @@
 		transition: opacity var(--dur-base) var(--ease);
 	}
 
-	a.ep:hover .play,
-	a.ep:focus-visible .play {
+	.thumb:hover .play,
+	.thumb:focus-visible .play,
+	.play.shown {
 		opacity: 1;
+	}
+
+	.progress {
+		position: absolute;
+		left: 8px;
+		right: 8px;
+		bottom: 8px;
+		height: 3px;
+		border-radius: var(--r-full);
+		background: rgba(246, 255, 255, 0.25);
+		overflow: hidden;
+	}
+
+	.progress span {
+		display: block;
+		height: 100%;
+		background: var(--accent);
 	}
 
 	.body {

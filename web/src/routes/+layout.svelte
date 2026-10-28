@@ -4,6 +4,7 @@
 	import '$lib/styles/base.css';
 
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import AppHeader from '$lib/components/shell/AppHeader.svelte';
 	import Sidebar from '$lib/components/shell/Sidebar.svelte';
 	import TabBar from '$lib/components/shell/TabBar.svelte';
@@ -15,6 +16,8 @@
 	const SIDEBAR_KEY = 'aether:sidebar';
 	let collapsed = $state(readCollapsed());
 	const version = $derived(system.info?.version);
+	/** Full-screen routes (the player) render without the app shell. */
+	const bare = $derived(page.route.id?.startsWith('/lecture') ?? false);
 
 	function readCollapsed() {
 		try {
@@ -42,24 +45,28 @@
 	});
 </script>
 
-<a class="skip" href="#contenu">Aller au contenu</a>
+{#if bare}
+	{@render children()}
+{:else}
+	<a class="skip" href="#contenu">Aller au contenu</a>
 
-<div class="shell" class:collapsed>
-	<div class="side">
-		<Sidebar {collapsed} ontoggle={toggleSidebar} {version} />
+	<div class="shell" class:collapsed>
+		<div class="side">
+			<Sidebar {collapsed} ontoggle={toggleSidebar} {version} />
+		</div>
+
+		<div class="main">
+			<AppHeader />
+			<main id="contenu" tabindex="-1">
+				{@render children()}
+			</main>
+		</div>
 	</div>
 
-	<div class="main">
-		<AppHeader />
-		<main id="contenu" tabindex="-1">
-			{@render children()}
-		</main>
+	<div class="tabs">
+		<TabBar />
 	</div>
-</div>
-
-<div class="tabs">
-	<TabBar />
-</div>
+{/if}
 
 <Toaster />
 

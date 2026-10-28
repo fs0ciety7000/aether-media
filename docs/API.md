@@ -145,3 +145,9 @@ type PlaybackInfo = {
 - HLS : `GET /playback/sessions/{sid}/master.m3u8`, `.../main.m3u8`, `.../init.mp4`, `.../{n}.m4s` (segments générés à la demande ; un segment lointain relance FFmpeg à cette position)
 - `GET /media/{fileId}/stream` : fichier brut, HTTP Range (lecture directe)
 - `GET /media/{fileId}/subtitles/{index}.vtt` : sous-titre texte converti en WebVTT (interne ou externe)
+
+Précisions :
+- `subtitleIndex` sur une piste **image** (PGS, VobSub) déclenche l'incrustation (transcodage). Sur une piste **texte**, il ne déclenche rien côté serveur : la piste est fournie en WebVTT et activée par le lecteur.
+- La playlist HLS couvre **tout le fichier** (horodatage absolu) ; `startMs` indique où commencer la lecture.
+- `video.codec` décrit la source ; `copied: false` signifie qu'elle est réencodée en H.264.
+- Une même liste de codecs sert à la lecture directe et au remux : le lecteur n'y déclare que les codecs lisibles dans les deux cas (fMP4/HLS).

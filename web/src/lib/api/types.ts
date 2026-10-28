@@ -234,3 +234,67 @@ export interface ScanResult {
 	unavailable?: string[];
 	durationMs: number;
 }
+
+// ——— Lecture (M5) ———
+
+/** Capabilities detected in the browser (src/lib/player/capabilities.ts). */
+export interface ClientProfile {
+	/** Containers playable directly: "mp4", "webm", "mov", "ogg", "mp3", "flac", "m4a", "wav" (never "mkv"). */
+	containers: string[];
+	/** "h264", "hevc", "av1", "vp9", "vp8" */
+	videoCodecs: string[];
+	/** "aac", "mp3", "opus", "vorbis", "flac", "ac3", "eac3", "alac", "pcm" */
+	audioCodecs: string[];
+	/** HDR display and a 10-bit codec. */
+	hdr: boolean;
+	maxHeight?: number;
+	/** Bits per second; 0 = unlimited. */
+	maxBitrate?: number;
+	hls: 'native' | 'mse';
+}
+
+export interface PlaybackTrack {
+	index: number;
+	language?: string;
+	title?: string;
+	codec: string;
+	channels?: number;
+	default: boolean;
+	forced?: boolean;
+	external?: boolean;
+}
+
+export interface SubtitleTrack extends PlaybackTrack {
+	delivery: 'vtt' | 'burn';
+	/** Present for delivery "vtt". */
+	url?: string;
+}
+
+export type PlaybackMethod = 'direct' | 'remux' | 'transcode';
+
+export interface PlaybackInfo {
+	sessionId: string;
+	method: PlaybackMethod;
+	/** Why not "direct": "container", "videoCodec", "audioCodec", "bitrate", "hdr", "subtitleBurn"… */
+	reasons: string[];
+	/** direct: /api/v1/media/{fileId}/stream · otherwise the session's master.m3u8. */
+	url: string;
+	mediaFileId: number;
+	durationMs: number;
+	/** Actual start position (aligned on a segment in HLS). */
+	startMs: number;
+	audioTracks: PlaybackTrack[];
+	subtitleTracks: SubtitleTrack[];
+	selectedAudio: number;
+	/** -1 = none. */
+	selectedSubtitle: number;
+	video?: { codec: string; width: number; height: number; hdr?: string; copied: boolean };
+}
+
+export interface PlaybackRequest {
+	profile: ClientProfile;
+	mediaFileId?: number;
+	audioIndex?: number;
+	subtitleIndex?: number;
+	startMs?: number;
+}

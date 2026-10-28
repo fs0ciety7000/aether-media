@@ -48,7 +48,20 @@
 		star: '<path d="m12 4.5 2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 16.3l-4.6 2.4.9-5.1-3.8-3.6 5.2-.8Z"/>',
 		grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
 		wand: '<path d="m4.5 19.5 10-10"/><path d="m13 8 3 3"/><path d="M17.5 3.5v3M16 5h3M19.5 10.5v2M18.5 11.5h2M9.5 3.5v2M8.5 4.5h2"/>',
-		key: '<circle cx="8" cy="15" r="3.5"/><path d="m10.5 12.5 8-8M16 7l2.5 2.5M14 9l1.5 1.5"/>'
+		key: '<circle cx="8" cy="15" r="3.5"/><path d="m10.5 12.5 8-8M16 7l2.5 2.5M14 9l1.5 1.5"/>',
+		// Player
+		volume: '<path d="M4 9.5h3l4.5-4v13l-4.5-4H4a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5Z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+		'volume-low': '<path d="M4 9.5h3l4.5-4v13l-4.5-4H4a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5Z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>',
+		'volume-x': '<path d="M4 9.5h3l4.5-4v13l-4.5-4H4a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+		maximize: '<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/>',
+		minimize: '<path d="M9 4v3.5A1.5 1.5 0 0 1 7.5 9H4M20 9h-3.5A1.5 1.5 0 0 1 15 7.5V4M15 20v-3.5a1.5 1.5 0 0 1 1.5-1.5H20M4 15h3.5A1.5 1.5 0 0 1 9 16.5V20"/>',
+		captions: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M16.5 10.2a2.2 2.2 0 1 0 0 3.6"/>',
+		'skip-next': '<path d="M6 5.5v13a.6.6 0 0 0 .9.5l9.6-6.5a.6.6 0 0 0 0-1L6.9 5a.6.6 0 0 0-.9.5Z"/><path d="M19 5v14"/>',
+		'back-10': '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 3.5v3.7h3.7"/><path d="M9.6 10v5.5"/><rect x="12" y="10" width="3.4" height="5.5" rx="1.7"/>',
+		'forward-10': '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 3.5v3.7h-3.7"/><path d="M8.6 10v5.5"/><rect x="11" y="10" width="3.4" height="5.5" rx="1.7"/>',
+		'arrow-left': '<path d="M19 12H5M10.5 6.5 5 12l5.5 5.5"/>',
+		audio: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/>',
+		gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/>'
 	} as const;
 
 	export type IconName = keyof typeof ICONS;

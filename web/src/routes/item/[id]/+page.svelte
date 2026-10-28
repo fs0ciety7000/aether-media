@@ -25,6 +25,8 @@
 	import Tag from '$lib/components/Tag.svelte';
 	import { formatDate, formatRuntime, metaLine, plural } from '$lib/format';
 	import { episodeCode, KIND_ICON, KIND_LABEL } from '$lib/media';
+	import { latestResume } from '$lib/player/resume';
+	import { HAS_PLAY, hasResume, playerHref, resolvePlayTarget } from '$lib/player/target';
 	import { toasts } from '$lib/toast.svelte';
 
 	const id = $derived(Number(page.params.id));
@@ -200,11 +202,28 @@
 		}
 	}
 
-	function play() {
-		toasts.show('Lecture disponible en M5', { detail: 'Le lecteur arrive avec la prochaine version.' });
+	/** Children the "Lecture" button can pick from without another request. */
+	const known = $derived(item?.kind === 'series' ? episodes : item?.kind === 'season' || item?.kind === 'album' ? children : []);
+	const resumable = $derived(item ? hasResume(item, known) : false);
+	let resolving = $state(false);
+
+	async function play() {
+		if (!item || resolving) return;
+		resolving = true;
+		try {
+			// A series resumes the in-progress episode of the season on screen, if any.
+			const inProgress = item.kind === 'series' ? latestResume(episodes.map((e) => e.id))?.id : undefined;
+			const target = inProgress ?? (await resolvePlayTarget(item, known));
+			if (target) goto(playerHref(target));
+			else toasts.show('Rien à lire pour l’instant', { detail: 'Aucun épisode ou piste n’a encore été trouvé.' });
+		} catch (err) {
+			toasts.show('Lecture impossible', { detail: errorMessage(err) });
+		} finally {
+			resolving = false;
+		}
 	}
 
-	const playable = $derived(item ? ['movie', 'episode', 'series', 'season', 'album'].includes(item.kind) : false);
+	const playable = $derived(item ? HAS_PLAY.includes(item.kind) : false);
 	const childLabel = $derived.by(() => {
 		if (!item?.childCount) return undefined;
 		const map = { series: ['saison', 'saisons'], season: ['épisode', 'épisodes'], artist: ['album', 'albums'], album: ['piste', 'pistes'] } as const;
@@ -291,7 +310,7 @@
 
 			{#snippet actions()}
 				{#if playable}
-					<Button variant="primary" size="lg" icon="play" iconFilled aria-disabled="true" title="Lecture disponible en M5" onclick={play}>Lecture</Button>
+					<Button variant="primary" size="lg" icon="play" iconFilled aria-busy={resolving} onclick={play}>{resumable ? 'Reprendre' : 'Lecture'}</Button>
 				{/if}
 				<Menu label="Plus d’actions" items={menuItems} icon="more" text="Plus" />
 			{/snippet}

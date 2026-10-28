@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { Item } from '$lib/api/types';
 	import { formatTrackTime } from '$lib/format';
+	import { playerHref } from '$lib/player/target';
+	import Icon from '../Icon.svelte';
 	import Skeleton from '../Skeleton.svelte';
 
 	interface Props {
@@ -30,10 +32,12 @@
 			{#if discs.length > 1}<h3 class="disc micro">Disque {disc}</h3>{/if}
 			<ol role="list" aria-label={discs.length > 1 ? `Disque ${disc}` : 'Pistes'}>
 				{#each list as t, i (t.id)}
-					<li class="row">
-						<span class="num tabular">{t.indexNumber ?? i + 1}</span>
-						<span class="title">{t.title}</span>
-						<span class="dur tabular">{formatTrackTime(t.runtimeMs) ?? '–'}</span>
+					<li>
+						<a class="row" href={playerHref(t.id)} aria-label="Lire {t.title}">
+							<span class="num tabular"><span class="n">{t.indexNumber ?? i + 1}</span><span class="p" aria-hidden="true"><Icon name="play" size={14} filled /></span></span>
+							<span class="title">{t.title}</span>
+							<span class="dur tabular">{formatTrackTime(t.runtimeMs) ?? '–'}</span>
+						</a>
 					</li>
 				{/each}
 			</ol>
@@ -69,9 +73,29 @@
 	}
 
 	.num {
+		display: grid;
+		justify-items: end;
 		color: var(--text-muted);
 		font-weight: var(--fw-bold);
-		text-align: right;
+	}
+
+	.num > span {
+		grid-area: 1 / 1;
+	}
+
+	.p {
+		display: none;
+		color: var(--accent);
+	}
+
+	a.row:hover .n,
+	a.row:focus-visible .n {
+		visibility: hidden;
+	}
+
+	a.row:hover .p,
+	a.row:focus-visible .p {
+		display: block;
 	}
 
 	.title {

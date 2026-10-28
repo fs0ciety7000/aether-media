@@ -11,6 +11,8 @@ import type {
 	Library,
 	LibraryFilters,
 	LibraryKind,
+	PlaybackInfo,
+	PlaybackRequest,
 	SearchResults,
 	SystemInfo
 } from './types';
@@ -175,5 +177,27 @@ export const api = {
 		} satisfies SearchResults;
 	},
 
-	jobs: (signal?: AbortSignal) => request<JobStats>('/jobs', s(signal))
+	jobs: (signal?: AbortSignal) => request<JobStats>('/jobs', s(signal)),
+
+	// ——— Lecture (M5) ———
+	startPlayback: async (itemId: number, body: PlaybackRequest, signal?: AbortSignal) => {
+		const p = await request<PlaybackInfo>(`/playback/${itemId}`, { method: 'POST', body, signal });
+		p.reasons ??= [];
+		p.audioTracks ??= [];
+		p.subtitleTracks ??= [];
+		p.selectedSubtitle ??= -1;
+		p.startMs ??= 0;
+		return p;
+	},
+	pingPlayback: (sessionId: string, body: { positionMs: number; paused: boolean }) =>
+		request<void>(`/playback/sessions/${encodeURIComponent(sessionId)}/ping`, { method: 'POST', body }),
+	/**
+	 * Stops a session. `keepalive` lets the request outlive the page (pagehide / unload):
+	 * sendBeacon cannot send DELETE.
+	 */
+	stopPlayback: (sessionId: string, keepalive = false) =>
+		fetch(`${API_BASE}/playback/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE', keepalive }).then(
+			() => undefined,
+			() => undefined
+		)
 };

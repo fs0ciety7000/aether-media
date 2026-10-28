@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { playerHref, resolvePlayTarget } from '$lib/player/target';
 	import { api, errorMessage, isAbort } from '$lib/api/client';
 	import { events } from '$lib/api/events.svelte';
 	import { firstImage, imageUrl } from '$lib/api/images';
@@ -43,6 +45,16 @@
 		// New items or artwork: refresh quietly once the burst is over.
 		return events.debounced(['library.scan.finished', 'item.updated', 'item.image'], () => load(true), 1500);
 	});
+
+	async function playHero(entry: { item: Item }) {
+		try {
+			const target = await resolvePlayTarget(entry.item);
+			if (target) goto(playerHref(target));
+			else toasts.show('Rien à lire pour l’instant', { detail: 'Aucun épisode n’a encore été trouvé.' });
+		} catch (err) {
+			toasts.show('Lecture impossible', { detail: errorMessage(err) });
+		}
+	}
 
 	const label = (it: Item) => KIND_LABEL[it.kind].one.replace(/^./, (c) => c.toUpperCase());
 
@@ -107,8 +119,7 @@
 						class="hero-card"
 						items={heroItems}
 						backdrop={posterFallback}
-						playHint="Lecture disponible en M5"
-						onplay={() => toasts.show('Lecture disponible en M5', { detail: 'Le lecteur arrive avec la prochaine version.' })}
+						onplay={playHero}
 					/>
 				{/if}
 				{#if home.categories.length}

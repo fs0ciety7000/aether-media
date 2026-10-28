@@ -48,7 +48,6 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-038 Watcher fsnotify + scan périodique de secours
 - [ ] T-039 Extras (bandes-annonces, making-of) rattachés à leur film/série
 - [ ] T-03A Bibliothèques « mixed » : structure séries mal reconnue si pas à la racine
-- [ ] T-03B Sous-titres externes (.srt/.ass à côté de la vidéo) → media_streams is_external
 - [ ] T-03C API : restreindre chemins disque et endpoints d'admin quand l'auth arrive (M6)
 
 ## M3 — Métadonnées ✅
@@ -76,15 +75,20 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-056 Défilement infini testé sur une grosse bibliothèque (> 60 éléments)
 - [ ] T-057 Page personne (filmographie) au lieu de `/parcourir?personne=`
 
-## M5 — Lecture
-- [ ] T-060 Détection des capacités du navigateur
-- [ ] T-061 Moteur de décision direct / remux / transcode
-- [ ] T-062 Direct play (HTTP Range)
-- [ ] T-063 HLS fMP4 à la demande + seek + nettoyage des sessions
-- [ ] T-064 Sous-titres (→ VTT, burn-in PGS)
-- [ ] T-065 Lecteur web stylé (pistes, plein écran, raccourcis clavier)
-- [ ] T-066 Accélération matérielle (détection + options)
-- [ ] T-067 Matrice de tests de lecture (Playwright)
+## M5 — Lecture ✅
+- [x] T-060 Détection des capacités du navigateur
+- [x] T-061 Moteur de décision direct / remux / transcode
+- [x] T-062 Direct play (HTTP Range)
+- [x] T-063 HLS fMP4 à la demande + seek + nettoyage des sessions
+- [x] T-064 Sous-titres (→ VTT, burn-in PGS)
+- [x] T-065 Lecteur web stylé (pistes, plein écran, raccourcis clavier)
+- [x] T-066 Accélération matérielle (détection + options ; paramètres testés, pas de GPU dans l'environnement de dev)
+- [x] T-067 Matrice de tests de lecture (Playwright)
+- [x] T-03B Sous-titres externes
+- [ ] T-068 Cache des images clés en base (remux MKV/TS : lecture complète du fichier au 1er lancement)
+- [ ] T-069 Chapitres dans l'API et sur la barre de progression
+- [ ] T-06A Valider l'accélération matérielle sur vrai GPU (VAAPI/NVENC/QSV)
+- [ ] T-06B Mini-lecteur audio persistant
 
 ## M5b — Sources distantes
 - [ ] T-0B0 Migration `library_paths` → `library_sources` (type local | agent | sftp, config, état)
