@@ -111,7 +111,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-0E3 Serveur : agents appairés, appairage, navigation, création de partages, désappairage
 - [x] T-0E4 Sélecteur de dossiers pour les sources locales du serveur
 - [x] T-0E5 Fichiers cachés jamais exposés par l'agent (ex. ~/.ssh si un dossier personnel est partagé)
-- [ ] T-0E6 UI : parcours guidé (agents connus, découverte, code, choix des dossiers)
+- [x] T-0E6 UI : parcours guidé (agents connus, découverte, code, choix des dossiers)
 - [ ] T-0E7 Installation de l'agent en service (systemd, launchd, service Windows)
 
 ## M6 — Utilisateurs & progression ✅

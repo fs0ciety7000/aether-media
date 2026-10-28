@@ -3,13 +3,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, errorMessage } from '$lib/api/client';
-	import { libraries, scans } from '$lib/api/stores.svelte';
+	import { agents, libraries, scans } from '$lib/api/stores.svelte';
 	import type { Kind, Library, Source } from '$lib/api/types';
 	import Button from '$lib/components/Button.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import AddLibraryDialog from '$lib/components/settings/AddLibraryDialog.svelte';
+	import AgentsPanel from '$lib/components/settings/AgentsPanel.svelte';
 	import SourceDialog from '$lib/components/settings/SourceDialog.svelte';
 	import SourceRow from '$lib/components/sources/SourceRow.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -60,6 +61,7 @@
 	function sourceSaved(src: Source, created: boolean) {
 		if (!srcLib) return;
 		libraries.upsertSource(srcLib.id, src);
+		if (src.kind === 'agent') agents.refresh();
 		if (created) {
 			scans.queued(srcLib.id);
 			toasts.show(`Source « ${src.name} » ajoutée`, { detail: 'L’analyse a commencé.' });
@@ -79,6 +81,7 @@
 			await api.deleteSource(lib.id, src.id);
 			srcDeleteOpen = false;
 			libraries.removeSource(lib.id, src.id);
+			if (src.kind === 'agent') agents.refresh();
 			toasts.show(`Source « ${src.name} » supprimée`, { detail: 'Ses titres disparaîtront au prochain scan.' });
 		} catch (err) {
 			toasts.show('Suppression impossible', { detail: errorMessage(err) });
@@ -122,6 +125,7 @@
 			deleteOpen = false;
 			toasts.show(`Bibliothèque « ${lib.name} » supprimée`, { detail: 'Vos fichiers n’ont pas été touchés.' });
 			await libraries.refresh();
+			if (lib.sources.some((x) => x.kind === 'agent')) agents.refresh();
 		} catch (err) {
 			toasts.show('Suppression impossible', { detail: errorMessage(err) });
 		} finally {
@@ -133,6 +137,7 @@
 		scans.queued(lib.id);
 		toasts.show(`Bibliothèque « ${lib.name} » créée`, { detail: 'L’analyse a commencé.' });
 		await libraries.refresh();
+		if (lib.sources.some((x) => x.kind === 'agent')) agents.refresh();
 	}
 
 	function pct(lib: Library) {
@@ -215,6 +220,8 @@
 			{/each}
 		</ul>
 	{/if}
+
+	{#if libraries.loaded}<AgentsPanel {now} />{/if}
 </section>
 
 <AddLibraryDialog bind:open={addOpen} oncreated={created} />

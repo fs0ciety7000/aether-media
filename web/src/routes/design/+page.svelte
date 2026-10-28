@@ -31,6 +31,9 @@
 	import SourceKindTiles from '$lib/components/sources/SourceKindTiles.svelte';
 	import SourceRow from '$lib/components/sources/SourceRow.svelte';
 	import SourceStatusPill from '$lib/components/sources/SourceStatusPill.svelte';
+	import FolderPicker from '$lib/components/FolderPicker.svelte';
+	import Stepper from '$lib/components/Stepper.svelte';
+	import type { FolderListing } from '$lib/api/types';
 	import { emptyDraft, sourceKindInfo, testKey, type SourceDraft } from '$lib/sources';
 	import BackdropArt from '$lib/demo/BackdropArt.svelte';
 	import PosterArt from '$lib/demo/PosterArt.svelte';
@@ -144,6 +147,7 @@
 	let trustDemo = $state<SourceDraft>(trustDraft());
 	function agentDraft(): SourceDraft {
 		const d = emptyDraft('agent');
+		d.agent.mode = 'token';
 		d.agent.url = 'http://salon.local:8097';
 		d.agent.token = 'Zk3q…';
 		d.shares = ['films', 'series', 'concerts'];
@@ -152,6 +156,27 @@
 		return d;
 	}
 	let agentDemo = $state<SourceDraft>(agentDraft());
+
+	// M5c: guided agent pairing — Stepper and FolderPicker on a static tree (no API).
+	let stepDemo = $state(2);
+	const demoTree: Record<string, string[]> = {
+		'': ['/srv', '/mnt', '/home/camille'],
+		'/srv': ['media', 'backups'],
+		'/srv/media': ['Films', 'Series', 'Musique', 'Concerts'],
+		'/srv/media/Films': ['4K', 'Classiques'],
+		'/mnt': ['nas'],
+		'/mnt/nas': ['Photos', 'Videos'],
+		'/home/camille': ['Téléchargements', 'Vidéos']
+	};
+	async function demoLoad(path: string): Promise<FolderListing> {
+		await new Promise((r) => setTimeout(r, 180));
+		if (path === '/srv/backups') throw new Error('denied');
+		const names = demoTree[path] ?? [];
+		const dirs = names.map((n) => (path ? { name: n, path: `${path}/${n}` } : { name: n.split('/').pop() ?? n, path: n }));
+		const parent = path && !demoTree[''].includes(path) ? path.slice(0, path.lastIndexOf('/')) : undefined;
+		return { path, parent, dirs };
+	}
+	let demoFolder = $state('');
 </script>
 
 <svelte:head>
@@ -595,7 +620,7 @@
 		</ul>
 		<div class="m5b-grid">
 			<div class="m5b-panel panel">
-				<p class="micro m5b-cap">Agent après un test réussi</p>
+				<p class="micro m5b-cap">Agent à jeton manuel (agent.toml) après un test réussi</p>
 				<SourceForm bind:draft={agentDemo} idp="demo-agent" />
 			</div>
 			<div class="m5b-panel panel">
@@ -670,6 +695,38 @@
 				{#snippet art()}{@const f = films[4]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
 			</PosterCard>
 			<CollectionCard collection={{ id: 'c0', name: 'Soirées d’hiver', kind: 'manual', count: 0, images: {}, shared: true }} posters={[]} />
+		</div>
+	</section>
+
+	<!-- M5c : agents appairés, sélecteurs de dossiers -->
+	<section class="block" aria-labelledby="s-m5c">
+		<div class="heading">
+			<span class="num tabular">14</span>
+			<h2 id="s-m5c">Agents et dossiers (M5c)</h2>
+			<p>Parcours guidé pour ajouter une machine sans agent.toml : agent, code d’appairage, dossier, vérification. Deux composants génériques : l’indicateur d’étapes et l’explorateur de dossiers (dossiers seulement, fil d’Ariane cliquable).</p>
+		</div>
+		<div class="m5b-panel panel">
+			<p class="micro m5b-cap">Stepper : étapes terminées, en cours, à venir (« Code » sautée pour un agent déjà appairé)</p>
+			<Stepper
+				steps={[{ label: 'Agent', onclick: () => (stepDemo = 0) }, { label: 'Code', skipped: stepDemo > 1 }, { label: 'Dossier', onclick: () => (stepDemo = 2) }, { label: 'Vérification' }]}
+				current={stepDemo}
+				label="Exemple d’étapes"
+			/>
+			<div class="row-inline">
+				{#each [0, 1, 2, 3] as i (i)}<Button variant={stepDemo === i ? 'primary' : 'tertiary'} onclick={() => (stepDemo = i)}>Étape {i + 1}</Button>{/each}
+			</div>
+		</div>
+		<div class="m5b-grid">
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">FolderPicker (« backups » simule un dossier refusé)</p>
+				<FolderPicker load={demoLoad} bind:value={demoFolder} label="Exemple d’explorateur" errorText={() => 'Dossier hors des emplacements autorisés sur cette machine.'}>
+					{#snippet footer(path)}
+						<p class="micro m5b-note">{path ? `Choisi : ${path}` : 'Ouvrez un emplacement.'}</p>
+						<Button variant="primary" icon="folder" disabled={!path} onclick={() => toasts.show('Dossier partagé', { detail: path })}>Partager ce dossier</Button>
+					{/snippet}
+				</FolderPicker>
+			</div>
+			<AgentHelp open />
 		</div>
 	</section>
 

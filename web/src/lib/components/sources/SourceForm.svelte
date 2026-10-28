@@ -13,10 +13,14 @@
 		type DraftErrors,
 		type SourceDraft
 	} from '$lib/sources';
+	import { agents } from '$lib/api/stores.svelte';
 	import Button from '../Button.svelte';
+	import FolderPicker from '../FolderPicker.svelte';
 	import Icon from '../Icon.svelte';
 	import AgentHelp from './AgentHelp.svelte';
+	import AgentWizard from './AgentWizard.svelte';
 	import SecretField from './SecretField.svelte';
+	import SourceStatusPill from './SourceStatusPill.svelte';
 
 	interface Props {
 		draft: SourceDraft;
@@ -41,10 +45,39 @@
 	onDestroy(() => ctrl?.abort());
 
 	const tested = $derived(isTested(draft));
+	/** M5c: new agent source → guided pairing; editing a paired one → summary. */
+	const paired = $derived(draft.kind === 'agent' && draft.agent.mode === 'paired');
+	const guided = $derived(paired && !editing);
+	let wizard = $state<AgentWizard>();
+	const pairedAgent = $derived(paired ? agents.get(draft.agent.agentId) : undefined);
+	$effect(() => {
+		if (paired && editing) agents.ensure();
+	});
+
+	// Local folder picker (GET /fs/browse).
+	let pickerOpen = $state(false);
+	let picked = $state('');
+	const browseServer = (path: string, signal: AbortSignal) => api.fsBrowse(path, signal);
+	function browseError(err: unknown): string {
+		const e = err as { status?: number };
+		if (e?.status === 403) return 'Dossier hors des emplacements autorisés sur le serveur.';
+		if (e?.status === 404) return 'Dossier introuvable ou illisible par le serveur.';
+		return errorMessage(err);
+	}
+	async function usePicked(path: string) {
+		if (!path) return;
+		draft.root = path;
+		clear('root');
+		pickerOpen = false;
+		await tick();
+		document.getElementById(id('root'))?.focus();
+	}
+	/** Picker starts at the typed folder when it looks absolute. */
+	const pickerStart = $derived(draft.kind === 'local' && draft.root.trim().startsWith('/') ? draft.root.trim().replace(/\/+$/, '') || '/' : '');
 	const stale = $derived(!!draft.test && draft.test.key !== testKey(draft));
 	const missingSecret = $derived.by(() => {
 		if (!editing) return false;
-		if (draft.kind === 'agent') return !draft.agent.token.trim();
+		if (draft.kind === 'agent') return draft.agent.mode === 'token' && !draft.agent.token.trim();
 		if (draft.kind === 'sftp') return draft.sftp.auth === 'password' ? !draft.sftp.password : !draft.sftp.privateKey.trim();
 		return false;
 	});
@@ -62,6 +95,7 @@
 	}
 
 	export async function test() {
+		if (guided) return wizard?.verify();
 		if (testing) return;
 		const e = validateDraft(draft, { editing, forTest: true });
 		// Testing needs the secret even when editing.
@@ -87,7 +121,7 @@
 			// connection itself is fine, the user picks a share from the list.
 			if (input.agent && !res.ok && res.agent && !res.agent.shares?.includes(input.agent.share)) res = { ...res, ok: true, error: undefined };
 			draft.test = { ...res, key };
-			if (res.ok && draft.kind === 'agent') {
+			if (res.ok && draft.kind === 'agent' && draft.agent.mode === 'token') {
 				const shares = res.agent?.shares ?? [];
 				draft.shares = shares;
 				if (!shares.includes(draft.agent.share)) draft.agent.share = shares.length === 1 ? shares[0] : '';
@@ -173,10 +207,60 @@
 			/>
 			<p class="f-hint" id={id('root-hint')}>Chemin absolu, tel que le serveur le voit (dans Docker : le chemin dans le conteneur).</p>
 			{@render err('root')}
+			<div>
+				<Button variant="tertiary" icon="folder" onclick={() => (pickerOpen = !pickerOpen)} aria-expanded={pickerOpen} aria-controls={id('picker')}>
+					{pickerOpen ? 'Fermer l’explorateur' : 'Parcourir les dossiers du serveur'}
+				</Button>
+			</div>
 		</div>
+		{#if pickerOpen}
+			<div id={id('picker')}>
+				<FolderPicker load={browseServer} bind:value={picked} initialPath={pickerStart} label="Dossiers du serveur" rootsLabel="Serveur" errorText={browseError}>
+					{#snippet footer(path)}
+						<p class="chosen">{#if path}Dossier choisi : <code>{path}</code>{:else}Ouvrez l’emplacement de vos médias.{/if}</p>
+						<Button variant="primary" icon="check" disabled={!path} onclick={() => usePicked(path)}>Utiliser ce dossier</Button>
+					{/snippet}
+				</FolderPicker>
+			</div>
+		{/if}
 		{@render nameField('Par défaut : le chemin')}
 		{@render testButton('Vérifier le dossier')}
+	{:else if guided}
+		<AgentWizard bind:this={wizard} bind:draft {idp} ontokenmode={() => ((draft.agent.mode = 'token'), (draft.test = undefined))} />
+	{:else if paired}
+		<div class="paired">
+			<span class="p-icon" aria-hidden="true"><Icon name="server" size={20} /></span>
+			<span class="p-text">
+				<strong>{pairedAgent?.name ?? original?.agent?.hostname ?? 'Agent appairé'}</strong>
+				<span>Partage « {draft.agent.share} »{pairedAgent ? ` · ${pairedAgent.url}` : ''}</span>
+			</span>
+			{#if pairedAgent}<SourceStatusPill status={pairedAgent.status} lastError={pairedAgent.lastError} lastSeen={pairedAgent.lastSeen} />{/if}
+		</div>
+		<div class="f-field">
+			<label class="f-label" for={id('root')}>Sous-dossier<span class="f-optional">{' (facultatif)'}</span></label>
+			<input
+				id={id('root')}
+				class="f-input f-mono"
+				type="text"
+				placeholder="ex. 4K   (vide = tout le partage)"
+				bind:value={draft.root}
+				oninput={() => clear('root')}
+				autocomplete="off"
+				spellcheck="false"
+				aria-invalid={!!errors.root}
+				aria-describedby={desc('root')}
+			/>
+			{@render err('root')}
+		</div>
+		{@render nameField('Par défaut : machine et partage')}
+		{@render testButton('Tester la connexion')}
 	{:else if draft.kind === 'agent'}
+		{#if !editing}
+			<p class="f-hint back-guided">
+				Jeton manuel (<code>agent.toml</code>).
+				<button type="button" class="link" onclick={() => ((draft.agent.mode = 'paired'), (draft.test = undefined))}>Revenir à l’appairage guidé</button>
+			</p>
+		{/if}
 		<div class="f-field">
 			<label class="f-label" for={id('url')}>Adresse de l’agent</label>
 			<input
@@ -325,7 +409,8 @@
 		{@render testButton('Tester la connexion')}
 	{/if}
 
-	<!-- Inline result of the last test (announced politely). -->
+	<!-- Inline result of the last test (announced politely). The guided agent flow shows its own. -->
+	{#if !guided}
 	<div class="result-slot" role="status" aria-live="polite" bind:this={resultEl}>
 		{#if requestError}
 			<div class="result bad">
@@ -378,8 +463,9 @@
 			{/if}
 		{/if}
 	</div>
+	{/if}
 
-	{#if draft.kind === 'agent'}
+	{#if draft.kind === 'agent' && !paired}
 		{#if draft.shares.length}
 			<fieldset class="f-field" aria-describedby={errors.share ? id('share-err') : undefined}>
 				<legend>Partage</legend>
@@ -414,7 +500,7 @@
 			{@render err('share')}
 			<p class="f-hint">Testez la connexion pour choisir parmi les partages déclarés dans <code>agent.toml</code>.</p>
 		{/if}
-		<AgentHelp />
+		<AgentHelp legacy />
 	{/if}
 </div>
 
@@ -422,6 +508,11 @@
 	.form {
 		display: grid;
 		gap: var(--sp-4);
+		min-width: 0;
+	}
+
+	.form > :global(*) {
+		min-width: 0;
 	}
 
 	.host-row {
@@ -440,6 +531,69 @@
 
 	.f-hint code {
 		font-size: 0.7rem;
+	}
+
+	.paired {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-3);
+		padding: var(--sp-3);
+		border-radius: var(--r-lg);
+		background: var(--tint), var(--surface);
+		box-shadow: inset 0 0 0 1px var(--line);
+		min-width: 0;
+	}
+
+	.p-icon {
+		display: grid;
+		place-items: center;
+		flex: none;
+		width: 40px;
+		height: 40px;
+		border-radius: var(--r-md);
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+	}
+
+	.p-text {
+		display: grid;
+		flex: 1;
+		min-width: 0;
+		font-size: var(--fs-micro);
+		color: var(--text-muted);
+	}
+
+	.p-text > * {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.p-text strong {
+		font-size: var(--fs-body);
+		color: var(--text);
+	}
+
+	.chosen {
+		flex: 1 1 240px;
+		min-width: 0;
+		font-size: var(--fs-small);
+		color: var(--text-muted);
+	}
+
+	.back-guided {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.link {
+		font-weight: var(--fw-bold);
+		color: var(--accent-ink);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
 	}
 
 	.test-row {

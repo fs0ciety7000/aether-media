@@ -79,7 +79,7 @@
 		current = emptyDraft(k);
 		currentErrors = {};
 		sourceHint = null;
-		go('source', '#add-library [data-source-form] input');
+		go('source', '#add-library [data-source-form] .s-head, #add-library [data-source-form] input');
 	}
 
 	function editSource(i: number) {
@@ -87,7 +87,7 @@
 		current = $state.snapshot(sources[i]) as SourceDraft;
 		currentErrors = {};
 		sourceHint = null;
-		go('source', '#add-library [data-source-form] input');
+		go('source', '#add-library [data-source-form] .s-head, #add-library [data-source-form] input');
 	}
 
 	function removeSource(i: number) {
@@ -108,7 +108,10 @@
 		if (!ready(current)) {
 			// Enter in a field of an untested source runs the test instead.
 			sourceForm?.test();
-			sourceHint = 'Testez la connexion avant d’ajouter cette source.';
+			sourceHint =
+				current.kind === 'agent' && current.agent.mode === 'paired'
+					? 'Terminez les étapes : dossier partagé puis vérification.'
+					: 'Testez la connexion avant d’ajouter cette source.';
 			return;
 		}
 		currentErrors = validateDraft(current);
@@ -287,7 +290,13 @@
 				form="add-library"
 				icon="check"
 				disabled={!currentReady}
-				title={currentReady ? undefined : current?.kind === 'agent' && isTested(current) ? 'Choisissez un partage' : 'Testez la connexion d’abord'}
+				title={currentReady
+					? undefined
+					: current?.kind === 'agent' && current.agent.mode === 'paired'
+						? 'Choisissez un dossier et attendez la vérification'
+						: current?.kind === 'agent' && isTested(current)
+							? 'Choisissez un partage'
+							: 'Testez la connexion d’abord'}
 				>{currentIndex === null ? 'Ajouter la source' : 'Mettre à jour'}</Button
 			>
 		{/if}

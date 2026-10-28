@@ -1,6 +1,10 @@
 // Typed client for /api/v1. Every call accepts an AbortSignal; errors are ApiError.
 import type {
+	Agent,
+	AgentShare,
 	AuthResult,
+	DiscoveredAgent,
+	FolderListing,
 	Candidate,
 	Collection,
 	DeviceSession,
@@ -224,6 +228,21 @@ export const api = {
 	deleteSource: (libraryId: number, sourceId: number) =>
 		request<void>(`/libraries/${libraryId}/sources/${sourceId}`, { method: 'DELETE' }),
 
+	// ——— Agents appairés, sélecteurs de dossiers (M5c) ———
+	agents: async (signal?: AbortSignal) => ((await request<Agent[]>('/agents', s(signal))) ?? []).map(normalizeAgent),
+	/** LAN broadcast: answers after ~2 s. */
+	discoverAgents: async (signal?: AbortSignal) => (await request<DiscoveredAgent[]>('/agents/discover', { method: 'POST', signal })) ?? [],
+	pairAgent: async (body: { url: string; code: string }, signal?: AbortSignal) =>
+		normalizeAgent(await request<Agent>('/agents/pair', { method: 'POST', body, signal })),
+	deleteAgent: (id: number) => request<void>(`/agents/${id}`, { method: 'DELETE' }),
+	agentBrowse: async (id: number, path = '', signal?: AbortSignal) =>
+		normalizeListing(await request<FolderListing>(`/agents/${id}/browse`, { params: { path }, signal }), path),
+	agentShares: async (id: number, signal?: AbortSignal) => (await request<AgentShare[]>(`/agents/${id}/shares`, s(signal))) ?? [],
+	addAgentShare: (id: number, body: { path: string; name?: string }) =>
+		request<AgentShare>(`/agents/${id}/shares`, { method: 'POST', body }),
+	/** Folders of the server itself (picker for local sources). */
+	fsBrowse: async (path = '', signal?: AbortSignal) => normalizeListing(await request<FolderListing>('/fs/browse', { params: { path }, signal }), path),
+
 	items: async (q: ItemQuery, signal?: AbortSignal) => {
 		// `played=false` is a real filter: query() drops false values, so send it as text.
 		const params = { ...q, played: q.played === undefined ? undefined : String(q.played) } as Params;
@@ -340,6 +359,17 @@ export const api = {
 	removeFromCollection: (id: string, itemId: number) =>
 		request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'DELETE' })
 };
+
+export function normalizeAgent(a: Agent): Agent {
+	a.status ??= 'unknown';
+	a.sources ??= 0;
+	a.name ||= a.url;
+	return a;
+}
+
+function normalizeListing(l: FolderListing | undefined, path: string): FolderListing {
+	return { path: l?.path ?? path, parent: l?.parent || undefined, dirs: l?.dirs ?? [] };
+}
 
 export function normalizeUser(u: User): User {
 	u.libraryIds ??= [];

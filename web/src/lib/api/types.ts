@@ -149,7 +149,8 @@ export interface Source {
 	status: SourceStatus;
 	lastError?: string;
 	lastSeen?: string;
-	agent?: { url: string; share: string; hostname?: string; version?: string };
+	/** M5c: `agentId` is set for sources of a paired agent (the URL then comes from the agent). */
+	agent?: { agentId?: number; url: string; share: string; hostname?: string; version?: string };
 	/** hostKey: "SHA256:…" fingerprint. */
 	sftp?: { host: string; port: number; user: string; auth: SftpAuth; hostKey: string };
 	/** Client-only: synthesised from `Library.paths` (older server) — cannot be edited or deleted. */
@@ -161,7 +162,8 @@ export interface SourceInput {
 	kind: SourceKind;
 	name?: string;
 	root: string;
-	agent?: { url: string; token: string; share: string };
+	/** Paired agent (M5c, recommended): `{ agentId, share }` · manual token: `{ url, token, share }`. */
+	agent?: { agentId: number; share: string } | { url: string; token: string; share: string };
 	sftp?: { host: string; port?: number; user: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
 }
 
@@ -169,7 +171,7 @@ export interface SourceInput {
 export interface SourcePatch {
 	name?: string;
 	root?: string;
-	agent?: { url?: string; token?: string; share?: string };
+	agent?: { agentId?: number; url?: string; token?: string; share?: string };
 	sftp?: { host?: string; port?: number; user?: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
 }
 
@@ -185,6 +187,60 @@ export interface SourceTestResult {
 export interface SourceStatusEvent {
 	id: number;
 	libraryId: number;
+	status: SourceStatus;
+	lastError?: string;
+}
+
+// ——— Agents appairés et sélecteur de dossiers (M5c) ———
+
+export interface Agent {
+	id: number;
+	uid: string;
+	name: string;
+	url: string;
+	version?: string;
+	status: SourceStatus;
+	lastError?: string;
+	lastSeen?: string;
+	/** Number of sources using this agent (unpairing is refused while > 0). */
+	sources: number;
+}
+
+/** Answer to the LAN discovery broadcast (POST /agents/discover). */
+export interface DiscoveredAgent {
+	uid: string;
+	name: string;
+	hostname: string;
+	version: string;
+	port: number;
+	tls: boolean;
+	addr: string;
+	url: string;
+	paired: boolean;
+	agentId?: number;
+}
+
+export interface Folder {
+	name: string;
+	path: string;
+}
+
+/** GET /fs/browse and GET /agents/{id}/browse. Empty `path`: the roots. */
+export interface FolderListing {
+	path: string;
+	parent?: string;
+	dirs: Folder[];
+}
+
+export interface AgentShare {
+	name: string;
+	path: string;
+	/** Created from the UI (removable); false for shares declared in agent.toml. */
+	managed?: boolean;
+}
+
+export interface AgentStatusEvent {
+	id: number;
 	status: SourceStatus;
 	lastError?: string;
 }

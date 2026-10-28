@@ -2,7 +2,7 @@
 // Each store loads lazily and keeps itself fresh from server events.
 import { api } from './client';
 import { events } from './events.svelte';
-import type { Kind, Library, ScanProgress, ServerEvent, Source, SourceStatusEvent, SystemInfo } from './types';
+import type { Agent, AgentStatusEvent, Kind, Library, ScanProgress, ServerEvent, Source, SourceStatusEvent, SystemInfo } from './types';
 
 class LibrariesStore {
 	list = $state<Library[]>([]);
@@ -74,6 +74,69 @@ class LibrariesStore {
 }
 
 export const libraries = new LibrariesStore();
+
+/** Paired agents (M5c, admin): list + live `agent.status`. */
+class AgentsStore {
+	list = $state<Agent[]>([]);
+	loaded = $state(false);
+	error = $state<unknown>(null);
+	#started = false;
+	#pending: Promise<void> | null = null;
+
+	ensure(): Promise<void> {
+		if (!this.#started) {
+			this.#started = true;
+			events.on('agent.status', (ev) => this.applyStatus(ev.data as AgentStatusEvent));
+		}
+		return this.#pending ?? (this.loaded ? Promise.resolve() : this.refresh());
+	}
+
+	refresh(): Promise<void> {
+		const p = api
+			.agents()
+			.then((list) => {
+				this.list = list;
+				this.error = null;
+			})
+			.catch((err) => {
+				this.error = err;
+			})
+			.finally(() => {
+				this.loaded = true;
+				if (this.#pending === p) this.#pending = null;
+			});
+		this.#pending = p;
+		return p;
+	}
+
+	get(id: number | undefined): Agent | undefined {
+		return id === undefined ? undefined : this.list.find((a) => a.id === id);
+	}
+
+	applyStatus(d: AgentStatusEvent | undefined) {
+		if (!d || typeof d.id !== 'number') return;
+		const a = this.get(d.id);
+		if (!a) {
+			if (this.loaded) this.refresh();
+			return;
+		}
+		a.status = d.status ?? 'unknown';
+		a.lastError = d.lastError || undefined;
+		if (a.status === 'online') a.lastSeen = new Date().toISOString();
+	}
+
+	upsert(a: Agent) {
+		const i = this.list.findIndex((x) => x.id === a.id);
+		if (i >= 0) this.list[i] = a;
+		else this.list.push(a);
+	}
+
+	remove(id: number) {
+		this.list = this.list.filter((a) => a.id !== id);
+	}
+}
+
+export const agents = new AgentsStore();
 
 class SystemStore {
 	info = $state<SystemInfo | null>(null);

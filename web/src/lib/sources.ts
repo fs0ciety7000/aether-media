@@ -17,7 +17,7 @@ export const STATUS_LABEL: Record<SourceStatus, string> = { online: 'En ligne', 
 /** Secondary line under a source name: where it lives. */
 export function sourceLocation(s: Pick<Source, 'kind' | 'root' | 'agent' | 'sftp'>): string {
 	if (s.kind === 'agent' && s.agent) {
-		const host = s.agent.hostname || hostOf(s.agent.url);
+		const host = s.agent.hostname || hostOf(s.agent.url ?? '') || 'Agent';
 		const path = [s.agent.share, s.root].filter(Boolean).join('/');
 		return `${host} · ${path || 'racine'}`;
 	}
@@ -97,12 +97,24 @@ export function sourceErrorMessage(err: string | undefined): string {
 
 // ——— Draft ———
 
+export type AgentMode = 'paired' | 'token';
+
 export interface SourceDraft {
 	kind: SourceKind;
 	name: string;
 	/** local path · agent sub-folder · sftp remote path */
 	root: string;
-	agent: { url: string; token: string; share: string };
+	agent: {
+		/** M5c: `paired` = an agent paired by code (`agentId`) · `token` = manual token (agent.toml). */
+		mode: AgentMode;
+		agentId?: number;
+		/** Display name of the paired agent, and local path of the chosen share (for labels). */
+		agentName?: string;
+		sharePath?: string;
+		url: string;
+		token: string;
+		share: string;
+	};
 	sftp: { host: string; port: string; user: string; auth: SftpAuth; password: string; privateKey: string; passphrase: string; hostKey: string };
 	/** Shares returned by the last successful agent test. */
 	shares: string[];
@@ -115,7 +127,7 @@ export function emptyDraft(kind: SourceKind): SourceDraft {
 		kind,
 		name: '',
 		root: '',
-		agent: { url: '', token: '', share: '' },
+		agent: { mode: 'paired', url: '', token: '', share: '' },
 		sftp: { host: '', port: '22', user: '', auth: 'password', password: '', privateKey: '', passphrase: '', hostKey: '' },
 		shares: []
 	};
@@ -127,7 +139,10 @@ export function draftFromSource(s: Source): SourceDraft {
 	d.name = s.name ?? '';
 	d.root = s.root ?? '';
 	if (s.agent) {
-		d.agent.url = s.agent.url;
+		d.agent.mode = s.agent.agentId ? 'paired' : 'token';
+		d.agent.agentId = s.agent.agentId || undefined;
+		d.agent.agentName = s.agent.hostname;
+		d.agent.url = s.agent.url ?? '';
 		d.agent.share = s.agent.share;
 		d.shares = s.agent.share ? [s.agent.share] : [];
 	}
@@ -150,10 +165,12 @@ export function normalizeAgentUrl(url: string): string {
 export function draftToInput(d: SourceDraft): SourceInput {
 	const name = d.name.trim() || undefined;
 	if (d.kind === 'agent') {
+		const root = d.root.trim().replace(/^\/+|\/+$/g, '');
+		if (d.agent.mode === 'paired') return { kind: 'agent', name, root, agent: { agentId: d.agent.agentId ?? 0, share: d.agent.share } };
 		return {
 			kind: 'agent',
 			name,
-			root: d.root.trim().replace(/^\/+|\/+$/g, ''),
+			root,
 			agent: { url: normalizeAgentUrl(d.agent.url), token: d.agent.token.trim(), share: d.agent.share }
 		};
 	}
@@ -181,7 +198,8 @@ export function draftToInput(d: SourceDraft): SourceInput {
  */
 export function testKey(d: SourceDraft): string {
 	const i = draftToInput(d);
-	if (i.kind === 'agent') return JSON.stringify(['agent', i.agent?.url, i.agent?.token]);
+	if (i.kind === 'agent' && d.agent.mode === 'paired') return JSON.stringify(['agent', d.agent.agentId, d.agent.share, i.root]);
+	if (i.kind === 'agent' && i.agent && 'url' in i.agent) return JSON.stringify(['agent', i.agent.url, i.agent.token]);
 	return JSON.stringify(i);
 }
 
@@ -205,6 +223,10 @@ export function validateDraft(d: SourceDraft, { editing = false, forTest = false
 	if (d.kind === 'local') {
 		if (!root) e.root = 'Indiquez le chemin du dossier.';
 		else if (!isAbsolutePath(root)) e.root = 'Le chemin doit être absolu (ex. /srv/media/films).';
+	} else if (d.kind === 'agent' && d.agent.mode === 'paired') {
+		if (!d.agent.agentId) e.share = 'Choisissez ou appairez un agent.';
+		else if (!d.agent.share) e.share = 'Choisissez le dossier à partager.';
+		if (root.split('/').includes('..')) e.root = 'Le sous-dossier ne peut pas contenir « .. ».';
 	} else if (d.kind === 'agent') {
 		const url = normalizeAgentUrl(d.agent.url);
 		if (!url) e.url = 'Indiquez l’adresse de l’agent.';
@@ -242,7 +264,12 @@ export function draftToPatch(d: SourceDraft, orig: Source): SourcePatch {
 	const p: SourcePatch = {};
 	if ((i.name ?? '') !== (orig.name ?? '') && i.name !== undefined) p.name = i.name;
 	if (i.root !== orig.root) p.root = i.root;
-	if (i.kind === 'agent' && i.agent) {
+	if (i.kind === 'agent' && i.agent && 'agentId' in i.agent) {
+		if (i.agent.share !== orig.agent?.share) p.agent = { agentId: i.agent.agentId, share: i.agent.share };
+		// The server rebuilds a PATCH from the stored settings without `agentId`: always resend it,
+		// or a simple rename would be read as a manual-token source without URL.
+		if (Object.keys(p).length) p.agent = { ...p.agent, agentId: i.agent.agentId };
+	} else if (i.kind === 'agent' && i.agent && 'url' in i.agent) {
 		const a: SourcePatch['agent'] = {};
 		if (i.agent.url !== orig.agent?.url) a.url = i.agent.url;
 		if (i.agent.share !== orig.agent?.share) a.share = i.agent.share;
@@ -267,6 +294,7 @@ export function draftToPatch(d: SourceDraft, orig: Source): SourcePatch {
 /** Editing: does the change touch the connection (so it must be tested again)? */
 export function connectionChanged(d: SourceDraft, orig: Source): boolean {
 	const p = draftToPatch(d, orig);
+	if (d.kind === 'agent' && d.agent.mode === 'paired') return !!p.agent?.share;
 	if (d.kind === 'agent') return !!(p.agent?.url || p.agent?.token);
 	if (d.kind === 'sftp') return !!p.sftp;
 	return false;
@@ -276,9 +304,74 @@ export function connectionChanged(d: SourceDraft, orig: Source): boolean {
 export function draftLabel(d: SourceDraft): { title: string; detail: string } {
 	const i = draftToInput(d);
 	if (i.kind === 'agent') {
-		const host = d.test?.agent?.hostname || hostOf(i.agent?.url ?? '');
-		return { title: i.name || `${host} · ${i.agent?.share}`, detail: `Agent · ${[i.agent?.share, i.root].filter(Boolean).join('/') || 'racine'}` };
+		const url = i.agent && 'url' in i.agent ? i.agent.url : '';
+		const host = d.agent.agentName || d.test?.agent?.hostname || hostOf(url);
+		const where = d.agent.sharePath || [i.agent?.share, i.root].filter(Boolean).join('/') || 'racine';
+		return { title: i.name || `${host} · ${i.agent?.share}`, detail: `Agent · ${where}` };
 	}
 	if (i.kind === 'sftp') return { title: i.name || `${i.sftp?.host}`, detail: `SFTP · ${i.sftp?.user}@${i.sftp?.host}:${i.root}` };
 	return { title: i.name || i.root, detail: 'Dossier local' };
+}
+
+// ——— Agents appairés (M5c) ———
+
+/** Pairing code alphabet (no ambiguous characters), shown as XXXX-XXXX. */
+export const PAIR_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** Uppercases, drops foreign characters and inserts the dash: "k7pq4x" → "K7PQ-4X". */
+export function formatPairCode(raw: string): string {
+	const c = raw
+		.toUpperCase()
+		.replace(/[^A-Z0-9]/g, '')
+		.slice(0, 8);
+	return c.length > 4 ? `${c.slice(0, 4)}-${c.slice(4)}` : c;
+}
+
+/** Problem with a typed code, or null when it looks valid. */
+export function pairCodeProblem(code: string): string | null {
+	const c = code.replace(/-/g, '');
+	if (!c) return 'Saisissez le code affiché par l’agent.';
+	if (c.length < 8) return 'Le code fait 8 caractères (XXXX-XXXX).';
+	const bad = [...c].find((ch) => !PAIR_ALPHABET.includes(ch));
+	if (bad) return `Caractère « ${bad} » impossible : le code n’utilise ni O, ni 0, ni I, ni 1, ni L.`;
+	return null;
+}
+
+/** Validated agent address ("192.168.1.20:8097" → "http://192.168.1.20:8097"), or an error. */
+export function parseAgentAddress(raw: string): { url: string } | { error: string } {
+	let u = normalizeAgentUrl(raw);
+	if (!u) return { error: 'Indiquez l’adresse de l’agent.' };
+	try {
+		const parsed = new URL(u);
+		if (!parsed.hostname || (parsed.pathname !== '/' && parsed.pathname !== '')) throw new Error();
+		if (!parsed.port && parsed.protocol === 'http:' && !/:\d+$/.test(raw.trim().replace(/\/+$/, ''))) parsed.port = '8097';
+		u = parsed.origin;
+	} catch {
+		return { error: 'Adresse invalide (ex. 192.168.1.20 ou http://nas.local:8097).' };
+	}
+	return { url: u };
+}
+
+/** Error of an agent call (pair, browse, shares) → French copy. */
+export function agentErrorMessage(err: unknown, action: 'pair' | 'browse' | 'share' = 'browse'): string {
+	if (err instanceof TypeError) return 'Le serveur Aether est injoignable.';
+	const e = err as { status?: number; code?: string; message?: string };
+	const code = e?.code ?? '';
+	const msg = (e?.message ?? '').trim();
+	if (action === 'pair') {
+		if (e?.status === 400 && msg) return sentenceCase(msg);
+		// The server answers 500 when it cannot reach the agent during pairing.
+		if (e?.status === 500 || e?.status === 502 || code === 'agent_offline')
+			return 'Agent injoignable à cette adresse : vérifiez qu’il est lancé, l’adresse et le port (8097 par défaut), et le pare-feu.';
+	}
+	if (code === 'agent_unpaired') return 'L’agent ne reconnaît plus ce serveur (appairage révoqué) : appairez-le de nouveau avec un code.';
+	if (code === 'agent_offline' || e?.status === 502) return 'Agent injoignable : vérifiez que la machine est allumée et que l’agent tourne.';
+	if (code === 'denied' || e?.status === 403) return 'Dossier hors des emplacements autorisés sur cette machine.';
+	if (code === 'not_found' || e?.status === 404) return action === 'share' ? 'Ce dossier n’existe plus.' : 'Dossier introuvable ou illisible.';
+	if (msg) return sentenceCase(msg);
+	return 'La requête a échoué.';
+}
+
+function sentenceCase(m: string): string {
+	return m.charAt(0).toUpperCase() + m.slice(1) + (/[.!?…]$/.test(m) ? '' : '.');
 }

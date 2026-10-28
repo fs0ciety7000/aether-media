@@ -9,7 +9,8 @@ export const EVENT_TYPES = [
 	'library.scan.finished',
 	'item.updated',
 	'item.image',
-	'source.status'
+	'source.status',
+	'agent.status'
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];

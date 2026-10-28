@@ -54,13 +54,14 @@
 	/** Remote: a new source must pass a test; an edit only when the connection changed. */
 	const mustTest = $derived(!!draft && draft.kind !== 'local' && (!source || connectionChanged(draft, source)));
 	const canSave = $derived(!!draft && !saving && (!mustTest || isTested(draft)) && (draft.kind !== 'agent' || !!draft.agent.share));
+	const guidedAgent = $derived(!!draft && !source && draft.kind === 'agent' && draft.agent.mode === 'paired');
 	const dirty = $derived(!!draft && !!source && Object.keys(draftToPatch(draft, source)).length > 0);
 
 	async function pick(kind: SourceKind) {
 		draft = emptyDraft(kind);
 		errors = {};
 		await tick();
-		document.querySelector<HTMLElement>('#source-dialog [data-source-form] input')?.focus();
+		document.querySelector<HTMLElement>('#source-dialog [data-source-form] .s-head, #source-dialog [data-source-form] input')?.focus();
 	}
 
 	async function back() {
@@ -76,7 +77,7 @@
 		formError = null;
 		if (mustTest && !isTested(draft)) {
 			form?.test();
-			hint = 'Testez la connexion avant d’enregistrer.';
+			hint = guidedAgent ? 'Terminez les étapes : dossier partagé puis vérification.' : 'Testez la connexion avant d’enregistrer.';
 			return;
 		}
 		errors = validateDraft(draft, { editing });
@@ -140,7 +141,7 @@
 				form="source-dialog"
 				icon={editing ? 'check' : 'plus'}
 				disabled={!canSave || (editing && !dirty)}
-				title={canSave ? undefined : 'Testez la connexion d’abord'}
+				title={canSave ? undefined : guidedAgent ? 'Choisissez un dossier et attendez la vérification' : 'Testez la connexion d’abord'}
 			>
 				{saving ? 'Enregistrement…' : editing ? 'Enregistrer' : 'Ajouter et analyser'}
 			</Button>
