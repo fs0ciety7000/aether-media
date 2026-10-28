@@ -187,7 +187,7 @@
 	$effect(() => {
 		const id = library?.id;
 		return events.debounced(
-			['library.scan.finished', 'item.updated', 'item.image'],
+			['library.scan.finished', 'item.updated', 'item.image', 'source.status'],
 			() => {
 				if (pages <= 1) load(true);
 			},

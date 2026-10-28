@@ -36,7 +36,7 @@
 		interval?: number;
 		onplay?: (item: T) => void;
 		/** When set, "Lecture" is shown unavailable with this explanation as tooltip. */
-		playHint?: string;
+		playHint?: string | ((item: T) => string | undefined);
 		secondaryLabel?: string;
 		onsecondary?: (item: T) => void;
 		class?: string;
@@ -52,6 +52,7 @@
 
 	const paused = $derived(userPaused || hovering || focusWithin || items.length < 2);
 	const current = $derived(items[index]);
+	const hint = $derived(typeof playHint === 'function' ? (current ? playHint(current) : undefined) : playHint);
 
 	// Time-based rotation; pausing freezes progress exactly where it is.
 	$effect(() => {
@@ -130,9 +131,9 @@
 				size="lg"
 				icon="play"
 				iconFilled
-				aria-disabled={playHint ? 'true' : undefined}
-				title={playHint}
-				onclick={() => onplay?.(current)}>Lecture</Button
+				aria-disabled={hint ? 'true' : undefined}
+				title={hint}
+				onclick={() => !hint && onplay?.(current)}>Lecture</Button
 			>
 			<Button variant="secondary" size="lg" href={current.href} onclick={() => onsecondary?.(current)}>{secondaryLabel}</Button>
 		</div>

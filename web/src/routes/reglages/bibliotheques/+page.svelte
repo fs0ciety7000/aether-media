@@ -4,12 +4,14 @@
 	import { page } from '$app/state';
 	import { api, errorMessage } from '$lib/api/client';
 	import { libraries, scans } from '$lib/api/stores.svelte';
-	import type { Kind, Library } from '$lib/api/types';
+	import type { Kind, Library, Source } from '$lib/api/types';
 	import Button from '$lib/components/Button.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import AddLibraryDialog from '$lib/components/settings/AddLibraryDialog.svelte';
+	import SourceDialog from '$lib/components/settings/SourceDialog.svelte';
+	import SourceRow from '$lib/components/sources/SourceRow.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import { formatDate, plural } from '$lib/format';
 	import { KIND_LABEL, libraryKindInfo } from '$lib/media';
@@ -20,16 +22,74 @@
 	let deleteOpen = $state(false);
 	let deleting = $state(false);
 
+	// Sources (M5b)
+	let srcLib = $state<Library | null>(null);
+	let srcEdit = $state<Source | null>(null);
+	let srcOpen = $state(false);
+	let srcDelete = $state<{ lib: Library; src: Source } | null>(null);
+	let srcDeleteOpen = $state(false);
+	let srcDeleting = $state(false);
+	/** Clock for "vue il y a…" (relative times stay fresh). */
+	let now = $state(Date.now());
+
 	onMount(() => {
 		libraries.ensure();
 		scans.ensure();
+		const clock = setInterval(() => (now = Date.now()), 30_000);
 		if (page.url.searchParams.has('ajouter')) {
 			addOpen = true;
 			const url = new URL(page.url);
 			url.searchParams.delete('ajouter');
 			goto(url, { replaceState: true, keepFocus: true, noScroll: true });
 		}
+		return () => clearInterval(clock);
 	});
+
+	function addSource(lib: Library) {
+		srcLib = lib;
+		srcEdit = null;
+		srcOpen = true;
+	}
+
+	function editSource(lib: Library, src: Source) {
+		srcLib = lib;
+		srcEdit = src;
+		srcOpen = true;
+	}
+
+	function sourceSaved(src: Source, created: boolean) {
+		if (!srcLib) return;
+		libraries.upsertSource(srcLib.id, src);
+		if (created) {
+			scans.queued(srcLib.id);
+			toasts.show(`Source « ${src.name} » ajoutée`, { detail: 'L’analyse a commencé.' });
+		} else toasts.show(`Source « ${src.name} » mise à jour`);
+	}
+
+	function askDeleteSource(lib: Library, src: Source) {
+		srcDelete = { lib, src };
+		srcDeleteOpen = true;
+	}
+
+	async function confirmDeleteSource() {
+		if (!srcDelete) return;
+		const { lib, src } = srcDelete;
+		srcDeleting = true;
+		try {
+			await api.deleteSource(lib.id, src.id);
+			srcDeleteOpen = false;
+			libraries.removeSource(lib.id, src.id);
+			toasts.show(`Source « ${src.name} » supprimée`, { detail: 'Ses titres disparaîtront au prochain scan.' });
+		} catch (err) {
+			toasts.show('Suppression impossible', { detail: errorMessage(err) });
+		} finally {
+			srcDeleting = false;
+		}
+	}
+
+	function offlineCount(lib: Library) {
+		return lib.sources.filter((s) => s.status === 'offline').length;
+	}
 
 	const ORDER: Kind[] = ['movie', 'series', 'season', 'episode', 'artist', 'album', 'track'];
 
@@ -91,7 +151,7 @@
 		<div>
 			<p class="micro eyebrow">Réglages</p>
 			<h1>Bibliothèques</h1>
-			<p class="lead">Les dossiers qu’Aether analyse et surveille. Supprimer une bibliothèque ne supprime aucun fichier.</p>
+			<p class="lead">Les sources qu’Aether analyse et surveille : dossiers du serveur, machines avec l’agent Aether, seedbox SFTP. Supprimer une bibliothèque ne supprime aucun fichier.</p>
 		</div>
 		<Button variant="primary" icon="plus" onclick={() => (addOpen = true)}>Ajouter</Button>
 	</header>
@@ -119,7 +179,9 @@
 						<span class="icon" aria-hidden="true"><Icon name={info.icon} size={22} /></span>
 						<div class="title">
 							<h2 id="lib-{lib.id}"><a href="/bibliotheque/{lib.id}">{lib.name}</a></h2>
-							<p class="meta">{info.label} · créée le {formatDate(lib.createdAt)}</p>
+							<p class="meta">
+								{info.label} · {plural(lib.sources.length, 'source', 'sources')}{#if offlineCount(lib)}<span class="off">{' · '}{plural(offlineCount(lib), 'hors ligne', 'hors ligne')}</span>{/if} · créée le {formatDate(lib.createdAt)}
+							</p>
 						</div>
 						<div class="actions">
 							<Button icon="refresh" disabled={s?.running} onclick={() => scan(lib)} aria-label="Analyser {lib.name}">
@@ -129,9 +191,14 @@
 						</div>
 					</div>
 
-					<ul class="paths" role="list" aria-label="Dossiers">
-						{#each lib.paths as path (path)}<li><Icon name="folder" size={15} /><code>{path}</code></li>{/each}
-					</ul>
+					<div class="sources">
+						<ul class="src-list" role="list" aria-label="Sources de {lib.name}">
+							{#each lib.sources as src (src.id)}
+								<li><SourceRow source={src} {now} onedit={(s) => editSource(lib, s)} ondelete={(s) => askDeleteSource(lib, s)} /></li>
+							{/each}
+						</ul>
+						<div><Button variant="tertiary" icon="plus" onclick={() => addSource(lib)} aria-label="Ajouter une source à {lib.name}">Ajouter une source</Button></div>
+					</div>
 
 					<div class="foot">
 						{#if s?.running}
@@ -151,6 +218,15 @@
 </section>
 
 <AddLibraryDialog bind:open={addOpen} oncreated={created} />
+
+<SourceDialog bind:open={srcOpen} library={srcLib} source={srcEdit} onsaved={sourceSaved} />
+
+<ConfirmDialog bind:open={srcDeleteOpen} title="Supprimer la source ?" confirmLabel="Supprimer la source" danger busy={srcDeleting} onconfirm={confirmDeleteSource}>
+	<p>
+		« <strong>{srcDelete?.src.name}</strong> » sera retirée de « {srcDelete?.lib.name} ». Les titres provenant de cette source
+		disparaîtront de la bibliothèque au prochain scan. Les fichiers eux-mêmes ne sont pas modifiés.
+	</p>
+</ConfirmDialog>
 
 <ConfirmDialog bind:open={deleteOpen} title="Supprimer la bibliothèque ?" confirmLabel="Supprimer" danger busy={deleting} onconfirm={confirmDelete}>
 	<p>
@@ -235,26 +311,18 @@
 		gap: var(--sp-2);
 	}
 
-	.paths {
+	.sources {
 		display: grid;
-		gap: 6px;
-	}
-
-	.paths li {
-		display: flex;
-		align-items: center;
 		gap: var(--sp-2);
-		min-width: 0;
-		color: var(--text-muted);
 	}
 
-	code {
-		font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-		font-size: 0.8125rem;
-		color: var(--text);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	.src-list {
+		display: grid;
+		gap: var(--sp-2);
+	}
+
+	.off {
+		color: var(--danger);
 	}
 
 	.foot {

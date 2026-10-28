@@ -102,3 +102,10 @@ export function hueFrom(text: string): number {
 	const palette = [196, 208, 222, 236, 252, 268, 286, 18, 32, 172, 184, 344];
 	return palette[h % palette.length];
 }
+
+/** M5b: false only when the server says every file is on an offline source. */
+export function isOffline(item: { available?: boolean } | undefined | null): boolean {
+	return item?.available === false;
+}
+
+export const OFFLINE_HINT = 'Source hors ligne';

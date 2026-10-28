@@ -178,8 +178,10 @@ type SourceInput = {
 - `POST /libraries` `{ name, kind, sources: SourceInput[] }` (`paths: string[]` reste accepté comme raccourci pour des sources locales).
 - `POST /sources/test` `SourceInput` → `{ ok: boolean, error?: string, hostKey?: string, agent?: { hostname, version, shares: string[] } }`
   - SFTP : sans `hostKey`, la connexion renvoie l'empreinte de l'hôte (`ok: false`, `error: "host_key_unknown"`, `hostKey`) que l'utilisateur confirme ; elle est ensuite exigée (protection contre l'usurpation).
+  - Agent avec `share: ""` : connexion seule, `{ ok: true, agent: { …, shares } }` pour proposer la liste des partages.
+- `POST /libraries/{id}/sources/{sid}/test` → `{ ok, error? }` : teste une source enregistrée avec ses identifiants stockés (met aussi son état à jour).
 - `POST /libraries/{id}/sources` `SourceInput` → `201 Source` (scan lancé)
-- `PATCH /libraries/{id}/sources/{sid}` `Partial<SourceInput>` → `Source` (ex. nouveau jeton / mot de passe)
+- `PATCH /libraries/{id}/sources/{sid}` `Partial<SourceInput>` → `Source` (ex. nouveau jeton / mot de passe ; les objets `agent`/`sftp` peuvent être partiels, secrets absents = inchangés). La connexion n'est re-testée que si la cible change (dossier, URL, hôte, identifiants) : renommer une source hors ligne reste possible.
 - `DELETE /libraries/{id}/sources/{sid}` → 204 (les éléments de cette source disparaissent au prochain scan)
 - `Item.available` : `false` quand tous les fichiers de l'élément sont sur des sources hors ligne (affichage grisé, lecture désactivée).
 - SSE : `source.status` `{ id, libraryId, status, lastError? }`.

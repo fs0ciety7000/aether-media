@@ -64,3 +64,20 @@ export function formatDate(iso: string | undefined | null): string | undefined {
 export function plural(n: number, one: string, many: string): string {
 	return `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
 }
+
+const RTF = typeof Intl !== 'undefined' ? new Intl.RelativeTimeFormat('fr-FR', { numeric: 'auto' }) : null;
+
+/** "il y a 5 minutes", "hier"… (undefined when the date is missing or invalid). */
+export function formatRelative(iso: string | undefined | null, now = Date.now()): string | undefined {
+	if (!iso) return undefined;
+	const t = new Date(iso).getTime();
+	if (Number.isNaN(t)) return undefined;
+	const sec = Math.round((t - now) / 1000);
+	const abs = Math.abs(sec);
+	if (abs < 45) return 'à l’instant';
+	if (!RTF) return formatDate(iso);
+	if (abs < 3600) return RTF.format(Math.round(sec / 60), 'minute');
+	if (abs < 86400) return RTF.format(Math.round(sec / 3600), 'hour');
+	if (abs < 86400 * 30) return RTF.format(Math.round(sec / 86400), 'day');
+	return formatDate(iso);
+}

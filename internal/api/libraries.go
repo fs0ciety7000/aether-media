@@ -454,3 +454,12 @@ func (s *Server) internalError(w http.ResponseWriter, err error) {
 	s.log.Error("api", "err", err)
 	writeError(w, http.StatusInternalServerError, "internal", "erreur interne")
 }
+
+// testStoredSource: POST /api/v1/libraries/{id}/sources/{sid}/test
+func (s *Server) testStoredSource(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.loadSource(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, s.Sources.TestStored(r.Context(), src))
+}

@@ -2,11 +2,12 @@
 	import { firstImage } from '$lib/api/images';
 	import type { Item } from '$lib/api/types';
 	import { formatDate, formatRuntime, metaLine } from '$lib/format';
-	import { episodeCode } from '$lib/media';
+	import { episodeCode, isOffline, OFFLINE_HINT } from '$lib/media';
 	import { resumeFor } from '$lib/player/resume';
 	import { playerHref } from '$lib/player/target';
 	import Artwork from '../Artwork.svelte';
 	import Icon from '../Icon.svelte';
+	import OfflineBadge from '../OfflineBadge.svelte';
 	import Skeleton from '../Skeleton.svelte';
 
 	interface Props {
@@ -30,7 +31,14 @@
 		{#each episodes as ep (ep.id)}
 			{@const resume = resumeFor(ep.id)}
 			{@const code = episodeCode(ep)}
-			<li class="ep">
+			{@const off = isOffline(ep)}
+			<li class="ep" class:offline={off}>
+				{#if off}
+					<span class="thumb" title={OFFLINE_HINT}>
+						<span class="art"><Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} /></span>
+						<span class="off-badge"><OfflineBadge /></span>
+					</span>
+				{:else}
 				<a class="thumb" href={playerHref(ep.id)} aria-label="{resume ? 'Reprendre' : 'Lire'} {code ? `${code} — ` : ''}{ep.title}">
 					<Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} />
 					<span class="play" class:shown={!!resume} aria-hidden="true"><Icon name="play" size={16} filled /></span>
@@ -38,10 +46,11 @@
 						<span class="progress" aria-hidden="true"><span style:width="{Math.min(100, (resume.positionMs / resume.durationMs) * 100)}%"></span></span>
 					{/if}
 				</a>
+				{/if}
 				<a class="body" href="/item/{ep.id}">
 					<span class="top">
 						<span class="num tabular">{ep.indexNumber ?? '–'}</span>
-						<span class="title">{ep.title}</span>
+						<span class="title">{ep.title}{#if off}<span class="visually-hidden"> (hors ligne)</span>{/if}</span>
 						<span class="dur tabular">{formatRuntime(ep.runtimeMs) ?? ''}</span>
 					</span>
 					{#if ep.airDate || ep.premiereDate}<span class="date">{metaLine(formatDate(ep.airDate ?? ep.premiereDate))}</span>{/if}
@@ -101,6 +110,22 @@
 	.thumb:focus-visible .play,
 	.play.shown {
 		opacity: 1;
+	}
+
+	.offline .art {
+		display: block;
+		opacity: 0.4;
+		filter: grayscale(0.7);
+	}
+
+	.offline .title {
+		color: var(--text-muted);
+	}
+
+	.off-badge {
+		position: absolute;
+		top: 6px;
+		left: 6px;
 	}
 
 	.progress {

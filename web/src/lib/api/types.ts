@@ -48,6 +48,8 @@ export interface Item {
 	/** Seasons of a series, episodes of a season, albums, tracks. */
 	childCount?: number;
 	video?: { resolution: Resolution; hdr?: string };
+	/** M5b: false when every file of the item sits on offline sources (greyed, playback disabled). Missing = available. */
+	available?: boolean;
 }
 
 export interface Person {
@@ -112,9 +114,68 @@ export interface Library {
 	id: number;
 	name: string;
 	kind: LibraryKind;
+	/** Paths of the local sources (kept for older clients). */
 	paths: string[];
 	counts: Record<string, number>;
 	createdAt: string;
+	/** M5b. Normalised by the client: derived from `paths` on servers that predate sources. */
+	sources: Source[];
+}
+
+// ——— Sources (M5b) ———
+
+export type SourceKind = 'local' | 'agent' | 'sftp';
+export type SourceStatus = 'online' | 'offline' | 'unknown';
+export type SftpAuth = 'password' | 'key';
+
+export interface Source {
+	id: number;
+	kind: SourceKind;
+	/** Display label (server default: host + folder). */
+	name: string;
+	/** local: absolute path · agent: sub-folder of the share ("" = root) · sftp: absolute remote path. */
+	root: string;
+	status: SourceStatus;
+	lastError?: string;
+	lastSeen?: string;
+	agent?: { url: string; share: string; hostname?: string; version?: string };
+	/** hostKey: "SHA256:…" fingerprint. */
+	sftp?: { host: string; port: number; user: string; auth: SftpAuth; hostKey: string };
+	/** Client-only: synthesised from `Library.paths` (older server) — cannot be edited or deleted. */
+	derived?: boolean;
+}
+
+/** Secrets (token, password, private key) are write-only: never returned by the API. */
+export interface SourceInput {
+	kind: SourceKind;
+	name?: string;
+	root: string;
+	agent?: { url: string; token: string; share: string };
+	sftp?: { host: string; port?: number; user: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
+}
+
+/** PATCH body: omitted secrets stay unchanged on the server. */
+export interface SourcePatch {
+	name?: string;
+	root?: string;
+	agent?: { url?: string; token?: string; share?: string };
+	sftp?: { host?: string; port?: number; user?: string; password?: string; privateKey?: string; passphrase?: string; hostKey?: string };
+}
+
+export interface SourceTestResult {
+	ok: boolean;
+	/** Machine code ("host_key_unknown", …) or a message. */
+	error?: string;
+	/** SFTP: fingerprint to confirm ("SHA256:…"). */
+	hostKey?: string;
+	agent?: { hostname: string; version: string; shares: string[] };
+}
+
+export interface SourceStatusEvent {
+	id: number;
+	libraryId: number;
+	status: SourceStatus;
+	lastError?: string;
 }
 
 export interface SystemInfo {

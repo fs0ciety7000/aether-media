@@ -2,7 +2,7 @@
 	// Card for any API item: 2:3 poster for films/series, square cover for albums, round for artists.
 	import { firstImage } from '$lib/api/images';
 	import type { Item } from '$lib/api/types';
-	import { KIND_ICON, KIND_LABEL, itemHref } from '$lib/media';
+	import { KIND_ICON, KIND_LABEL, isOffline, itemHref } from '$lib/media';
 	import { metaLine, plural } from '$lib/format';
 	import PosterCard from './PosterCard.svelte';
 
@@ -35,5 +35,6 @@
 	ratio={square ? '1 / 1' : '2 / 3'}
 	round={item.kind === 'artist'}
 	icon={KIND_ICON[item.kind]}
+	offline={isOffline(item)}
 	{sizes}
 />

@@ -66,6 +66,7 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/v1/libraries/{id}/sources", s.addSource)
 	mux.HandleFunc("PATCH /api/v1/libraries/{id}/sources/{sid}", s.patchSource)
 	mux.HandleFunc("DELETE /api/v1/libraries/{id}/sources/{sid}", s.deleteSource)
+	mux.HandleFunc("POST /api/v1/libraries/{id}/sources/{sid}/test", s.testStoredSource)
 	mux.HandleFunc("POST /api/v1/sources/test", s.testSource)
 	mux.HandleFunc("GET /internal/vfs/{id}/{exp}/{sig}/{path...}", s.vfsProxy)
 	mux.HandleFunc("GET /api/v1/items", s.listItems)

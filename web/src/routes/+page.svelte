@@ -19,7 +19,7 @@
 	import Row from '$lib/components/Row.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import { formatClock, formatRuntime, metaLine } from '$lib/format';
-	import { episodeCode, KIND_LABEL } from '$lib/media';
+	import { episodeCode, isOffline, KIND_LABEL, OFFLINE_HINT } from '$lib/media';
 	import { toasts } from '$lib/toast.svelte';
 
 	let home = $state<HomeData | null>(null);
@@ -43,7 +43,7 @@
 	onMount(() => {
 		load();
 		// New items or artwork: refresh quietly once the burst is over.
-		return events.debounced(['library.scan.finished', 'item.updated', 'item.image'], () => load(true), 1500);
+		return events.debounced(['library.scan.finished', 'item.updated', 'item.image', 'source.status'], () => load(true), 1500);
 	});
 
 	async function playHero(entry: { item: Item }) {
@@ -67,7 +67,7 @@
 			item: it,
 			id: String(it.id),
 			title: it.title,
-			tags: [label(it), it.video?.resolution, it.video?.hdr].filter(Boolean) as string[],
+			tags: [label(it), it.video?.resolution, it.video?.hdr, isOffline(it) ? 'Hors ligne' : undefined].filter(Boolean) as string[],
 			badge: i === 0 ? 'Nouveauté' : undefined,
 			meta: metaLine(it.year, formatRuntime(it.runtimeMs), it.officialRating),
 			synopsis: it.tagline && !it.overview ? it.tagline : it.overview,
@@ -120,6 +120,7 @@
 						items={heroItems}
 						backdrop={posterFallback}
 						onplay={playHero}
+						playHint={(e) => (isOffline(e.item) ? OFFLINE_HINT : undefined)}
 					/>
 				{/if}
 				{#if home.categories.length}

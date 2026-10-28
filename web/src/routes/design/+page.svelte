@@ -23,7 +23,15 @@
 	import Menu from '$lib/components/Menu.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import TitleArt from '$lib/components/TitleArt.svelte';
-	import type { Image } from '$lib/api/types';
+	import type { Image, Source } from '$lib/api/types';
+	import OfflineBadge from '$lib/components/OfflineBadge.svelte';
+	import AgentHelp from '$lib/components/sources/AgentHelp.svelte';
+	import SecretField from '$lib/components/sources/SecretField.svelte';
+	import SourceForm from '$lib/components/sources/SourceForm.svelte';
+	import SourceKindTiles from '$lib/components/sources/SourceKindTiles.svelte';
+	import SourceRow from '$lib/components/sources/SourceRow.svelte';
+	import SourceStatusPill from '$lib/components/sources/SourceStatusPill.svelte';
+	import { emptyDraft, sourceKindInfo, testKey, type SourceDraft } from '$lib/sources';
 	import BackdropArt from '$lib/demo/BackdropArt.svelte';
 	import PosterArt from '$lib/demo/PosterArt.svelte';
 	import { currentUser, dominant, films, genres } from '$lib/demo/data';
@@ -107,6 +115,36 @@
 	const blurOnly: Image = { url: '', blurhash: 'T74of_t7M{X=M{j@XUt8ogbct7of', dominant: '#233953', width: 600, height: 900 };
 	let sortValue = $state('title');
 	let dialogOpen = $state(false);
+
+	// M5b sources: static examples (no API).
+	const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+	const demoSources: Source[] = [
+		{ id: 1, kind: 'local', name: '/srv/media/films', root: '/srv/media/films', status: 'online', lastSeen: ago(0) },
+		{ id: 2, kind: 'agent', name: 'Salon · films', root: '4K', status: 'online', lastSeen: ago(1), agent: { url: 'http://salon.local:8097', share: 'films', hostname: 'salon', version: '0.6.0' } },
+		{ id: 3, kind: 'sftp', name: 'Seedbox', root: '/home/moi/downloads', status: 'offline', lastError: 'timeout', lastSeen: ago(42), sftp: { host: 'sb.example.net', port: 22, user: 'moi', auth: 'key', hostKey: 'SHA256:3f9K…' } }
+	];
+	let secretDemo = $state('s3cr3t-jeton');
+	let pickedKind = $state<string | null>(null);
+	function trustDraft(): SourceDraft {
+		const d = emptyDraft('sftp');
+		d.sftp.host = 'sb.example.net';
+		d.sftp.user = 'moi';
+		d.root = '/home/moi/downloads';
+		d.sftp.password = 'secret';
+		d.test = { ok: false, error: 'host_key_unknown', hostKey: 'SHA256:p2cIu6X0Qa+9u0Zf1kHq7lYgq8JxV3mWbQyQe4mJt2c', key: testKey(d) };
+		return d;
+	}
+	let trustDemo = $state<SourceDraft>(trustDraft());
+	function agentDraft(): SourceDraft {
+		const d = emptyDraft('agent');
+		d.agent.url = 'http://salon.local:8097';
+		d.agent.token = 'Zk3q…';
+		d.shares = ['films', 'series', 'concerts'];
+		d.agent.share = 'films';
+		d.test = { ok: true, agent: { hostname: 'salon', version: '0.6.0', shares: d.shares }, key: testKey(d) };
+		return d;
+	}
+	let agentDemo = $state<SourceDraft>(agentDraft());
 </script>
 
 <svelte:head>
@@ -530,6 +568,49 @@
 		</Dialog>
 	</section>
 
+	<!-- M5b : sources -->
+	<section class="block" aria-labelledby="s-sources">
+		<div class="heading">
+			<span class="num tabular">12</span>
+			<h2 id="s-sources">Sources (M5b)</h2>
+			<p>Une bibliothèque regroupe des sources : dossier local, Agent Aether, SFTP. Tuiles de choix navigables au clavier (Tab, flèches), pastilles d’état et titres hors ligne grisés.</p>
+		</div>
+		<SourceKindTiles onpick={(k) => (pickedKind = sourceKindInfo(k).label)} demo="agent" />
+		{#if pickedKind}<p class="micro m5b-note" role="status">Choisi : {pickedKind}</p>{/if}
+		<div class="row-inline">
+			<SourceStatusPill status="online" lastSeen={ago(0)} />
+			<SourceStatusPill status="offline" lastError="connection_refused" lastSeen={ago(12)} />
+			<SourceStatusPill status="unknown" />
+			<OfflineBadge variant="surface" />
+		</div>
+		<ul class="m5b-sources" role="list">
+			{#each demoSources as src (src.id)}<li><SourceRow source={src} onedit={() => toasts.show(`Modifier « ${src.name} »`)} ondelete={() => toasts.show(`Supprimer « ${src.name} »`)} /></li>{/each}
+		</ul>
+		<div class="m5b-grid">
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">Agent après un test réussi</p>
+				<SourceForm bind:draft={agentDemo} idp="demo-agent" />
+			</div>
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">SFTP : empreinte à confirmer</p>
+				<SourceForm bind:draft={trustDemo} idp="demo-sftp" />
+			</div>
+		</div>
+		<div class="m5b-grid">
+			<div><SecretField id="demo-secret" label="Jeton d’appairage" bind:value={secretDemo} hint="Champ secret : masqué, bouton Afficher / Masquer." /></div>
+			<AgentHelp />
+		</div>
+		<div class="m5b-cards">
+			<PosterCard title={films[0].title} year={films[0].year} color={dominant(films[0].hue, films[0].hue2)} href="/design">
+				{#snippet art()}{@const f = films[0]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
+			</PosterCard>
+			<PosterCard title={films[1].title} year={films[1].year} color={dominant(films[1].hue, films[1].hue2)} href="/design" offline>
+				{#snippet art()}{@const f = films[1]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
+			</PosterCard>
+			<Button variant="primary" icon="play" iconFilled aria-disabled="true" title="Source hors ligne">Lecture</Button>
+		</div>
+	</section>
+
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
@@ -553,6 +634,47 @@
 </div>
 
 <style>
+	.m5b-sources {
+		display: grid;
+		gap: var(--sp-2);
+		max-width: 820px;
+	}
+
+	.m5b-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--gap);
+		align-items: start;
+	}
+
+	.m5b-panel {
+		display: grid;
+		gap: var(--sp-3);
+		padding: var(--sp-5);
+	}
+
+	.m5b-cap,
+	.m5b-note {
+		color: var(--text-muted);
+	}
+
+	.m5b-cards {
+		display: grid;
+		grid-template-columns: repeat(2, 160px) auto;
+		align-items: center;
+		gap: var(--gap);
+	}
+
+	@media (max-width: 767px) {
+		.m5b-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.m5b-cards {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
 	.m4-art {
 		display: flex;
 		flex-wrap: wrap;

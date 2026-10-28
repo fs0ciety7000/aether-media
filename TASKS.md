@@ -90,16 +90,20 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-06A Valider l'accélération matérielle sur vrai GPU (VAAPI/NVENC/QSV)
 - [ ] T-06B Mini-lecteur audio persistant
 
-## M5b — Sources distantes
-- [ ] T-0B0 Migration `library_paths` → `library_sources` (type local | agent | sftp, config, état)
-- [ ] T-0B1 Abstraction VFS (Walk/Stat/Open avec Range, URL d'entrée FFmpeg) ; scanner, probe, lecture directe branchés dessus
-- [ ] T-0B2 Proxy HTTP interne (Range) pour exposer les sources non locales à FFmpeg/ffprobe
-- [ ] T-0B3 Agent Aether : `aether agent`, appairage par jeton, API fichiers, probe sur place
+## M5b — Sources distantes ✅
+- [x] T-0B0 Migration `library_paths` → `library_sources` (type local | agent | sftp, config, état)
+- [x] T-0B1 Abstraction VFS (Walk/Stat/Open avec Range, URL d'entrée FFmpeg) ; scanner, probe, lecture directe branchés dessus
+- [x] T-0B2 Proxy HTTP interne (Range) pour exposer les sources non locales à FFmpeg/ffprobe
+- [x] T-0B3 Agent Aether : `aether agent`, appairage par jeton, API fichiers, probe sur place
 - [ ] T-0B4 Agent : transcodage/remux près des fichiers, relayé par le serveur principal
-- [ ] T-0B5 Agent : notification des changements (watcher local → serveur)
-- [ ] T-0B6 Source SFTP (clé / mot de passe, reconnexion, lecture par plages)
-- [ ] T-0B7 UI : ajout de sources par type, test de connexion, état en ligne/hors ligne
-- [ ] T-0B8 Tests de bout en bout : bibliothèque mixant local + agent + SFTP
+- [x] T-0B5 Agent : notification des changements (watcher local → serveur)
+- [x] T-0B6 Source SFTP (clé / mot de passe, reconnexion, lecture par plages)
+- [x] T-0B7 UI : ajout de sources par type, test de connexion, état en ligne/hors ligne
+- [x] T-0B8 Tests de bout en bout : bibliothèque mixant local + agent + SFTP
+- [ ] T-0B9 Codes d'erreur stables pour les tests de connexion (aujourd'hui texte libre traduit côté UI)
+- [ ] T-0BA SFTP : parcours parallèle des gros arbres, détection des changements (polling léger)
+- [ ] T-0BB Agent : HTTPS par défaut (certificat auto-signé + empreinte épinglée)
+- [ ] T-0BC Proxy interne : supporter un serveur lié à une IP non-loopback
 
 ## M6 — Utilisateurs & progression
 - [ ] T-070 Comptes, argon2id, sessions, rôles

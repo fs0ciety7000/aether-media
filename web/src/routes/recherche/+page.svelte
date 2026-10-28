@@ -12,7 +12,7 @@
 	import SearchField from '$lib/components/SearchField.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import { formatRuntime, formatTrackTime, metaLine, plural } from '$lib/format';
-	import { episodeCode, hueFrom, itemHref, KIND_ICON } from '$lib/media';
+	import { episodeCode, hueFrom, isOffline, itemHref, KIND_ICON } from '$lib/media';
 
 	type Group = keyof SearchResults['results'];
 	const GROUPS: { key: Group; label: string }[] = [
@@ -208,7 +208,7 @@
 						{#each g.entries as e (e.key)}
 							{@const i = indexOf(e)}
 							<li>
-								<a id="res-{e.key}" class="res" class:active={i === active} href={e.href} aria-current={i === active ? 'true' : undefined} onmouseenter={() => (active = i)}>
+								<a id="res-{e.key}" class="res" class:active={i === active} class:offline={isOffline(e.item)} title={isOffline(e.item) ? 'Source hors ligne' : undefined} href={e.href} aria-current={i === active ? 'true' : undefined} onmouseenter={() => (active = i)}>
 									{#if e.person}
 										<Avatar name={e.person.name} src={e.person.image} size={48} hue={hueFrom(e.person.name)} />
 									{:else}
@@ -218,7 +218,7 @@
 									{/if}
 									<span class="text">
 										<span class="title">{e.title}</span>
-										{#if e.meta}<span class="meta">{e.meta}</span>{/if}
+										{#if e.meta || isOffline(e.item)}<span class="meta">{[e.meta, isOffline(e.item) ? 'Hors ligne' : ''].filter(Boolean).join(' · ')}</span>{/if}
 									</span>
 								</a>
 							</li>
@@ -231,6 +231,15 @@
 </section>
 
 <style>
+	.res.offline .thumb {
+		opacity: 0.4;
+		filter: grayscale(0.7);
+	}
+
+	.res.offline .title {
+		color: var(--text-muted);
+	}
+
 	.search {
 		display: grid;
 		gap: var(--sp-5);

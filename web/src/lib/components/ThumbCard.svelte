@@ -4,6 +4,7 @@
 	import Artwork from './Artwork.svelte';
 	import Icon from './Icon.svelte';
 	import ProgressLine from './ProgressLine.svelte';
+	import OfflineBadge from './OfflineBadge.svelte';
 
 	interface Props {
 		title: string;
@@ -20,18 +21,21 @@
 		progress?: number;
 		/** Show the play affordance on hover. */
 		playable?: boolean;
+		/** Files on an offline source: greyed, badge, no play affordance. */
+		offline?: boolean;
 		class?: string;
 		/** Forces a visual state in the design gallery. */
 		'data-demo'?: string;
 	}
 
-	let { title, eyebrow, detail, href, image, src, sizes = '(max-width: 767px) 80vw, 300px', color, art, progress, playable = true, class: className, 'data-demo': demo }: Props = $props();
+	let { title, eyebrow, detail, href, image, src, sizes = '(max-width: 767px) 80vw, 300px', color, art, progress, playable = true, offline = false, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
-<svelte:element this={href ? 'a' : 'div'} {href} class={['thumb-card', className]} data-demo={demo}>
+<svelte:element this={href ? 'a' : 'div'} {href} class={['thumb-card', className, { offline }]} data-demo={demo} title={offline ? 'Source hors ligne' : undefined}>
 	<div class="frame">
-		<Artwork {image} {src} {color} {art} {sizes} ratio="16 / 9" placeholder={{ title }} />
-		{#if playable}
+		<div class="art"><Artwork {image} {src} {color} {art} {sizes} ratio="16 / 9" placeholder={{ title }} /></div>
+		{#if offline}<span class="off-badge"><OfflineBadge /></span>{/if}
+		{#if playable && !offline}
 			<span class="play" aria-hidden="true"><Icon name="play" size={18} filled /></span>
 		{/if}
 		{#if progress}<ProgressLine value={progress} />{/if}
@@ -72,6 +76,22 @@
 	.thumb-card[data-demo='hover'] .frame {
 		box-shadow: var(--shadow-2);
 		transform: translateY(-3px);
+	}
+
+	.offline .art {
+		opacity: 0.4;
+		filter: grayscale(0.7);
+	}
+
+	.offline .title {
+		color: var(--text-muted);
+	}
+
+	.off-badge {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		z-index: 1;
 	}
 
 	.play {

@@ -182,6 +182,94 @@ ol[role='list'] {
 	box-shadow: inset 0 0 0 1px var(--line);
 }
 
+/* Form fields shared by the settings dialogs (label above, hint, inline error). */
+.f-field {
+	display: grid;
+	gap: var(--sp-2);
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.f-label,
+.f-field > legend {
+	padding: 0;
+	font-size: var(--fs-small);
+	font-weight: var(--fw-medium);
+	color: var(--text-muted);
+}
+
+.f-optional {
+	font-weight: var(--fw-regular, 400);
+	color: var(--text-muted);
+}
+
+.f-input {
+	width: 100%;
+	min-width: 0;
+	height: 42px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: var(--r-md);
+	background: var(--surface);
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+	color: var(--text);
+	font: inherit;
+	font-size: var(--fs-body);
+}
+
+textarea.f-input {
+	height: auto;
+	min-height: 120px;
+	padding: 10px 14px;
+	resize: vertical;
+	line-height: 1.45;
+}
+
+.f-input:focus-visible {
+	outline: none;
+	box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.f-input[aria-invalid='true'] {
+	box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+.f-input::placeholder {
+	color: var(--text-faint);
+}
+
+.f-input:disabled,
+.f-input[readonly] {
+	color: var(--text-muted);
+	background: var(--bg-sunken);
+}
+
+.f-mono {
+	font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+	font-size: 0.8125rem;
+}
+
+.f-hint {
+	font-size: var(--fs-micro);
+	line-height: var(--lh-micro, 1.35);
+	color: var(--text-muted);
+}
+
+.f-err {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	font-size: var(--fs-small);
+	color: var(--danger);
+}
+
+.f-err :where(svg) {
+	flex: none;
+	margin-top: 2px;
+}
+
 /* Scrollbars: thin and quiet. */
 * {
 	scrollbar-width: thin;

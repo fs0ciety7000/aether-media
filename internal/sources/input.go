@@ -178,6 +178,24 @@ type TestResult struct {
 
 // Test checks that a source can be reached and listed.
 func (m *Manager) Test(ctx context.Context, in Input) (TestResult, error) {
+	// An agent without a share yet: just connect and list its shares.
+	if in.Kind == KindAgent && in.Agent != nil && strings.TrimSpace(in.Agent.Share) == "" {
+		probeIn := in
+		agentIn := *in.Agent
+		agentIn.Share = "-"
+		probeIn.Agent = &agentIn
+		p, err := prepare(probeIn, nil)
+		if err != nil {
+			return TestResult{}, err
+		}
+		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		info, err := m.factory.AgentInfo(ctx, p.cfg.Agent.URL, p.sec.Token)
+		if err != nil {
+			return TestResult{Error: err.Error()}, nil
+		}
+		return TestResult{OK: true, Agent: &info}, nil
+	}
 	p, err := prepare(in, nil)
 	if err != nil {
 		return TestResult{}, err
@@ -283,7 +301,9 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 	if err != nil {
 		return src, err
 	}
-	if p.kind != KindLocal {
+	prevCfg, _, _ := m.Decode(src)
+	sameTarget := p.root == src.Root && p.sec == prevSec && sameConfig(p.cfg, prevCfg)
+	if p.kind != KindLocal && !sameTarget {
 		test := in
 		if test.Agent != nil && test.Agent.Token == "" {
 			test.Agent.Token = prevSec.Token
@@ -299,6 +319,9 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 			return src, invalid("connexion impossible : %s", res.Error)
 		}
 	}
+	if p.cfg.Agent != nil && prevCfg.Agent != nil && sameTarget {
+		p.cfg.Agent.Hostname, p.cfg.Agent.Version = prevCfg.Agent.Hostname, prevCfg.Agent.Version
+	}
 	cfg, _ := json.Marshal(p.cfg)
 	sealed, err := m.box.SealJSON(p.sec)
 	if err != nil {
@@ -309,4 +332,31 @@ func (m *Manager) Update(ctx context.Context, src db.LibrarySource, in Input) (d
 		m.Forget(src.ID)
 	}
 	return out, err
+}
+
+// sameConfig compares the connection settings (ignoring informative fields).
+func sameConfig(a, b Config) bool {
+	switch {
+	case a.Agent != nil && b.Agent != nil:
+		return a.Agent.URL == b.Agent.URL && a.Agent.Share == b.Agent.Share
+	case a.SFTP != nil && b.SFTP != nil:
+		return *a.SFTP == *b.SFTP
+	}
+	return a.Agent == nil && b.Agent == nil && a.SFTP == nil && b.SFTP == nil
+}
+
+// TestStored checks a saved source with its stored credentials.
+func (m *Manager) TestStored(ctx context.Context, src db.LibrarySource) TestResult {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	m.Forget(src.ID)
+	f, _, err := m.FS(ctx, src.ID)
+	if err == nil {
+		err = f.Ping(ctx)
+	}
+	m.SetStatus(ctx, src, err)
+	if err != nil {
+		return TestResult{Error: err.Error()}
+	}
+	return TestResult{OK: true}
 }

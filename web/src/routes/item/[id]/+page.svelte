@@ -15,6 +15,7 @@
 	import TrackList from '$lib/components/detail/TrackList.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import OfflineBadge from '$lib/components/OfflineBadge.svelte';
 	import ItemCard from '$lib/components/ItemCard.svelte';
 	import EditItemDialog from '$lib/components/items/EditItemDialog.svelte';
 	import IdentifyDialog from '$lib/components/items/IdentifyDialog.svelte';
@@ -24,7 +25,7 @@
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Tag from '$lib/components/Tag.svelte';
 	import { formatDate, formatRuntime, metaLine, plural } from '$lib/format';
-	import { episodeCode, KIND_ICON, KIND_LABEL } from '$lib/media';
+	import { episodeCode, isOffline, KIND_ICON, KIND_LABEL, OFFLINE_HINT } from '$lib/media';
 	import { latestResume } from '$lib/player/resume';
 	import { HAS_PLAY, hasResume, playerHref, resolvePlayTarget } from '$lib/player/target';
 	import { toasts } from '$lib/toast.svelte';
@@ -208,7 +209,7 @@
 	let resolving = $state(false);
 
 	async function play() {
-		if (!item || resolving) return;
+		if (!item || resolving || offline) return;
 		resolving = true;
 		try {
 			// A series resumes the in-progress episode of the season on screen, if any.
@@ -224,6 +225,7 @@
 	}
 
 	const playable = $derived(item ? HAS_PLAY.includes(item.kind) : false);
+	const offline = $derived(isOffline(item));
 	const childLabel = $derived.by(() => {
 		if (!item?.childCount) return undefined;
 		const map = { series: ['saison', 'saisons'], season: ['épisode', 'épisodes'], artist: ['album', 'albums'], album: ['piste', 'pistes'] } as const;
@@ -260,7 +262,7 @@
 	</div>
 {:else}
 	{@const it = item}
-	<article class="detail">
+	<article class="detail" class:offline>
 		<DetailHeader
 			title={it.title}
 			{eyebrow}
@@ -300,6 +302,7 @@
 					{#if it.video.hdr}<Tag variant="image">{it.video.hdr}</Tag>{/if}
 				{/if}
 				{#if it.identifyStatus === 'unmatched'}<Tag variant="image" icon="wand">À identifier</Tag>{/if}
+				{#if offline}<OfflineBadge />{/if}
 			{/snippet}
 
 			{#snippet chips()}
@@ -310,7 +313,18 @@
 
 			{#snippet actions()}
 				{#if playable}
-					<Button variant="primary" size="lg" icon="play" iconFilled aria-busy={resolving} onclick={play}>{resumable ? 'Reprendre' : 'Lecture'}</Button>
+					<Button
+						variant="primary"
+						size="lg"
+						icon="play"
+						iconFilled
+						aria-busy={resolving}
+						aria-disabled={offline ? 'true' : undefined}
+						title={offline ? OFFLINE_HINT : undefined}
+						aria-describedby={offline ? 'offline-note' : undefined}
+						onclick={play}>{resumable ? 'Reprendre' : 'Lecture'}</Button
+					>
+					{#if offline}<span id="offline-note" class="visually-hidden">{OFFLINE_HINT} : les fichiers de ce titre sont sur une source hors ligne.</span>{/if}
 				{/if}
 				<Menu label="Plus d’actions" items={menuItems} icon="more" text="Plus" />
 			{/snippet}
@@ -423,6 +437,13 @@
 {/if}
 
 <style>
+	/* Files on an offline source: artwork greyed (the badge and disabled "Lecture" say why). */
+	.detail.offline :global(.detail-header .art),
+	.detail.offline :global(.detail-header .backdrop) {
+		opacity: 0.45;
+		filter: grayscale(0.7);
+	}
+
 	.detail {
 		padding-bottom: var(--sp-9);
 	}

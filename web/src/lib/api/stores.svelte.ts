@@ -2,7 +2,7 @@
 // Each store loads lazily and keeps itself fresh from server events.
 import { api } from './client';
 import { events } from './events.svelte';
-import type { Kind, Library, ScanProgress, ServerEvent, SystemInfo } from './types';
+import type { Kind, Library, ScanProgress, ServerEvent, Source, SourceStatusEvent, SystemInfo } from './types';
 
 class LibrariesStore {
 	list = $state<Library[]>([]);
@@ -16,6 +16,7 @@ class LibrariesStore {
 		if (!this.#started) {
 			this.#started = true;
 			events.debounced(['library.scan.finished'], () => this.refresh(), 600);
+			events.on('source.status', (ev) => this.applySourceStatus(ev.data as SourceStatusEvent));
 		}
 		return this.#pending ?? this.refresh();
 	}
@@ -40,6 +41,35 @@ class LibrariesStore {
 
 	get(id: number): Library | undefined {
 		return this.list.find((l) => l.id === id);
+	}
+
+	/** Live `source.status` event: patches the source in place (no refetch). */
+	applySourceStatus(d: SourceStatusEvent | undefined) {
+		if (!d || typeof d.id !== 'number') return;
+		const lib = this.list.find((l) => l.id === d.libraryId) ?? this.list.find((l) => l.sources.some((s) => s.id === d.id));
+		const src = lib?.sources.find((s) => s.id === d.id);
+		if (!src) {
+			// A source we do not know yet (added elsewhere): reload quietly.
+			if (this.loaded) this.refresh();
+			return;
+		}
+		src.status = d.status ?? 'unknown';
+		src.lastError = d.lastError;
+		if (src.status === 'online') src.lastSeen = new Date().toISOString();
+	}
+
+	/** Local updates after a successful POST / PATCH / DELETE. */
+	upsertSource(libraryId: number, src: Source) {
+		const lib = this.get(libraryId);
+		if (!lib) return;
+		const i = lib.sources.findIndex((s) => s.id === src.id);
+		if (i >= 0) lib.sources[i] = src;
+		else lib.sources.push(src);
+	}
+
+	removeSource(libraryId: number, sourceId: number) {
+		const lib = this.get(libraryId);
+		if (lib) lib.sources = lib.sources.filter((s) => s.id !== sourceId);
 	}
 }
 

@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { Image } from '$lib/api/types';
 	import ProgressLine from './ProgressLine.svelte';
+	import OfflineBadge from './OfflineBadge.svelte';
 	import Artwork from './Artwork.svelte';
 	import type { IconName } from './Icon.svelte';
 
@@ -29,18 +30,21 @@
 		art?: Snippet;
 		/** 0–1; shows a thin accent bar. */
 		progress?: number;
+		/** Files on an offline source: greyed with a "Hors ligne" badge. */
+		offline?: boolean;
 		class?: string;
 		/** Forces a visual state in the design gallery. */
 		'data-demo'?: string;
 	}
 
-	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, class: className, 'data-demo': demo }: Props = $props();
+	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, offline = false, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
-<svelte:element this={href ? 'a' : 'div'} {href} class={['poster-card', className]} data-demo={demo}>
+<svelte:element this={href ? 'a' : 'div'} {href} class={['poster-card', className, { offline }]} data-demo={demo} title={offline ? 'Source hors ligne' : undefined}>
 	<div class="frame" class:round>
-		<Artwork {image} {src} {color} {art} {ratio} {sizes} placeholder={{ title, year, icon }} alt="" />
+		<div class="art"><Artwork {image} {src} {color} {art} {ratio} {sizes} placeholder={{ title, year, icon }} alt="" /></div>
 		{#if progress}<ProgressLine value={progress} />{/if}
+		{#if offline}<span class="off-badge"><OfflineBadge /></span>{/if}
 	</div>
 	<div class="meta">
 		<span class="title">{title}</span>
@@ -79,6 +83,35 @@
 
 	.frame.round {
 		border-radius: 50%;
+	}
+
+	.art {
+		transition:
+			opacity var(--dur-base) var(--ease),
+			filter var(--dur-base) var(--ease);
+	}
+
+	.offline .art {
+		opacity: 0.4;
+		filter: grayscale(0.7);
+	}
+
+	.offline .title {
+		color: var(--text-muted);
+	}
+
+	.off-badge {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		z-index: 1;
+	}
+
+	.round .off-badge {
+		top: auto;
+		bottom: 10%;
+		left: 50%;
+		transform: translateX(-50%);
 	}
 
 	.round + .meta {

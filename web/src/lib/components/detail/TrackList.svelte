@@ -2,6 +2,8 @@
 	import type { Item } from '$lib/api/types';
 	import { formatTrackTime } from '$lib/format';
 	import { playerHref } from '$lib/player/target';
+	import { isOffline, OFFLINE_HINT } from '$lib/media';
+	import OfflineBadge from '../OfflineBadge.svelte';
 	import Icon from '../Icon.svelte';
 	import Skeleton from '../Skeleton.svelte';
 
@@ -33,11 +35,19 @@
 			<ol role="list" aria-label={discs.length > 1 ? `Disque ${disc}` : 'Pistes'}>
 				{#each list as t, i (t.id)}
 					<li>
-						<a class="row" href={playerHref(t.id)} aria-label="Lire {t.title}">
-							<span class="num tabular"><span class="n">{t.indexNumber ?? i + 1}</span><span class="p" aria-hidden="true"><Icon name="play" size={14} filled /></span></span>
-							<span class="title">{t.title}</span>
-							<span class="dur tabular">{formatTrackTime(t.runtimeMs) ?? '–'}</span>
-						</a>
+						{#if isOffline(t)}
+							<span class="row offline" title={OFFLINE_HINT}>
+								<span class="num tabular"><span class="n">{t.indexNumber ?? i + 1}</span></span>
+								<span class="title">{t.title}<span class="visually-hidden"> (hors ligne)</span></span>
+								<span class="end"><OfflineBadge variant="surface" /><span class="dur tabular">{formatTrackTime(t.runtimeMs) ?? '–'}</span></span>
+							</span>
+						{:else}
+							<a class="row" href={playerHref(t.id)} aria-label="Lire {t.title}">
+								<span class="num tabular"><span class="n">{t.indexNumber ?? i + 1}</span><span class="p" aria-hidden="true"><Icon name="play" size={14} filled /></span></span>
+								<span class="title">{t.title}</span>
+								<span class="dur tabular">{formatTrackTime(t.runtimeMs) ?? '–'}</span>
+							</a>
+						{/if}
 					</li>
 				{/each}
 			</ol>
@@ -113,5 +123,24 @@
 
 	.sk {
 		grid-template-columns: 1fr;
+	}
+
+	.row.offline {
+		cursor: default;
+	}
+
+	.row.offline:hover {
+		background: none;
+	}
+
+	.offline .title,
+	.offline .n {
+		color: var(--text-faint);
+	}
+
+	.end {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--sp-3);
 	}
 </style>

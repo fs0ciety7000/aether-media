@@ -14,6 +14,10 @@ import type {
 	PlaybackInfo,
 	PlaybackRequest,
 	SearchResults,
+	Source,
+	SourceInput,
+	SourcePatch,
+	SourceTestResult,
 	SystemInfo
 } from './types';
 
@@ -115,15 +119,35 @@ function normalizeDetail(d: ItemDetail): ItemDetail {
 	return d;
 }
 
+/** Older servers have no `sources`: the local folders in `paths` stand in for them. */
+export function normalizeLibrary(lib: Library): Library {
+	lib.paths ??= [];
+	lib.counts ??= {};
+	if (!Array.isArray(lib.sources)) {
+		lib.sources = lib.paths.map((p, i) => ({ id: -(i + 1), kind: 'local', name: p, root: p, status: 'unknown', derived: true }));
+	} else {
+		for (const src of lib.sources) normalizeSource(src);
+	}
+	return lib;
+}
+
+export function normalizeSource(src: Source): Source {
+	src.status ??= 'unknown';
+	src.root ??= '';
+	src.name ||= src.root || src.agent?.hostname || src.sftp?.host || 'Source';
+	return src;
+}
+
+export type CreateLibraryBody = { name: string; kind: LibraryKind } & ({ sources: SourceInput[] } | { paths: string[] });
+
 const s = (signal?: AbortSignal) => ({ signal });
 
 export const api = {
 	systemInfo: (signal?: AbortSignal) => request<SystemInfo>('/system/info', s(signal)),
 
-	libraries: (signal?: AbortSignal) => request<Library[]>('/libraries', s(signal)),
-	library: (id: number, signal?: AbortSignal) => request<Library>(`/libraries/${id}`, s(signal)),
-	createLibrary: (body: { name: string; kind: LibraryKind; paths: string[] }) =>
-		request<Library>('/libraries', { method: 'POST', body }),
+	libraries: async (signal?: AbortSignal) => ((await request<Library[]>('/libraries', s(signal))) ?? []).map(normalizeLibrary),
+	library: async (id: number, signal?: AbortSignal) => normalizeLibrary(await request<Library>(`/libraries/${id}`, s(signal))),
+	createLibrary: async (body: CreateLibraryBody) => normalizeLibrary(await request<Library>('/libraries', { method: 'POST', body })),
 	deleteLibrary: (id: number) => request<void>(`/libraries/${id}`, { method: 'DELETE' }),
 	scanLibrary: (id: number, full = false) =>
 		request<{ queued: boolean }>(`/libraries/${id}/scan`, { method: 'POST', params: { full } }),
@@ -131,6 +155,16 @@ export const api = {
 		const f = await request<LibraryFilters>(`/libraries/${id}/filters`, s(signal));
 		return { genres: f.genres ?? [], years: f.years ?? null, resolutions: f.resolutions ?? [], hasHdr: !!f.hasHdr };
 	},
+
+	// ——— Sources (M5b) ———
+	testSource: async (body: SourceInput, signal?: AbortSignal) =>
+		(await request<SourceTestResult>('/sources/test', { method: 'POST', body, signal })) ?? { ok: false },
+	addSource: async (libraryId: number, body: SourceInput) =>
+		normalizeSource(await request<Source>(`/libraries/${libraryId}/sources`, { method: 'POST', body })),
+	patchSource: async (libraryId: number, sourceId: number, body: SourcePatch) =>
+		normalizeSource(await request<Source>(`/libraries/${libraryId}/sources/${sourceId}`, { method: 'PATCH', body })),
+	deleteSource: (libraryId: number, sourceId: number) =>
+		request<void>(`/libraries/${libraryId}/sources/${sourceId}`, { method: 'DELETE' }),
 
 	items: async (q: ItemQuery, signal?: AbortSignal) => {
 		const page = await request<ItemPage>('/items', { params: q as Params, signal });
