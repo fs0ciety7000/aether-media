@@ -426,7 +426,10 @@ func launchdPlist(s serviceSpec) string {
 		w(`		<string>%s</string>`, xmlEscape(a))
 	}
 	w(`	</array>`)
-	if env := s.env(); len(env) > 0 {
+	// launchd starts services with PATH=/usr/bin:/bin:/usr/sbin:/sbin:
+	// add Homebrew so ffmpeg / ffprobe are found.
+	env := append(s.env(), [2]string{"PATH", launchdPath})
+	{
 		w(`	<key>EnvironmentVariables</key>`)
 		w(`	<dict>`)
 		for _, kv := range env {
@@ -460,6 +463,9 @@ func launchdPlist(s serviceSpec) string {
 	w(`</plist>`)
 	return b.String()
 }
+
+// launchdPath is the PATH given to launchd services.
+const launchdPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 func xmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;").Replace(s)

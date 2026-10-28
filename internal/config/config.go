@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/fs0ciety7000/aether-media/internal/toolpath"
 )
 
 type Config struct {
@@ -179,6 +181,9 @@ func Load(path string) (Config, error) {
 	if err := applyEnv(&cfg); err != nil {
 		return cfg, err
 	}
+	// launchd and cron give services a minimal PATH without Homebrew or ~/bin.
+	cfg.Paths.FFmpeg = toolpath.Resolve(cfg.Paths.FFmpeg)
+	cfg.Paths.FFprobe = toolpath.Resolve(cfg.Paths.FFprobe)
 	if cfg.Paths.Cache == "" {
 		cfg.Paths.Cache = filepath.Join(cfg.Paths.Data, "cache")
 	}

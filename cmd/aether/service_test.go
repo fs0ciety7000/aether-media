@@ -159,7 +159,8 @@ func TestLaunchdPlist(t *testing.T) {
 	}
 	// LaunchAgent: no UserName, no data directory override.
 	p = launchdPlist(serviceSpec{Role: roleAgent, Name: "aether-agent", User: true, Exe: "/opt/aether", RunAs: "alice"})
-	if strings.Contains(p, "UserName") || strings.Contains(p, "EnvironmentVariables") || !strings.Contains(p, "<string>agent</string>") {
+	if strings.Contains(p, "UserName") || strings.Contains(p, "DATA_DIR") || !strings.Contains(p, "<string>agent</string>") ||
+		strings.Count(p, "EnvironmentVariables") != 1 || !strings.Contains(p, "/opt/homebrew/bin") {
 		t.Errorf("LaunchAgent inattendu :\n%s", p)
 	}
 }

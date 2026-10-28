@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/toolpath"
 )
 
 const (
@@ -21,7 +23,7 @@ const (
 // detectFFprobe returns the resolved ffprobe path, or "" when it is missing
 // or does not run.
 func detectFFprobe(name string) string {
-	p, err := exec.LookPath(name)
+	p, err := exec.LookPath(toolpath.Resolve(name))
 	if err != nil {
 		return ""
 	}

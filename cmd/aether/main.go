@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -179,6 +180,9 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 		log.Warn("ffprobe introuvable : l'analyse des médias est désactivée", "ffprobe", cfg.Paths.FFprobe, "err", err)
 	} else {
 		log.Info("ffprobe détecté", "version", v)
+	}
+	if _, err := exec.LookPath(cfg.Paths.FFmpeg); err != nil {
+		log.Error("ffmpeg introuvable : la lecture remux / transcodage échouera (installez FFmpeg ou réglez paths.ffmpeg / AETHER_FFMPEG)", "ffmpeg", cfg.Paths.FFmpeg)
 	}
 	runner.Register(library.JobScan, 1, scanner.HandleScanJob)
 	runner.Register(library.JobProbe, cfg.Library.ProbeWorkers, scanner.ProbeHandler(prober))
