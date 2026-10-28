@@ -372,7 +372,7 @@ La limite de **Réglages › Serveur** est atteinte. Augmentez-la si la machine 
 Elle n'est prise en compte qu'au redémarrage. **Réglages › Serveur** liste les encodeurs détectés : si la liste est vide, le serveur n'accède pas au GPU (en Docker : `devices: /dev/dri` et `group_add` avec le groupe `render` de l'hôte ; sur Linux : appartenance du compte `aether` aux groupes `render` et `video`).
 
 **Une source est « hors ligne ».**
-Pour un agent : la machine est-elle allumée, et le port 8097 ouvert ? **Tester** donne l'erreur exacte. Pour SFTP : identifiants, empreinte de l'hôte (une seedbox réinstallée change de clé, il faut alors la confirmer de nouveau).
+Pour un agent : la machine est-elle allumée, et le port 8097 ouvert ? **Tester** donne l'erreur exacte. Après une erreur réseau, Aether cesse d'appeler l'agent et ne le sonde plus qu'une fois après 1, 2, 5, 15 puis toutes les 30 minutes (le message indique l'heure du prochain essai) ; les analyses en attente reprennent seules quand il répond. Un hébergeur de seedbox peut bloquer une adresse qui a ouvert trop de connexions : patientez, ou passez par un tunnel SSH (voir l'installation, « Seedbox sans root »). Pour SFTP : identifiants, empreinte de l'hôte (une seedbox réinstallée change de clé, il faut alors la confirmer de nouveau).
 
 **L'appairage d'un agent échoue.**
 Le code change régulièrement et ne sert qu'une fois : relisez-le dans les journaux de l'agent ou sur `http://127.0.0.1:8097`. Après plusieurs codes faux, l'agent impose une courte pause. Si la découverte ne trouve rien, le réseau bloque peut-être la diffusion UDP (port 7360) : saisissez l'adresse à la main.

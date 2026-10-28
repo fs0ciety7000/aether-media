@@ -237,7 +237,7 @@ func TestCertificateChangeRefused(t *testing.T) {
 	}
 	other := startAgent(t, t.TempDir(), nil) // another certificate
 	sw.target.Store(other.addr)
-	agentfs.ClientFor(ag.Fingerprint).CloseIdleConnections() // an agent restart drops them
+	agentfs.ClientFor(ag.Url, ag.Fingerprint).CloseIdleConnections() // an agent restart drops them
 	err = m.AgentCall(context.Background(), ag.ID, http.MethodGet, "/agent/v1/info", nil, nil)
 	if agentStatus(err) != AgentCertMismatch {
 		t.Fatalf("call after certificate change: %v", err)

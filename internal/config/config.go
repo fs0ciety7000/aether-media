@@ -94,6 +94,10 @@ type LibraryConfig struct {
 	WatchDebounce Duration `toml:"watch_debounce"`
 	// Concurrent ffprobe processes (default 2).
 	ProbeWorkers int `toml:"probe_workers"`
+	// Concurrent analyses (and scan walks) per remote agent, whatever
+	// ProbeWorkers is (default 2): a seedbox host may block an address that
+	// opens too many connections.
+	AgentConcurrency int `toml:"agent_concurrency"`
 }
 
 // Duration decodes TOML strings such as "6h" or "30s".
@@ -138,9 +142,10 @@ func Default() Config {
 		Paths:  PathsConfig{Data: defaultDataDir(), FFmpeg: "ffmpeg", FFprobe: "ffprobe"},
 		Log:    LogConfig{Level: "info", Format: "text"},
 		Library: LibraryConfig{
-			ScanInterval:  Duration{6 * time.Hour},
-			WatchDebounce: Duration{30 * time.Second},
-			ProbeWorkers:  2,
+			ScanInterval:     Duration{6 * time.Hour},
+			WatchDebounce:    Duration{30 * time.Second},
+			ProbeWorkers:     2,
+			AgentConcurrency: 2,
 		},
 		Metadata:  MetadataConfig{Language: "fr-FR"},
 		Transcode: TranscodeConfig{MaxSessions: 2, HWAccel: "none", VAAPIDevice: "/dev/dri/renderD128"},
@@ -261,6 +266,9 @@ func (c *Config) validate() error {
 	}
 	if c.Library.ProbeWorkers < 1 || c.Library.ProbeWorkers > 32 {
 		return fmt.Errorf("library.probe_workers: %d (1 à 32)", c.Library.ProbeWorkers)
+	}
+	if c.Library.AgentConcurrency < 1 || c.Library.AgentConcurrency > 8 {
+		return fmt.Errorf("library.agent_concurrency: %d (1 à 8)", c.Library.AgentConcurrency)
 	}
 	if c.Transcode.MaxSessions < 1 || c.Transcode.MaxSessions > 64 {
 		return fmt.Errorf("transcode.max_sessions: %d (1 à 64)", c.Transcode.MaxSessions)

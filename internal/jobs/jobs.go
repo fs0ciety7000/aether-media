@@ -35,10 +35,14 @@ var ErrPermanent = errors.New("permanent failure")
 
 // RetryAfterError asks for the next attempt to wait at least After (e.g. a
 // remote service answered 429 with Retry-After). It still counts as an
-// attempt, so a job never retries forever.
+// attempt, so a job never retries forever, unless Postponed.
 type RetryAfterError struct {
 	Err   error
 	After time.Duration
+	// Postponed: the job did not really run (its resource is known to be
+	// unavailable, e.g. an agent behind an open circuit breaker), so the
+	// attempt is given back and the job waits as long as needed.
+	Postponed bool
 }
 
 func (e *RetryAfterError) Error() string { return e.Err.Error() }
@@ -46,6 +50,13 @@ func (e *RetryAfterError) Unwrap() error { return e.Err }
 
 // RetryAfter wraps err so the job is retried no sooner than d.
 func RetryAfter(err error, d time.Duration) error { return &RetryAfterError{Err: err, After: d} }
+
+// Postpone wraps err so the job is put back, to start no sooner than d,
+// without consuming an attempt: for a job that did not run because what it
+// needs is known to be down (it must not be what decides that).
+func Postpone(err error, d time.Duration) error {
+	return &RetryAfterError{Err: err, After: d, Postponed: true}
+}
 
 const (
 	maxAttempts  = 3
@@ -302,6 +313,11 @@ func (r *Runner) run(ctx context.Context, h Handler, row db.Job) {
 	case ctx.Err() != nil:
 		// Shutting down: put it back untouched for the next start.
 		err = r.store.RetryJob(bg, db.RetryJobParams{Error: "", RunAfter: time.Now().Unix(), ID: j.ID})
+	case isPostponed(err):
+		ra, _ := errors.AsType[*RetryAfterError](err)
+		d := max(ra.After, time.Second)
+		r.log.Debug("job différé", "kind", j.Kind, "key", j.Key, "in", d, "err", err)
+		err = r.store.PostponeJob(bg, db.PostponeJobParams{Error: err.Error(), RunAfter: time.Now().Add(d).Unix(), ID: j.ID})
 	case errors.Is(err, ErrPermanent) || j.Attempts >= maxAttempts:
 		r.log.Warn("job en échec", "kind", j.Kind, "key", j.Key, "attempts", j.Attempts, "err", err)
 		err = r.store.FailJob(bg, db.FailJobParams{Error: err.Error(), ID: j.ID})
@@ -316,6 +332,11 @@ func (r *Runner) run(ctx context.Context, h Handler, row db.Job) {
 	if err != nil {
 		r.log.Error("job bookkeeping", "kind", j.Kind, "key", j.Key, "err", err)
 	}
+}
+
+func isPostponed(err error) bool {
+	ra, ok := errors.AsType[*RetryAfterError](err)
+	return ok && ra.Postponed
 }
 
 func safeCall(ctx context.Context, h Handler, j Job) (err error) {

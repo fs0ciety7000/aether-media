@@ -19,6 +19,10 @@ DELETE FROM jobs WHERE id = ?;
 -- name: RetryJob :exec
 UPDATE jobs SET status = 'queued', error = ?, run_after = ?, updated_at = unixepoch() WHERE id = ?;
 
+-- name: PostponeJob :exec
+-- Puts a job back without consuming the attempt it was claimed with.
+UPDATE jobs SET status = 'queued', attempts = max(attempts - 1, 0), error = ?, run_after = ?, updated_at = unixepoch() WHERE id = ?;
+
 -- name: FailJob :exec
 UPDATE jobs SET status = 'failed', error = ?, updated_at = unixepoch() WHERE id = ?;
 

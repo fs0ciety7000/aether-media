@@ -13,23 +13,40 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
-// httpFile is a vfs.File backed by Range requests. Reads stream from a
-// single open-ended "Range: bytes=<off>-" response; Seek only records the
+// httpFile is a vfs.File backed by Range requests. Seek only records the
 // new offset (small forward seeks are served by discarding from the open
 // body), so http.ServeContent and ffprobe access patterns cost one request
 // per discontinuity.
+//
+// Over HTTP/2 reads stream from a single open-ended "Range: bytes=<off>-"
+// response: abandoning it only resets its stream. Over HTTP/1.1 an
+// abandoned body costs its connection (a new TCP + TLS handshake for the
+// next request, which a seedbox host may take for abuse), so reads use
+// bounded windows growing from minWindow to maxWindow: a window read to its
+// end, or abandoned close to it (drained), leaves the connection reusable.
 type httpFile struct {
 	fs   *FS
 	ctx  context.Context
 	url  string
 	size int64
 	mod  time.Time
+	h2   bool // the agent answers over HTTP/2
 
 	off     int64         // logical offset of the next Read
 	body    io.ReadCloser // open response body, positioned at bodyOff
 	bodyOff int64
+	bodyEnd int64 // offset where body ends (exclusive)
+	window  int64 // size of the next ranged request (HTTP/1.1)
 	closed  bool
 }
+
+const (
+	minWindow = 256 << 10
+	maxWindow = 64 << 20
+	// maxDrainWindow: a body abandoned with at most this much left is read
+	// to its end so that its HTTP/1.1 connection is kept.
+	maxDrainWindow = 256 << 10
+)
 
 var _ vfs.File = (*httpFile)(nil)
 
@@ -49,13 +66,14 @@ func (f *FS) Open(ctx context.Context, name string) (vfs.File, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusMethodNotAllowed {
-			_ = resp.Body.Close()
+			drainResp(resp)
 			return hf.openWithGet()
 		}
 		return nil, statusErr(resp)
 	}
-	_ = resp.Body.Close()
+	drainResp(resp)
 	hf.size = resp.ContentLength
+	hf.h2 = resp.ProtoMajor >= 2
 	if hf.size < 0 {
 		return nil, fmt.Errorf("%w: agent: missing Content-Length", vfs.ErrOffline)
 	}
@@ -66,22 +84,24 @@ func (f *FS) Open(ctx context.Context, name string) (vfs.File, error) {
 // openWithGet is the fallback when HEAD is not allowed: the first GET gives
 // the metadata and its body is kept for the first Read.
 func (hf *httpFile) openWithGet() (vfs.File, error) {
-	resp, err := hf.get(0)
+	resp, err := hf.get(0) // size unknown yet: open-ended
 	if err != nil {
 		return nil, err
 	}
+	hf.h2 = resp.ProtoMajor >= 2
 	switch resp.StatusCode {
 	case http.StatusPartialContent:
-		_, _, total, ok := parseContentRange(resp.Header.Get("Content-Range"))
+		_, end, total, ok := parseContentRange(resp.Header.Get("Content-Range"))
 		if !ok {
 			_ = resp.Body.Close()
 			return nil, fmt.Errorf("%w: agent: bad Content-Range", vfs.ErrOffline)
 		}
-		hf.size = total
+		hf.size, hf.bodyEnd = total, end+1
 	case http.StatusOK:
 		hf.size = resp.ContentLength
+		hf.bodyEnd = hf.size
 	case http.StatusRequestedRangeNotSatisfiable:
-		_ = resp.Body.Close()
+		drainResp(resp)
 		hf.mod, _ = http.ParseTime(resp.Header.Get("Last-Modified"))
 		return hf, nil // empty file
 	default:
@@ -93,18 +113,37 @@ func (hf *httpFile) openWithGet() (vfs.File, error) {
 }
 
 func (hf *httpFile) get(off int64) (*http.Response, error) {
-	h := http.Header{"Range": {"bytes=" + strconv.FormatInt(off, 10) + "-"}}
+	h := http.Header{"Range": {hf.rangeAt(off)}}
 	return hf.fs.do(hf.ctx, http.MethodGet, hf.url, h)
+}
+
+// rangeAt is the Range header of the next request at off: open-ended over
+// HTTP/2 (or while the size is unknown), else the next window.
+func (hf *httpFile) rangeAt(off int64) string {
+	from := "bytes=" + strconv.FormatInt(off, 10) + "-"
+	if hf.h2 || hf.size <= 0 {
+		return from
+	}
+	w := max(hf.window, minWindow)
+	hf.window = min(w*4, maxWindow)
+	return from + strconv.FormatInt(min(off+w, hf.size)-1, 10)
 }
 
 func (hf *httpFile) Size() int64        { return hf.size }
 func (hf *httpFile) ModTime() time.Time { return hf.mod }
 
+// dropBody releases the current body: read to its end when little is left
+// (the HTTP/1.1 connection is then reused), else closed (over HTTP/2 this
+// only resets the stream; over HTTP/1.1 it drops the connection).
 func (hf *httpFile) dropBody() {
-	if hf.body != nil {
-		_ = hf.body.Close()
-		hf.body = nil
+	if hf.body == nil {
+		return
 	}
+	if rem := hf.bodyEnd - hf.bodyOff; rem >= 0 && rem <= maxDrainWindow {
+		_, _ = io.CopyN(io.Discard, hf.body, rem+1)
+	}
+	_ = hf.body.Close()
+	hf.body = nil
 }
 
 // reopen starts a new ranged GET at hf.off. It returns io.EOF when the
@@ -125,7 +164,12 @@ func (hf *httpFile) reopen() error {
 			_ = resp.Body.Close()
 			return fmt.Errorf("%w: agent: unexpected Content-Range %q", vfs.ErrOffline, resp.Header.Get("Content-Range"))
 		}
+		hf.h2 = resp.ProtoMajor >= 2
 		hf.body, hf.bodyOff = resp.Body, start
+		hf.bodyEnd = hf.size
+		if _, end, _, ok := parseContentRange(resp.Header.Get("Content-Range")); ok {
+			hf.bodyEnd = end + 1
+		}
 	case http.StatusOK:
 		// Range ignored: skip to the offset.
 		if hf.off > 0 {
@@ -134,9 +178,9 @@ func (hf *httpFile) reopen() error {
 				return fmt.Errorf("%w: agent: %w", vfs.ErrOffline, err)
 			}
 		}
-		hf.body, hf.bodyOff = resp.Body, hf.off
+		hf.body, hf.bodyOff, hf.bodyEnd = resp.Body, hf.off, hf.size
 	case http.StatusRequestedRangeNotSatisfiable:
-		_ = resp.Body.Close()
+		drainResp(resp)
 		return io.EOF
 	default:
 		return statusErr(resp)
@@ -184,12 +228,19 @@ func (hf *httpFile) Read(p []byte) (int, error) {
 		if err == nil {
 			return n, nil
 		}
+		complete := errors.Is(err, io.EOF) && hf.bodyOff >= hf.bodyEnd
 		hf.dropBody()
 		if errors.Is(err, io.EOF) && hf.off >= hf.size {
 			if n > 0 {
 				return n, nil
 			}
 			return 0, io.EOF
+		}
+		if complete { // end of a window: the next one starts at hf.off
+			if n > 0 {
+				return n, nil
+			}
+			continue
 		}
 		if n > 0 {
 			// Return what we have; the next Read reopens at the new offset.
@@ -230,6 +281,7 @@ func (hf *httpFile) Seek(offset int64, whence int) (int64, error) {
 	if hf.body != nil {
 		if d := abs - hf.bodyOff; d < 0 || d > maxSkipForward {
 			hf.dropBody()
+			hf.window = 0 // random access: start small again
 		}
 	}
 	return abs, nil

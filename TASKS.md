@@ -122,6 +122,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0E9 Découverte réseau : tester sur un vrai LAN (la diffusion UDP n'est pas disponible dans l'environnement de dev)
 - [x] T-0EB `aether agent install --user --method cron` : crontab de l'utilisateur (`@reboot` + surveillance 5 min, verrou flock, journal tourné), choisie d'office sans `systemctl --user`, `--listen` / `--data-dir`, `uninstall` / `status` ; section « Seedbox sans root » dans INSTALL.md
 - [ ] T-0EC Méthode cron : tester sur une vraie seedbox (Whatbox) et sur macOS / BSD (crontab et flock testés avec un faux binaire `crontab`)
+- [x] T-0ED Sobriété des connexions vers un agent distant (IP du serveur bloquée par l'anti-abus d'une seedbox après un scan) : un transport par agent pour tous les appels, corps vidés avant fermeture, HTTP/2 négocié (ALPN `h2` côté agent, `ForceAttemptHTTP2` avec l'épinglage), première requête seule après inactivité, `MaxConnsPerHost` = 8 en HTTP/1.1 avec lecture par fenêtres bornées ; limite de 2 analyses / parcours simultanés par agent (`library.agent_concurrency`) ; disjoncteur par agent (hors ligne à la première erreur réseau, sonde unique après 1, 2, 5, 15, 30 min, analyses différées par `jobs.Postpone` sans consommer d'essai). Mesure E2E (30 fichiers, 40 ms de latence ajoutée) : scan 7 → 1 connexion, 90 lectures par plages 91 → 1 (agent ancien en HTTP/1.1 : 91 → 6)
 
 ## M6 — Utilisateurs & progression ✅
 - [x] T-070 Comptes, argon2id, sessions, rôles (premier compte = admin, limitation des connexions, contrôle d'Origin)

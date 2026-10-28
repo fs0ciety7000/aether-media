@@ -74,14 +74,64 @@ type FS struct {
 
 var _ vfs.FS = (*FS)(nil)
 
-// DefaultClient returns an HTTP client suitable for agents: connection and
-// header timeouts but no overall timeout (bodies are long media streams).
+// Connection discipline towards an agent (docs/AGENT_PROTOCOL.md,
+// « Connexions »). An agent is often a seedbox reached over the Internet
+// whose host blocks addresses opening many TCP/TLS connections: every call
+// to one agent goes through a single shared transport (ClientFor), HTTP/2
+// when the agent offers it (every request multiplexed on one connection),
+// otherwise HTTP/1.1 keep-alive with at most MaxConnsPerAgent connections.
+const (
+	// MaxConnsPerAgent bounds the connections (idle + active) to one agent
+	// in HTTP/1.1. It must leave room for the long-lived ones: the change
+	// stream (SSE) holds one for good, each playback/remux read one more.
+	MaxConnsPerAgent = 8
+	// ResponseHeaderTimeout exceeds the agent's own ffprobe timeout (60 s)
+	// so that a slow analysis is not mistaken for a dead agent.
+	ResponseHeaderTimeout = 75 * time.Second
+	maxDrainBytes         = 64 << 10
+)
+
+// DefaultClient returns a new HTTP client suitable for agents: connection
+// and header timeouts but no overall timeout (bodies are long media
+// streams), HTTP/2 attempted even with a custom TLS configuration (pinning),
+// connections bounded per host. Callers should use ClientFor, which shares
+// one per agent.
 func DefaultClient() *http.Client {
+	return &http.Client{Transport: wrapTransport(newTransport())}
+}
+
+func newTransport() *http.Transport {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DialContext = (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext
-	tr.ResponseHeaderTimeout = 30 * time.Second
-	tr.MaxIdleConnsPerHost = 16
-	return &http.Client{Transport: tr}
+	tr.TLSHandshakeTimeout = 10 * time.Second
+	tr.ResponseHeaderTimeout = ResponseHeaderTimeout
+	tr.MaxIdleConns = 4 * MaxConnsPerAgent
+	tr.MaxIdleConnsPerHost = MaxConnsPerAgent
+	tr.MaxConnsPerHost = MaxConnsPerAgent
+	tr.IdleConnTimeout = 90 * time.Second
+	// Required as soon as TLSClientConfig is set (pinned agents), or
+	// net/http silently stays on HTTP/1.1.
+	tr.ForceAttemptHTTP2 = true
+	// Detect a dead HTTP/2 connection (address blocked, NAT expired)
+	// instead of queueing every request on it.
+	tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: 30 * time.Second, PingTimeout: 15 * time.Second}
+	return tr
+}
+
+// DrainClose reads what is left of a (small) response body, up to a bound,
+// then closes it: an HTTP/1.1 connection is only reused once its body was
+// read to the end, an early Close drops it.
+func DrainClose(rc io.ReadCloser) {
+	if rc == nil {
+		return
+	}
+	_, _ = io.CopyN(io.Discard, rc, maxDrainBytes)
+	_ = rc.Close()
+}
+
+func drainResp(resp *http.Response) {
+	DrainClose(resp.Body)
+	_ = resp.Body.Close() // already closed; spelled out for bodyclose
 }
 
 func parseBase(raw string) (*url.URL, error) {
@@ -112,7 +162,7 @@ func newFS(cfg Config) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := clientFor(base.Scheme, cfg.Fingerprint, cfg.HTTPClient)
+	c, err := clientFor(base, cfg.Fingerprint, cfg.HTTPClient)
 	if err != nil {
 		return nil, err
 	}
@@ -125,20 +175,14 @@ func newFS(cfg Config) (*FS, error) {
 
 // clientFor picks the HTTP client of an agent: pinned to fingerprint when
 // set (https only: a pinned agent is never reached in clear).
-func clientFor(scheme, fingerprint string, base *http.Client) (*http.Client, error) {
-	if fingerprint == "" {
-		if base != nil {
-			return base, nil
-		}
-		return ClientFor(""), nil
-	}
-	if scheme != "https" {
+func clientFor(base *url.URL, fingerprint string, c *http.Client) (*http.Client, error) {
+	if fingerprint != "" && base.Scheme != "https" {
 		return nil, errors.New("agentfs: empreinte de certificat définie mais adresse http:// (https:// attendu)")
 	}
-	if base != nil {
-		return PinClient(base, fingerprint), nil
+	if c != nil {
+		return PinClient(c, fingerprint), nil
 	}
-	return ClientFor(fingerprint), nil
+	return ClientFor(base.String(), fingerprint), nil
 }
 
 // remote maps a source-relative path to a share-relative one.
@@ -209,7 +253,7 @@ func doReq(ctx context.Context, c *http.Client, method, rawURL, token, ua string
 // statusErr converts a non-success response into a vfs error and closes the
 // body.
 func statusErr(resp *http.Response) error {
-	defer func() { _ = resp.Body.Close() }()
+	defer drainResp(resp)
 	var body struct {
 		Error   string `json:"error"`
 		Message string `json:"message"`
@@ -254,7 +298,7 @@ func (f *FS) getJSON(ctx context.Context, ep, remote string, v any) error {
 	if resp.StatusCode != http.StatusOK {
 		return statusErr(resp)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainResp(resp)
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		return fmt.Errorf("%w: agent: bad %s response: %w", vfs.ErrOffline, ep, err)
 	}
@@ -284,7 +328,9 @@ func (f *FS) Walk(ctx context.Context, dir string, fn func(vfs.Entry) error) err
 	if resp.StatusCode != http.StatusOK {
 		return statusErr(resp)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	// Drained after the terminator so that the connection is reused (an
+	// early return reads at most maxDrainBytes more).
+	defer drainResp(resp)
 
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 64<<10), maxLineBytes)
@@ -412,11 +458,10 @@ func (f *FS) Ping(ctx context.Context) error {
 	return fmt.Errorf("agentfs: agent does not export share %q: %w", f.share, vfs.ErrNotExist)
 }
 
-// Close releases idle connections.
-func (f *FS) Close() error {
-	f.client.CloseIdleConnections()
-	return nil
-}
+// Close is a no-op: the transport is shared by every source of the agent
+// (ClientFor) and its idle connections expire on their own; closing them
+// here would force the other sources to reconnect.
+func (f *FS) Close() error { return nil }
 
 // Info fetches /agent/v1/info (used by the "test connection" endpoint). c
 // must already pin the agent's certificate when it has one (ClientFor).
@@ -426,7 +471,7 @@ func Info(ctx context.Context, baseURL, token string, c *http.Client) (AgentInfo
 		return AgentInfo{}, err
 	}
 	if c == nil {
-		c = ClientFor("")
+		c = ClientFor(base.String(), "")
 	}
 	ctx, cancel := withMetaTimeout(ctx)
 	defer cancel()
@@ -439,7 +484,7 @@ func Info(ctx context.Context, baseURL, token string, c *http.Client) (AgentInfo
 	if resp.StatusCode != http.StatusOK {
 		return AgentInfo{}, statusErr(resp)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainResp(resp)
 	var info AgentInfo
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&info); err != nil {
 		return AgentInfo{}, fmt.Errorf("agentfs: not an Aether agent (bad /info response): %w", err)

@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
 
@@ -22,6 +24,10 @@ type probePayload struct {
 // ProbeHandler returns the jobs.Handler for JobProbe: it runs ffprobe on a
 // media file and stores container, streams and chapters. Audio tags refine
 // track titles and numbers.
+// agentResumeDelay lets the breaker's probe of an agent conclude before the
+// postponed analyses come back.
+const agentResumeDelay = 5 * time.Second
+
 func (s *Scanner) ProbeHandler(p *probe.Prober) jobs.Handler {
 	return func(ctx context.Context, j jobs.Job) error {
 		var pl probePayload
@@ -40,6 +46,11 @@ func (s *Scanner) ProbeHandler(p *probe.Prober) jobs.Handler {
 		if errors.Is(err, probe.ErrNotMedia) {
 			s.log.Warn("fichier illisible", "path", mf.Path, "err", err)
 			return s.store.SetProbeError(ctx, db.SetProbeErrorParams{ProbeError: nullStr(err.Error()), ID: mf.ID})
+		}
+		if de, ok := errors.AsType[*sources.AgentDownError](err); ok {
+			// The agent is behind an open circuit breaker: wait for its
+			// next probe instead of each job retrying on its own.
+			return jobs.Postpone(err, de.RetryIn()+agentResumeDelay)
 		}
 		if err != nil {
 			if j.Attempts >= 3 {

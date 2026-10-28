@@ -240,6 +240,22 @@ func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusPara
 	return items, nil
 }
 
+const postponeJob = `-- name: PostponeJob :exec
+UPDATE jobs SET status = 'queued', attempts = max(attempts - 1, 0), error = ?, run_after = ?, updated_at = unixepoch() WHERE id = ?
+`
+
+type PostponeJobParams struct {
+	Error    string `json:"error"`
+	RunAfter int64  `json:"runAfter"`
+	ID       int64  `json:"id"`
+}
+
+// Puts a job back without consuming the attempt it was claimed with.
+func (q *Queries) PostponeJob(ctx context.Context, arg PostponeJobParams) error {
+	_, err := q.db.ExecContext(ctx, postponeJob, arg.Error, arg.RunAfter, arg.ID)
+	return err
+}
+
 const purgeFailedJobs = `-- name: PurgeFailedJobs :execrows
 DELETE FROM jobs WHERE status = 'failed' AND updated_at < ?
 `

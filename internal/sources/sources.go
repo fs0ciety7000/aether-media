@@ -117,14 +117,25 @@ type Manager struct {
 	ProxyBase string
 	proxyKey  []byte
 
+	// AgentConcurrency bounds the concurrent analyses and scan walks per
+	// agent (DefaultAgentConcurrency when 0). Set it before first use.
+	AgentConcurrency int
+	// OnAgentOnline is called when an agent found unreachable answers again
+	// (e.g. to wake the postponed probe jobs).
+	OnAgentOnline func()
+
 	mu  sync.Mutex
 	fss map[int64]vfs.FS
+
+	gmu          sync.Mutex
+	gates        map[string]*agentGate // agentKey → gate
+	gatesStopped bool
 }
 
 func New(s *store.Store, box *secret.Box, f Factory, hub *events.Hub, log *slog.Logger) *Manager {
 	key := make([]byte, 32)
 	_, _ = rand.Read(key)
-	return &Manager{store: s, box: box, factory: f, hub: hub, log: log, proxyKey: key, fss: map[int64]vfs.FS{}}
+	return &Manager{store: s, box: box, factory: f, hub: hub, log: log, proxyKey: key, fss: map[int64]vfs.FS{}, gates: map[string]*agentGate{}}
 }
 
 // Location builds the stored location of a file of src.
@@ -218,7 +229,11 @@ func (m *Manager) open(ctx context.Context, src db.LibrarySource) (vfs.FS, error
 		if err != nil {
 			return nil, err
 		}
-		return m.factory.Agent(ctx, ac, asec, src.Root)
+		f, err := m.factory.Agent(ctx, ac, asec, src.Root)
+		if err != nil {
+			return nil, err
+		}
+		return gatedFS{FS: f, g: m.gate(ac, asec)}, nil
 	case KindSFTP:
 		if cfg.SFTP == nil {
 			return nil, errors.New("sftp source without config")
@@ -241,6 +256,7 @@ func (m *Manager) Forget(sourceID int64) {
 
 // Close releases every open file system.
 func (m *Manager) Close() {
+	m.stopGates()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, f := range m.fss {
@@ -521,8 +537,16 @@ func (m *Manager) Probe(ctx context.Context, p *probe.Prober, loc string) (*prob
 		if err != nil {
 			return nil, err
 		}
-		data, err := agentProbe(ctx, ac, asec, path.Join(src.Root, rel))
+		// At most AgentConcurrency analyses per agent, none while it is
+		// unreachable (AgentDownError: the caller postpones).
+		g := m.gate(ac, asec)
+		release, err := g.acquire(ctx)
 		if err != nil {
+			return nil, err
+		}
+		data, err := agentProbe(ctx, ac, asec, path.Join(src.Root, rel))
+		release()
+		if err = g.done(ctx, err); err != nil {
 			return nil, err
 		}
 		return probe.ParseOutput(data, loc)

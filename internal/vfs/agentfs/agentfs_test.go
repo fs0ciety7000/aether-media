@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -33,6 +34,7 @@ type fakeAgent struct {
 	dirs      map[string]bool
 	status    int // forced status for every request when != 0
 	gets      atomic.Int64
+	conns     atomic.Int64 // TCP connections accepted
 	ignoreRng bool
 }
 
@@ -148,7 +150,13 @@ func (a *fakeAgent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func newTestFS(t *testing.T, a *fakeAgent, root string) (*httptest.Server, *FS) {
 	t.Helper()
-	srv := httptest.NewServer(a)
+	srv := httptest.NewUnstartedServer(a)
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			a.conns.Add(1)
+		}
+	}
+	srv.Start()
 	t.Cleanup(srv.Close)
 	f, err := newFS(Config{BaseURL: srv.URL + "/", Token: token, Share: "films", Root: root})
 	if err != nil {
@@ -284,13 +292,21 @@ func TestRangeReadsAndSeeks(t *testing.T) {
 			if fl.Size() != int64(len(data)) || !fl.ModTime().Equal(mtime) {
 				t.Fatalf("size=%d mtime=%v", fl.Size(), fl.ModTime())
 			}
-			// Sequential read is one GET.
+			// Sequential read over HTTP/1.1: growing windows (256 KiB, 1 MiB,
+			// 4 MiB), each read to its end, on one connection.
 			got, err := io.ReadAll(fl)
 			if err != nil || !bytes.Equal(got, data) {
 				t.Fatalf("readall: %v (len %d)", err, len(got))
 			}
-			if g := a.gets.Load(); g != 1 {
-				t.Fatalf("sequential read used %d GETs", g)
+			wantGets := int64(3)
+			if ignore {
+				wantGets = 1 // 200 with the whole file
+			}
+			if g := a.gets.Load(); g != wantGets {
+				t.Fatalf("sequential read used %d GETs, want %d", g, wantGets)
+			}
+			if c := a.conns.Load(); c != 1 {
+				t.Fatalf("sequential read used %d connections", c)
 			}
 			// At EOF.
 			if n, err := fl.Read(make([]byte, 10)); n != 0 || !errors.Is(err, io.EOF) {
@@ -318,6 +334,12 @@ func TestRangeReadsAndSeeks(t *testing.T) {
 				if int64(n) != end-start || !bytes.Equal(buf[:n], data[start:end]) {
 					t.Fatalf("mismatch off=%d n=%d err=%v", off, n, err)
 				}
+			}
+			// Random reads ending close to the end of their window keep the
+			// connection (the rest is drained); only those abandoning a
+			// large window lose it (an agent ignoring Range: every one).
+			if c := a.conns.Load(); !ignore && c > 100 {
+				t.Fatalf("random access used %d connections", c)
 			}
 			// Small forward seeks reuse the body.
 			before := a.gets.Load()
@@ -586,7 +608,74 @@ func TestPinnedTLS(t *testing.T) {
 	if err != nil || info.Fingerprint != fp || info.CAValid {
 		t.Fatalf("probe: %+v %v", info, err)
 	}
-	if c1, c2 := ClientFor(fp), ClientFor(fp); c1 != c2 {
+	if c1, c2 := ClientFor(srv.URL, fp), ClientFor(srv.URL+"/", fp); c1 != c2 {
 		t.Fatal("pinned clients are not shared")
+	}
+}
+
+// TestPinnedHTTP2: over a pinned certificate, HTTP/2 is negotiated and every
+// call (metadata, walk, ranged reads with seeks) shares one connection.
+func TestPinnedHTTP2(t *testing.T) {
+	a := newFake()
+	data := make([]byte, 2<<20)
+	for i := range data {
+		data[i] = byte(i)
+	}
+	a.add("big.bin", data)
+	for i := range 20 {
+		a.add(fmt.Sprintf("d/%02d.mkv", i), []byte("x"))
+	}
+	srv := httptest.NewUnstartedServer(a)
+	srv.EnableHTTP2 = true
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			a.conns.Add(1)
+		}
+	}
+	srv.StartTLS()
+	defer srv.Close()
+	fp := agentproto.CertFingerprint(srv.Certificate())
+	f, err := New(Config{BaseURL: srv.URL, Token: token, Share: "films", Fingerprint: fp})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Go(func() {
+			if _, err := f.Stat(ctx, fmt.Sprintf("d/%02d.mkv", i)); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if err := f.Walk(ctx, "", func(vfs.Entry) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	fl, err := f.Open(ctx, "big.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fl.Close()
+	if got, err := io.ReadAll(fl); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("readall: %v", err)
+	}
+	if g := a.gets.Load(); g != 1 {
+		t.Fatalf("sequential read over HTTP/2 used %d GETs (open-ended range expected)", g)
+	}
+	for i := range 50 {
+		if _, err := fl.Seek(int64(i*40000), io.SeekStart); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadFull(fl, make([]byte, 1000)); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = fl.Seek(int64(len(data)-i*30000-5000), io.SeekStart) // abandons the stream
+		if _, err := io.ReadFull(fl, make([]byte, 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c := a.conns.Load(); c != 1 {
+		t.Fatalf("%d connections, want 1 (HTTP/2)", c)
 	}
 }

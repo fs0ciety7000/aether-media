@@ -26,7 +26,8 @@ format = "text"   # text | json
 [library]
 # scan_interval = "6h"   # (interface) rescan périodique de sécurité — AETHER_SCAN_INTERVAL
 watch_debounce = "30s"   # délai de calme après une modification de fichiers
-probe_workers  = 2       # analyses ffprobe simultanées
+probe_workers     = 2    # analyses ffprobe simultanées
+agent_concurrency = 2    # analyses simultanées par agent distant (sobriété réseau)
 
 [metadata]
 # Clé API TMDB (v3) ou jeton de lecture (v4) : https://www.themoviedb.org/settings/api

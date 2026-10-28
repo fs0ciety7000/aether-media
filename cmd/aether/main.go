@@ -173,6 +173,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	}
 	srcs := sources.New(st, box, sources.DefaultFactory{UserAgent: userAgent()}, hub, log)
 	srcs.ServerID, srcs.ServerName = serverIdentity(cfg.Paths.Data)
+	srcs.AgentConcurrency = cfg.Library.AgentConcurrency
 	nfo.SetFileSystem(srcs.NFOFileSystem())
 	scanner := library.NewScanner(st, runner, hub, log, srcs)
 	prober := probe.New(cfg.Paths.FFprobe)
@@ -186,6 +187,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	}
 	runner.Register(library.JobScan, 1, scanner.HandleScanJob)
 	runner.Register(library.JobProbe, cfg.Library.ProbeWorkers, scanner.ProbeHandler(prober))
+	srcs.OnAgentOnline = func() { runner.Wake(library.JobProbe) }
 
 	imgs, err := images.New(images.Options{Dir: filepath.Join(cfg.Paths.Cache, "images"), UserAgent: userAgent()})
 	if err != nil {

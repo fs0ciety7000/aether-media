@@ -30,11 +30,12 @@ func agentProbe(ctx context.Context, cfg AgentConfig, sec Secrets, rel string) (
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+sec.Token)
-	res, err := agentfs.ClientFor(cfg.Fingerprint).Do(req)
+	res, err := agentfs.ClientFor(cfg.URL, cfg.Fingerprint).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: agent injoignable: %v", vfs.ErrOffline, err) //nolint:errorlint // keep a single sentinel
+		// The cause stays wrapped: the circuit breaker classifies it.
+		return nil, fmt.Errorf("%w: agent injoignable: %w", vfs.ErrOffline, err)
 	}
-	defer func() { _ = res.Body.Close() }()
+	defer drainClose(res)
 	body, err := io.ReadAll(io.LimitReader(res.Body, 16<<20))
 	if err != nil {
 		return nil, err
@@ -46,4 +47,11 @@ func agentProbe(ctx context.Context, cfg AgentConfig, sec Secrets, rel string) (
 		return nil, fmt.Errorf("agent probe: HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return body, nil
+}
+
+// drainClose reads the rest of a response (bounded) and closes it, so that
+// its connection is reused.
+func drainClose(res *http.Response) {
+	agentfs.DrainClose(res.Body)
+	_ = res.Body.Close() // already closed; spelled out for bodyclose
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/store"
+	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
 
 func newRunner(t *testing.T) (*Runner, *store.Store) {
@@ -92,4 +93,50 @@ func TestRetryAndPanic(t *testing.T) {
 		}
 		return got["boom"] == "failed" && got["flaky"] == "queued"
 	})
+}
+
+// TestPostponeKeepsAttempts: a postponed job gives its attempt back, so an
+// outage longer than the retry budget does not fail it.
+func TestPostponeKeepsAttempts(t *testing.T) {
+	r, st := newRunner(t)
+	ctx := context.Background()
+	var ran atomic.Int32
+	r.Register("p", 1, func(context.Context, Job) error {
+		if ran.Add(1) <= maxAttempts+1 {
+			return Postpone(errors.New("agent down"), time.Millisecond)
+		}
+		return nil
+	})
+	r.Enqueue(ctx, "p", "k", nil, 0)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer func() { cancel(); r.Wait() }()
+	r.Start(runCtx)
+	waitFor(t, func() bool {
+		if ran.Load() != 1 {
+			return false
+		}
+		jobs, _ := st.ListJobsByStatus(ctx, db.ListJobsByStatusParams{Status: "queued", Lim: 10})
+		return len(jobs) == 1 && jobs[0].Attempts == 0 && jobs[0].Error == "agent down"
+	})
+	// More postponements than maxAttempts, then success: never failed.
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		stats, _ := st.JobStats(ctx)
+		if len(stats) == 0 {
+			break
+		}
+		for _, s := range stats {
+			if s.Status == "failed" {
+				t.Fatal("postponed job failed")
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job still pending: %+v (ran %d)", stats, ran.Load())
+		}
+		r.Wake("p")
+		time.Sleep(20 * time.Millisecond)
+	}
+	if ran.Load() != maxAttempts+2 {
+		t.Fatalf("ran %d times", ran.Load())
+	}
 }

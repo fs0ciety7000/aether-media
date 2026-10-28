@@ -51,7 +51,7 @@ func (f DefaultFactory) SFTPHostKey(ctx context.Context, cfg SFTPConfig) (string
 }
 
 func (f DefaultFactory) AgentInfo(ctx context.Context, url, token, fingerprint string) (AgentInfo, error) {
-	c := agentfs.ClientFor(fingerprint)
+	c := agentfs.ClientFor(url, fingerprint)
 	if f.HTTP != nil {
 		c = agentfs.PinClient(f.HTTP, fingerprint)
 	}

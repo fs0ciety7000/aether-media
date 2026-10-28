@@ -115,7 +115,7 @@ func agentCall(ctx context.Context, c *http.Client, method, base, path, token st
 	if err != nil {
 		return fmt.Errorf("agent injoignable : %w", err)
 	}
-	defer func() { _ = res.Body.Close() }()
+	defer drainClose(res)
 	data, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if err != nil {
 		return err
@@ -147,17 +147,20 @@ func normalizeCode(in string) string {
 // agent's answer and what the server saw of the TLS certificate. The code
 // never travels: the request carries HMAC(Argon2id(code, nonce), seen
 // fingerprint…), and the answer must carry the agent's own proof.
-func (m *Manager) pairExchange(ctx context.Context, base, code string) (PairResult, agentfs.TLSInfo, error) {
+// seen, when set, is a handshake just made with base (no second one).
+func (m *Manager) pairExchange(ctx context.Context, base, code string, seen *agentfs.TLSInfo) (PairResult, agentfs.TLSInfo, error) {
 	var tlsInfo agentfs.TLSInfo
-	client := agentfs.ClientFor("")
+	client := agentfs.ClientFor(base, "")
 	if strings.HasPrefix(base, "https://") {
 		var err error
-		if tlsInfo, err = agentfs.ProbeTLS(ctx, base); err != nil {
+		if seen != nil {
+			tlsInfo = *seen
+		} else if tlsInfo, err = agentfs.ProbeTLS(ctx, base); err != nil {
 			return PairResult{}, tlsInfo, fmt.Errorf("%w: agent injoignable: %v", vfs.ErrOffline, err) //nolint:errorlint // keep a single sentinel
 		}
 		// The request goes over a connection pinned to the certificate just
 		// seen, the one the proof is bound to.
-		client = agentfs.ClientFor(tlsInfo.Fingerprint)
+		client = agentfs.ClientFor(base, tlsInfo.Fingerprint)
 	}
 	nonce := make([]byte, agentproto.NonceLen)
 	if _, err := rand.Read(nonce); err != nil {
@@ -212,24 +215,26 @@ func (m *Manager) Pair(ctx context.Context, rawURL, code string, agentID int64) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	var seen *agentfs.TLSInfo
 	if u.Scheme == "http" {
 		// Agents serve HTTPS and HTTP on the same port: prefer HTTPS before
 		// sending anything, so that the proof never travels in clear.
 		hu := *u
 		hu.Scheme = "https"
 		pctx, pcancel := context.WithTimeout(ctx, 5*time.Second)
-		if _, err := agentfs.ProbeTLS(pctx, hu.String()); err == nil {
+		if ti, err := agentfs.ProbeTLS(pctx, hu.String()); err == nil {
 			u.Scheme = "https"
 			base = strings.TrimSuffix(u.String(), "/")
+			seen = &ti
 		}
 		pcancel()
 	}
-	res, tlsInfo, err := m.pairExchange(ctx, base, code)
+	res, tlsInfo, err := m.pairExchange(ctx, base, code, seen)
 	var ae *AgentError
 	if errors.As(err, &ae) && ae.Code == "tls_required" && u.Scheme == "http" {
 		u.Scheme = "https"
 		base = strings.TrimSuffix(u.String(), "/")
-		res, tlsInfo, err = m.pairExchange(ctx, base, code)
+		res, tlsInfo, err = m.pairExchange(ctx, base, code, nil)
 	}
 	if err != nil {
 		return db.RemoteAgent{}, pairError(err)
@@ -252,7 +257,7 @@ func (m *Manager) Pair(ctx context.Context, rawURL, code string, agentID int64) 
 		// Agent with tls = false behind an HTTPS reverse proxy: it cannot
 		// check which certificate we saw, so only a CA-verified one is safe.
 		if !tlsInfo.CAValid {
-			_ = agentCall(ctx, agentfs.ClientFor(tlsInfo.Fingerprint), http.MethodDelete, base, "/agent/v1/pair", res.Token, nil, nil)
+			_ = agentCall(ctx, agentfs.ClientFor(base, tlsInfo.Fingerprint), http.MethodDelete, base, "/agent/v1/pair", res.Token, nil, nil)
 			return db.RemoteAgent{}, &ValidationError{Code: "agent_cert_untrusted", Msg: "l'agent n'assure pas lui-même HTTPS (tls = false) et le certificat du proxy n'est pas reconnu : utilisez un certificat d'une autorité reconnue sur le proxy, ou activez HTTPS sur l'agent"}
 		}
 	default:
@@ -266,7 +271,7 @@ func (m *Manager) Pair(ctx context.Context, rawURL, code string, agentID int64) 
 	var a db.RemoteAgent
 	if prev != nil && prev.Uid != res.UID {
 		if !strings.HasPrefix(prev.Uid, "legacy:") {
-			_ = agentCall(ctx, agentfs.ClientFor(fp), http.MethodDelete, base, "/agent/v1/pair", res.Token, nil, nil)
+			_ = agentCall(ctx, agentfs.ClientFor(base, fp), http.MethodDelete, base, "/agent/v1/pair", res.Token, nil, nil)
 			return db.RemoteAgent{}, &ValidationError{Code: "agent_not_same", Msg: "la machine qui a répondu n'est pas cet agent (identifiant différent)"}
 		}
 		if other, err := m.store.GetAgentByUID(ctx, res.UID); err == nil && other.ID != prev.ID {
@@ -281,6 +286,7 @@ func (m *Manager) Pair(ctx context.Context, rawURL, code string, agentID int64) 
 	if err != nil {
 		return a, err
 	}
+	m.gate(AgentConfig{AgentID: a.ID, URL: base, Fingerprint: fp}, Secrets{Token: res.Token}).up()
 	m.log.Info("agent appairé", "agent", a.Name, "url", base, "transport", AgentTransport(a), "empreinte", agentproto.FormatFingerprint(fp))
 	m.forgetAgentSources(ctx, a.ID) // new token / certificate: reopen file systems
 	if m.hub != nil {
@@ -328,9 +334,13 @@ func (m *Manager) AgentCall(ctx context.Context, agentID int64, method, path str
 	if a.Fingerprint != "" && !strings.HasPrefix(a.Url, "https://") {
 		return errors.New("agent épinglé joint en http:// : réappairez-le")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	g := m.gate(AgentConfig{AgentID: a.ID, URL: a.Url, Fingerprint: a.Fingerprint}, sec)
+	if err := g.check(); err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	return agentCall(ctx, agentfs.ClientFor(a.Fingerprint), method, a.Url, path, sec.Token, body, out)
+	return g.done(ctx, agentCall(cctx, agentfs.ClientFor(a.Url, a.Fingerprint), method, a.Url, path, sec.Token, body, out))
 }
 
 // Unpair revokes this server's token on the agent (best effort) and forgets it.

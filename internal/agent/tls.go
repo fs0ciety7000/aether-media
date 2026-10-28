@@ -46,7 +46,10 @@ func (t *agentTLS) config() *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{t.cert},
 		MinVersion:   tls.VersionTLS12,
-		NextProtos:   []string{"http/1.1"},
+		// HTTP/2 lets the server multiplex all its calls on one connection
+		// (http.Server.Serve configures it for the *tls.Conn the sniffing
+		// listener returns, since Server.TLSConfig is nil).
+		NextProtos: []string{"h2", "http/1.1"},
 	}
 }
 

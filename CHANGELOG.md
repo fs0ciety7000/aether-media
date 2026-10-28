@@ -12,6 +12,7 @@ Première version publique : la « Première séance ». Elle couvre le périmè
 - Analyse incrémentale (taille et date, sans lecture du contenu), surveillance des dossiers (fsnotify) et rescan périodique de secours, marqueurs d'exclusion (`.aetherignore`, `.ignore`, `.plexignore`, `.nomedia`), échantillons ignorés.
 - Analyse ffprobe (pistes, langues, HDR, chapitres), sous-titres externes.
 - Agent : appairage par code à usage unique, découverte sur le réseau local, partages gérés depuis l'interface, analyse sur place, notification des changements de fichiers, installation en service (`aether agent install`).
+- Agent distant sobre en connexions (seedbox dont l'hébergeur bloque les adresses trop bavardes) : une seule connexion HTTP/2 par agent, au plus 8 en HTTP/1.1, deux analyses simultanées par agent (`library.agent_concurrency`), et mise hors ligne après une erreur réseau avec un seul essai espacé (1 à 30 min) au lieu de nouvelles tentatives à chaque tâche.
 
 ### Métadonnées
 - Fichiers NFO (Kodi) et images locales en priorité, puis TMDB (films, séries, saisons, épisodes, distribution, collections) et MusicBrainz avec Cover Art Archive.
