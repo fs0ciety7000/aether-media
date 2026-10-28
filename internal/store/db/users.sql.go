@@ -7,7 +7,42 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
+
+const addUserLibrary = `-- name: AddUserLibrary :exec
+INSERT OR IGNORE INTO user_library_access (user_id, library_id) VALUES (?, ?)
+`
+
+type AddUserLibraryParams struct {
+	UserID    int64 `json:"userId"`
+	LibraryID int64 `json:"libraryId"`
+}
+
+func (q *Queries) AddUserLibrary(ctx context.Context, arg AddUserLibraryParams) error {
+	_, err := q.db.ExecContext(ctx, addUserLibrary, arg.UserID, arg.LibraryID)
+	return err
+}
+
+const clearUserLibraries = `-- name: ClearUserLibraries :exec
+DELETE FROM user_library_access WHERE user_id = ?
+`
+
+func (q *Queries) ClearUserLibraries(ctx context.Context, userID int64) error {
+	_, err := q.db.ExecContext(ctx, clearUserLibraries, userID)
+	return err
+}
+
+const countAdmins = `-- name: CountAdmins :one
+SELECT count(*) FROM users WHERE is_admin = 1
+`
+
+func (q *Queries) CountAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const countUsers = `-- name: CountUsers :one
 SELECT count(*) FROM users
@@ -18,4 +53,367 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createSession = `-- name: CreateSession :exec
+INSERT INTO sessions (id, token_hash, user_id, device_name, client) VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateSessionParams struct {
+	ID         sql.NullInt64 `json:"id"`
+	TokenHash  []byte        `json:"tokenHash"`
+	UserID     int64         `json:"userId"`
+	DeviceName string        `json:"deviceName"`
+	Client     string        `json:"client"`
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.ID,
+		arg.TokenHash,
+		arg.UserID,
+		arg.DeviceName,
+		arg.Client,
+	)
+	return err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO users (name, password_hash, is_admin, all_libraries, max_rating_age, block_unrated)
+VALUES (?, ?, ?, ?, ?, ?) RETURNING id, name, password_hash, is_admin, prefs, created_at, all_libraries, max_rating_age, block_unrated, last_seen
+`
+
+type CreateUserParams struct {
+	Name         string        `json:"name"`
+	PasswordHash string        `json:"passwordHash"`
+	IsAdmin      int64         `json:"isAdmin"`
+	AllLibraries int64         `json:"allLibraries"`
+	MaxRatingAge sql.NullInt64 `json:"maxRatingAge"`
+	BlockUnrated int64         `json:"blockUnrated"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.Name,
+		arg.PasswordHash,
+		arg.IsAdmin,
+		arg.AllLibraries,
+		arg.MaxRatingAge,
+		arg.BlockUnrated,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.Prefs,
+		&i.CreatedAt,
+		&i.AllLibraries,
+		&i.MaxRatingAge,
+		&i.BlockUnrated,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const deleteOtherSessions = `-- name: DeleteOtherSessions :exec
+DELETE FROM sessions WHERE user_id = ? AND token_hash != ?
+`
+
+type DeleteOtherSessionsParams struct {
+	UserID    int64  `json:"userId"`
+	TokenHash []byte `json:"tokenHash"`
+}
+
+func (q *Queries) DeleteOtherSessions(ctx context.Context, arg DeleteOtherSessionsParams) error {
+	_, err := q.db.ExecContext(ctx, deleteOtherSessions, arg.UserID, arg.TokenHash)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions WHERE token_hash = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, tokenHash)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = ?
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
+	return err
+}
+
+const deleteUserSession = `-- name: DeleteUserSession :execrows
+DELETE FROM sessions WHERE user_id = ? AND id = ?
+`
+
+type DeleteUserSessionParams struct {
+	UserID int64         `json:"userId"`
+	ID     sql.NullInt64 `json:"id"`
+}
+
+func (q *Queries) DeleteUserSession(ctx context.Context, arg DeleteUserSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserSession, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = ?
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteUserSessions, userID)
+	return err
+}
+
+const getSessionByToken = `-- name: GetSessionByToken :one
+SELECT token_hash, user_id, device_name, client, last_seen, created_at, id FROM sessions WHERE token_hash = ?
+`
+
+func (q *Queries) GetSessionByToken(ctx context.Context, tokenHash []byte) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByToken, tokenHash)
+	var i Session
+	err := row.Scan(
+		&i.TokenHash,
+		&i.UserID,
+		&i.DeviceName,
+		&i.Client,
+		&i.LastSeen,
+		&i.CreatedAt,
+		&i.ID,
+	)
+	return i, err
+}
+
+const getUser = `-- name: GetUser :one
+SELECT id, name, password_hash, is_admin, prefs, created_at, all_libraries, max_rating_age, block_unrated, last_seen FROM users WHERE id = ?
+`
+
+func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.Prefs,
+		&i.CreatedAt,
+		&i.AllLibraries,
+		&i.MaxRatingAge,
+		&i.BlockUnrated,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const getUserByName = `-- name: GetUserByName :one
+SELECT id, name, password_hash, is_admin, prefs, created_at, all_libraries, max_rating_age, block_unrated, last_seen FROM users WHERE name = ? COLLATE NOCASE
+`
+
+func (q *Queries) GetUserByName(ctx context.Context, name string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByName, name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.Prefs,
+		&i.CreatedAt,
+		&i.AllLibraries,
+		&i.MaxRatingAge,
+		&i.BlockUnrated,
+		&i.LastSeen,
+	)
+	return i, err
+}
+
+const listUserLibraries = `-- name: ListUserLibraries :many
+SELECT library_id FROM user_library_access WHERE user_id = ? ORDER BY library_id
+`
+
+func (q *Queries) ListUserLibraries(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listUserLibraries, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var library_id int64
+		if err := rows.Scan(&library_id); err != nil {
+			return nil, err
+		}
+		items = append(items, library_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT token_hash, user_id, device_name, client, last_seen, created_at, id FROM sessions WHERE user_id = ? ORDER BY last_seen DESC
+`
+
+func (q *Queries) ListUserSessions(ctx context.Context, userID int64) ([]Session, error) {
+	rows, err := q.db.QueryContext(ctx, listUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.TokenHash,
+			&i.UserID,
+			&i.DeviceName,
+			&i.Client,
+			&i.LastSeen,
+			&i.CreatedAt,
+			&i.ID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, name, password_hash, is_admin, prefs, created_at, all_libraries, max_rating_age, block_unrated, last_seen FROM users ORDER BY name COLLATE NOCASE
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.PasswordHash,
+			&i.IsAdmin,
+			&i.Prefs,
+			&i.CreatedAt,
+			&i.AllLibraries,
+			&i.MaxRatingAge,
+			&i.BlockUnrated,
+			&i.LastSeen,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const purgeSessions = `-- name: PurgeSessions :exec
+DELETE FROM sessions WHERE last_seen < ?
+`
+
+func (q *Queries) PurgeSessions(ctx context.Context, lastSeen int64) error {
+	_, err := q.db.ExecContext(ctx, purgeSessions, lastSeen)
+	return err
+}
+
+const setUserPassword = `-- name: SetUserPassword :exec
+UPDATE users SET password_hash = ? WHERE id = ?
+`
+
+type SetUserPasswordParams struct {
+	PasswordHash string `json:"passwordHash"`
+	ID           int64  `json:"id"`
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, setUserPassword, arg.PasswordHash, arg.ID)
+	return err
+}
+
+const setUserPrefs = `-- name: SetUserPrefs :exec
+UPDATE users SET prefs = ? WHERE id = ?
+`
+
+type SetUserPrefsParams struct {
+	Prefs string `json:"prefs"`
+	ID    int64  `json:"id"`
+}
+
+func (q *Queries) SetUserPrefs(ctx context.Context, arg SetUserPrefsParams) error {
+	_, err := q.db.ExecContext(ctx, setUserPrefs, arg.Prefs, arg.ID)
+	return err
+}
+
+const touchSession = `-- name: TouchSession :exec
+UPDATE sessions SET last_seen = unixepoch() WHERE token_hash = ?
+`
+
+func (q *Queries) TouchSession(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.ExecContext(ctx, touchSession, tokenHash)
+	return err
+}
+
+const touchUser = `-- name: TouchUser :exec
+UPDATE users SET last_seen = unixepoch() WHERE id = ?
+`
+
+func (q *Queries) TouchUser(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, touchUser, id)
+	return err
+}
+
+const updateUser = `-- name: UpdateUser :exec
+UPDATE users SET name = ?, is_admin = ?, all_libraries = ?, max_rating_age = ?, block_unrated = ? WHERE id = ?
+`
+
+type UpdateUserParams struct {
+	Name         string        `json:"name"`
+	IsAdmin      int64         `json:"isAdmin"`
+	AllLibraries int64         `json:"allLibraries"`
+	MaxRatingAge sql.NullInt64 `json:"maxRatingAge"`
+	BlockUnrated int64         `json:"blockUnrated"`
+	ID           int64         `json:"id"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	_, err := q.db.ExecContext(ctx, updateUser,
+		arg.Name,
+		arg.IsAdmin,
+		arg.AllLibraries,
+		arg.MaxRatingAge,
+		arg.BlockUnrated,
+		arg.ID,
+	)
+	return err
 }

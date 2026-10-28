@@ -234,6 +234,9 @@ func runServe(args []string) error {
 	defer func() { _ = svc.store.Close() }()
 	defer svc.sources.Close()
 	svc.sources.ProxyBase = loopbackBase(cfg)
+	if err := svc.store.BackfillRatingAges(ctx); err != nil {
+		log.Warn("classification par âge", "err", err)
+	}
 
 	bgCtx, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()

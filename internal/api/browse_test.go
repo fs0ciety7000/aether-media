@@ -74,14 +74,15 @@ func browseServer(t *testing.T) *httptest.Server {
 	files, _ := st.ListItemMediaFiles(ctx, byTitle["Inception"].ID)
 	st.InsertMediaStream(ctx, db.InsertMediaStreamParams{MediaFileID: files[0].ID, Type: "video", Codec: "hevc", Width: 3840, Height: 1600, Hdr: "HDR10"})
 
-	ts := httptest.NewServer(New(Deps{Store: st, Log: log}).Handler(http.NotFoundHandler()))
+	ts := httptest.NewServer(New(Deps{Store: st, Log: log, Hub: events.NewHub()}).Handler(http.NotFoundHandler()))
 	t.Cleanup(ts.Close)
+	authed = loginAdmin(t, ts)
 	return ts
 }
 
 func getJSON(t *testing.T, ts *httptest.Server, path string, out any) int {
 	t.Helper()
-	res, err := http.Get(ts.URL + path)
+	res, err := authed.Get(ts.URL + path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,3 +211,31 @@ func TestHomeAndSimilar(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// showsServer scans a shows library made of the given files.
+func showsServer(t *testing.T, files []string) *httptest.Server {
+	t.Helper()
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "s.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	root := t.TempDir()
+	for _, f := range files {
+		p := filepath.Join(root, f)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(f), 0o644)
+	}
+	log := slog.New(slog.DiscardHandler)
+	lib, _ := st.CreateLibrary(ctx, db.CreateLibraryParams{Name: "Séries", Kind: "shows"})
+	st.AddLocalSource(ctx, lib.ID, root)
+	srcs, _ := sources.NewForTests(st, t.TempDir(), events.NewHub(), log)
+	if _, err := library.NewScanner(st, jobs.NewRunner(st, log), events.NewHub(), log, srcs).Scan(ctx, lib.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(New(Deps{Store: st, Log: log, Hub: events.NewHub()}).Handler(http.NotFoundHandler()))
+	t.Cleanup(ts.Close)
+	authed = loginAdmin(t, ts)
+	return ts
+}

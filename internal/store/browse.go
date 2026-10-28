@@ -31,6 +31,16 @@ const browseExtras = `,
 	 OR EXISTS (SELECT 1 FROM media_files mf LEFT JOIN library_sources ls ON ls.id = mf.source_id
 	            WHERE mf.item_id = i.id AND COALESCE(ls.status, 'online') != 'offline'))`
 
+// Viewer data; the unplayed-episode count takes the user id as first argument.
+const userExtras = `,
+	CASE WHEN i.kind IN ('series', 'season') THEN (
+		SELECT count(*) FROM items e WHERE e.kind = 'episode' AND e.missing = 0
+		  AND (e.parent_id = i.id OR e.parent_id IN (SELECT se.id FROM items se WHERE se.parent_id = i.id))
+		  AND NOT EXISTS (SELECT 1 FROM user_item_data x WHERE x.item_id = e.id AND x.user_id = ? AND x.played = 1))
+	END,
+	COALESCE(ud.position_ms, 0), COALESCE(ud.played, 0) = 1, COALESCE(ud.play_count, 0), ud.last_played_at,
+	COALESCE(ud.is_favorite, 0) = 1, ud.rating`
+
 // Video width thresholds for resolution classes (width is robust to
 // letterboxing, height is a fallback for narrow/portrait encodes).
 const (
@@ -43,8 +53,49 @@ const (
 // TopLevelKinds are listed when neither a parent nor kinds are requested.
 var TopLevelKinds = []string{"movie", "series", "artist"}
 
+// Viewer restricts listings to what a user may see and attaches their data.
+// The zero Viewer sees everything and has no user data (internal use).
+type Viewer struct {
+	UserID       int64
+	LibraryIDs   []int64 // nil = all libraries
+	MaxAge       int     // parental limit, used when HasMaxAge
+	HasMaxAge    bool
+	BlockUnrated bool
+}
+
+// Visibility returns the SQL condition (on alias i) hiding items the viewer
+// may not see.
+func (v Viewer) Visibility() (string, []any) {
+	var conds []string
+	var args []any
+	if v.LibraryIDs != nil {
+		if len(v.LibraryIDs) == 0 {
+			return "0", nil
+		}
+		conds = append(conds, "i.library_id IN ("+placeholders(len(v.LibraryIDs))+")")
+		args = append(args, anys(v.LibraryIDs)...)
+	}
+	// An item inherits the classification of its series/season.
+	const lineage = "a.id IN (i.id, i.parent_id, (SELECT p.parent_id FROM items p WHERE p.id = i.parent_id))"
+	if v.HasMaxAge {
+		conds = append(conds, "NOT EXISTS (SELECT 1 FROM items a WHERE "+lineage+" AND a.rating_age > ?)")
+		args = append(args, v.MaxAge)
+	}
+	if v.BlockUnrated {
+		conds = append(conds, "(i.kind IN ('artist', 'album', 'track') OR EXISTS (SELECT 1 FROM items a WHERE "+lineage+" AND a.rating_age IS NOT NULL))")
+	}
+	if len(conds) == 0 {
+		return "1", nil
+	}
+	return strings.Join(conds, " AND "), args
+}
+
 // BrowseParams filters and orders an item listing. Zero values mean "any".
 type BrowseParams struct {
+	Viewer     Viewer
+	Played     *bool
+	InProgress bool
+	Favorite   bool
 	LibraryID  int64
 	ParentID   int64
 	Kinds      []string
@@ -72,6 +123,14 @@ type BrowseRow struct {
 	VideoHeight int64
 	HDR         string
 	Available   bool // false when every file sits on an offline source
+	// Viewer's data (zero without a viewer).
+	PositionMs    int64
+	Played        bool
+	PlayCount     int64
+	LastPlayedAt  sql.NullInt64
+	Favorite      bool
+	UserRating    sql.NullFloat64
+	UnplayedCount sql.NullInt64 // series and seasons
 }
 
 // Browse lists items with dynamic filters and ordering, and the total
@@ -82,6 +141,22 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	add := func(cond string, a ...any) { where = append(where, cond); args = append(args, a...) }
 
 	add("i.missing = 0")
+	if vis, vargs := p.Viewer.Visibility(); vis != "1" {
+		add(vis, vargs...)
+	}
+	if p.Played != nil {
+		if *p.Played {
+			add("COALESCE(ud.played, 0) = 1")
+		} else {
+			add("COALESCE(ud.played, 0) = 0")
+		}
+	}
+	if p.InProgress {
+		add("COALESCE(ud.position_ms, 0) > 0")
+	}
+	if p.Favorite {
+		add("COALESCE(ud.is_favorite, 0) = 1")
+	}
 	if p.LibraryID != 0 {
 		add("i.library_id = ?", p.LibraryID)
 	}
@@ -132,8 +207,10 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	}
 	cond := strings.Join(where, " AND ")
 
+	join := " LEFT JOIN user_item_data ud ON ud.item_id = i.id AND ud.user_id = ? "
+	joinArgs := []any{p.Viewer.UserID}
 	var total int
-	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM items i WHERE "+cond, args...).Scan(&total); err != nil {
+	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM items i"+join+"WHERE "+cond, append(joinArgs, args...)...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -158,6 +235,8 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	case "random":
 		// Deterministic shuffle so pages do not overlap.
 		order = fmt.Sprintf("((i.id * 2654435761 + %d) %% 4294967291)", p.Seed%4294967291)
+	case "lastPlayed":
+		order = "ud.last_played_at IS NULL, ud.last_played_at " + dir
 	case "latest":
 		// Series by their most recently added episode.
 		order = `COALESCE((SELECT max(e.date_added) FROM items se JOIN items e ON e.parent_id = se.id
@@ -169,9 +248,11 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	if limit <= 0 {
 		limit = 50
 	}
-	q := "SELECT " + itemColumns + browseExtras + " FROM items i WHERE " + cond +
+	q := "SELECT " + itemColumns + browseExtras + userExtras + " FROM items i" + join + "WHERE " + cond +
 		" ORDER BY " + order + ", i.id LIMIT ? OFFSET ?"
-	rows, err := s.DB.QueryContext(ctx, q, append(args, limit, p.Offset)...)
+	all := append([]any{p.Viewer.UserID}, joinArgs...)
+	all = append(all, args...)
+	rows, err := s.DB.QueryContext(ctx, q, append(all, limit, p.Offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -179,7 +260,8 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	var out []BrowseRow
 	for rows.Next() {
 		var r BrowseRow
-		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available)...); err != nil {
+		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available,
+			&r.UnplayedCount, &r.PositionMs, &r.Played, &r.PlayCount, &r.LastPlayedAt, &r.Favorite, &r.UserRating)...); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, r)
@@ -440,4 +522,42 @@ func (s *Store) ImagesFor(ctx context.Context, ids []int64) (map[int64][]db.Imag
 		out[im.ItemID] = append(out[im.ItemID], im)
 	}
 	return out, rows.Err()
+}
+
+// NextUpIDs returns, for each series the user has started (most recent
+// first), the next unwatched episode after the last one watched. Specials
+// (season 0) are skipped; episodes already in progress are left to
+// "continue watching".
+func (s *Store) NextUpIDs(ctx context.Context, userID int64, limit int) ([]int64, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+WITH watched AS (
+    SELECT se.parent_id AS series_id, e.id AS ep_id, se.index_number AS season, e.sort_title AS st, ud.last_played_at AS lp,
+           row_number() OVER (PARTITION BY se.parent_id ORDER BY ud.last_played_at DESC, se.index_number DESC, e.sort_title DESC) AS rn
+    FROM user_item_data ud
+    JOIN items e ON e.id = ud.item_id AND e.kind = 'episode' AND e.missing = 0
+    JOIN items se ON se.id = e.parent_id
+    WHERE ud.user_id = ?1 AND ud.played = 1
+)
+SELECT (SELECT n.id FROM items n JOIN items ns ON ns.id = n.parent_id
+        WHERE ns.parent_id = w.series_id AND n.kind = 'episode' AND n.missing = 0 AND ns.index_number > 0
+          AND (ns.index_number > w.season OR (ns.index_number = w.season AND n.sort_title > w.st))
+          AND NOT EXISTS (SELECT 1 FROM user_item_data x WHERE x.user_id = ?1 AND x.item_id = n.id
+                          AND (x.played = 1 OR x.position_ms > 0))
+        ORDER BY ns.index_number, n.sort_title LIMIT 1) AS next_id
+FROM watched w WHERE w.rn = 1 ORDER BY w.lp DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() && len(ids) < limit {
+		var id sql.NullInt64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		if id.Valid {
+			ids = append(ids, id.Int64)
+		}
+	}
+	return ids, rows.Err()
 }

@@ -65,6 +65,7 @@ type categoryDTO struct {
 type homeDTO struct {
 	Hero             []itemDTO     `json:"hero"`
 	ContinueWatching []itemDTO     `json:"continueWatching"`
+	NextUp           []itemDTO     `json:"nextUp"`
 	RecentlyAdded    []recentRow   `json:"recentlyAdded"`
 	Categories       []categoryDTO `json:"categories"`
 	Recommended      []itemDTO     `json:"recommended"`
@@ -73,9 +74,9 @@ type homeDTO struct {
 // home assembles the landing page in one request.
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	out := homeDTO{ContinueWatching: []itemDTO{}, RecentlyAdded: []recentRow{}, Categories: []categoryDTO{}}
+	out := homeDTO{ContinueWatching: []itemDTO{}, NextUp: []itemDTO{}, RecentlyAdded: []recentRow{}, Categories: []categoryDTO{}}
 	browse := func(p store.BrowseParams) ([]itemDTO, error) {
-		rows, _, err := s.store.Browse(ctx, p)
+		rows, _, err := s.browse(r, p)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +88,23 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	libs, err := s.store.ListLibraries(ctx)
+	if out.ContinueWatching, err = browse(store.BrowseParams{Kinds: []string{"movie", "episode"}, InProgress: true, Sort: "lastPlayed", Limit: 12}); err != nil {
+		s.internalError(w, err)
+		return
+	}
+	if p := principalFrom(r); p != nil {
+		ids, err := s.store.NextUpIDs(ctx, p.user.ID, 12)
+		if err != nil {
+			s.internalError(w, err)
+			return
+		}
+		if out.NextUp, err = s.browseIDs(r, ids); err != nil {
+			s.internalError(w, err)
+			return
+		}
+	}
+
+	libs, err := s.visibleLibraries(r)
 	if err != nil {
 		s.internalError(w, err)
 		return

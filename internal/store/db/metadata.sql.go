@@ -227,7 +227,7 @@ func (q *Queries) GetItemImage(ctx context.Context, arg GetItemImageParams) (Ima
 }
 
 const listChildItems = `-- name: ListChildItems :many
-SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end, tagline, premiere_date, end_date, status, official_rating, community_rating, collection, identify_status, metadata_refreshed_at FROM items WHERE parent_id = ? AND missing = 0 ORDER BY sort_title, id
+SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end, tagline, premiere_date, end_date, status, official_rating, community_rating, collection, identify_status, metadata_refreshed_at, rating_age FROM items WHERE parent_id = ? AND missing = 0 ORDER BY sort_title, id
 `
 
 func (q *Queries) ListChildItems(ctx context.Context, parentID sql.NullInt64) ([]Item, error) {
@@ -273,6 +273,7 @@ func (q *Queries) ListChildItems(ctx context.Context, parentID sql.NullInt64) ([
 			&i.Collection,
 			&i.IdentifyStatus,
 			&i.MetadataRefreshedAt,
+			&i.RatingAge,
 		); err != nil {
 			return nil, err
 		}

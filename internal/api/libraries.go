@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -59,6 +60,9 @@ func (s *Server) libraryDTO(r *http.Request, l db.Library) (libraryDTO, error) {
 	if err != nil {
 		return dto, err
 	}
+	if !isAdmin(r) {
+		srcs = nil // where files live is administrators' business
+	}
 	for _, src := range srcs {
 		dto.Sources = append(dto.Sources, toSourceDTO(src))
 		if src.Kind == sources.KindLocal {
@@ -75,8 +79,27 @@ func (s *Server) libraryDTO(r *http.Request, l db.Library) (libraryDTO, error) {
 	return dto, nil
 }
 
-func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
+// visibleLibraries lists the libraries the requesting user may browse.
+func (s *Server) visibleLibraries(r *http.Request) ([]db.Library, error) {
 	libs, err := s.store.ListLibraries(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	allowed := viewer(r).LibraryIDs
+	if allowed == nil {
+		return libs, nil
+	}
+	out := libs[:0]
+	for _, l := range libs {
+		if slices.Contains(allowed, l.ID) {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
+	libs, err := s.visibleLibraries(r)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -96,6 +119,10 @@ func (s *Server) listLibraries(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getLibrary(w http.ResponseWriter, r *http.Request) {
 	l, ok := s.loadLibrary(w, r)
 	if !ok {
+		return
+	}
+	if allowed := viewer(r).LibraryIDs; allowed != nil && !slices.Contains(allowed, l.ID) {
+		writeError(w, http.StatusNotFound, "not_found", "bibliothèque introuvable")
 		return
 	}
 	dto, err := s.libraryDTO(r, l)

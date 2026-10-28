@@ -32,12 +32,39 @@ func newTestServer(t *testing.T) *httptest.Server {
 	}
 	ts := httptest.NewServer(New(Deps{Store: st, Log: log, Sources: srcs}).Handler(web))
 	t.Cleanup(ts.Close)
+	authed = loginAdmin(t, ts)
 	return ts
+}
+
+// authed is the admin client of the current test server (tests are sequential).
+var authed *http.Client
+
+type bearerTransport struct{ token string }
+
+func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+b.token)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// loginAdmin creates the first administrator and returns a client using its token.
+func loginAdmin(t *testing.T, ts *httptest.Server) *http.Client {
+	t.Helper()
+	res, err := http.Post(ts.URL+"/api/v1/setup", "application/json", strings.NewReader(`{"name":"admin","password":"motdepasse"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var out struct{ Token string }
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil || out.Token == "" {
+		t.Fatalf("setup: %d %v", res.StatusCode, err)
+	}
+	return &http.Client{Transport: bearerTransport{out.Token}}
 }
 
 func TestSystemInfo(t *testing.T) {
 	ts := newTestServer(t)
-	res, err := http.Get(ts.URL + "/api/v1/system/info")
+	res, err := authed.Get(ts.URL + "/api/v1/system/info")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +73,7 @@ func TestSystemInfo(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
 		t.Fatal(err)
 	}
-	if res.StatusCode != 200 || info.Name != "Aether" || !info.SetupRequired {
+	if res.StatusCode != 200 || info.Name != "Aether" || info.SetupRequired { // the test server is already set up
 		t.Fatalf("got %d %+v", res.StatusCode, info)
 	}
 }
@@ -59,7 +86,7 @@ func TestRouting(t *testing.T) {
 		"/films/123":   200, // SPA route
 	}
 	for path, want := range cases {
-		res, err := http.Get(ts.URL + path)
+		res, err := authed.Get(ts.URL + path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,7 +101,7 @@ func TestCreateLibraryValidation(t *testing.T) {
 	ts := newTestServer(t)
 	dir := t.TempDir()
 	post := func(body string) int {
-		res, err := http.Post(ts.URL+"/api/v1/libraries", "application/json", strings.NewReader(body))
+		res, err := authed.Post(ts.URL+"/api/v1/libraries", "application/json", strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +126,7 @@ func TestCreateLibraryValidation(t *testing.T) {
 			t.Errorf("%s → %d, want %d", c.body, got, c.want)
 		}
 	}
-	res, err := http.Get(ts.URL + "/api/v1/libraries")
+	res, err := authed.Get(ts.URL + "/api/v1/libraries")
 	if err != nil {
 		t.Fatal(err)
 	}

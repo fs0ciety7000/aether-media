@@ -185,3 +185,54 @@ type SourceInput = {
 - `DELETE /libraries/{id}/sources/{sid}` → 204 (les éléments de cette source disparaissent au prochain scan)
 - `Item.available` : `false` quand tous les fichiers de l'élément sont sur des sources hors ligne (affichage grisé, lecture désactivée).
 - SSE : `source.status` `{ id, libraryId, status, lastError? }`.
+
+## Comptes, progression, collections (M6)
+
+### Authentification
+- Session par cookie `aether_session` (HttpOnly, SameSite=Lax, Secure en HTTPS) **ou** en-tête `Authorization: Bearer <jeton>` (clients non navigateur). Toute la route `/api/v1` exige une session, **sauf** : `GET /system/info`, `POST /auth/login`, `POST /setup`.
+- Requêtes modifiantes avec cookie : l'en-tête `Origin` (s'il est présent) doit correspondre à l'hôte (protection CSRF).
+- 401 `unauthenticated` (pas de session) · 403 `forbidden` (droits insuffisants).
+- `GET /system/info` gagne `setupRequired: boolean` (aucun compte encore).
+
+```ts
+type User = { id: number; name: string; isAdmin: boolean
+              allLibraries: boolean; libraryIds: number[]   // accès si !allLibraries
+              maxRatingAge?: number                         // contrôle parental : 0, 6, 10, 12, 16, 18 ; absent = aucun
+              blockUnrated: boolean
+              prefs: { audioLanguage?: string; subtitleLanguage?: string; subtitleMode?: "auto" | "always" | "forced" | "off" }
+              createdAt: string; lastSeen?: string }
+type UserData = { positionMs: number; played: boolean; playCount: number; lastPlayedAt?: string
+                  favorite: boolean; rating?: number /* 0–10 */ }
+```
+
+- `POST /setup` `{ name, password }` → `201 { user, token }` + cookie — uniquement si aucun compte (sinon 409) ; crée l'administrateur.
+- `POST /auth/login` `{ name, password, device? }` → `{ user, token }` + cookie · 401 `invalid_credentials` · 429 après 10 échecs / 15 min / IP.
+- `POST /auth/logout` → 204 (session courante révoquée).
+- `GET /me` → `User` · `PATCH /me` `{ prefs?, currentPassword?, newPassword? }` → `User` (mot de passe ≥ 8 caractères ; changer le mot de passe révoque les autres sessions).
+- `GET /me/sessions` → `{ id, device, client, current, lastSeen, createdAt }[]` · `DELETE /me/sessions/{id}` → 204.
+- Administration (admin) : `GET /users` → `User[]` · `POST /users` `{ name, password, isAdmin?, allLibraries?, libraryIds?, maxRatingAge?, blockUnrated? }` → `201 User` · `PATCH /users/{id}` (mêmes champs, `password` pour réinitialiser) · `DELETE /users/{id}` (impossible de supprimer le dernier admin).
+
+### Droits
+- Lecture (tout utilisateur) : navigation, recherche, détail, images, lecture, ses propres données.
+- Admin seulement : bibliothèques et sources, scans, tâches, utilisateurs, modification/identification/rafraîchissement des éléments, champ `path` et chemins de fichiers dans les réponses.
+- Filtrage : un utilisateur ne voit que les bibliothèques autorisées ; avec `maxRatingAge`, les éléments (et les épisodes de séries) au-dessus sont masqués partout (listes, recherche, accueil, détail → 404, lecture → 404) ; `blockUnrated` masque aussi les éléments sans classification.
+
+### Données utilisateur
+- `Item.userData: UserData` sur les films, épisodes, pistes ; `Item.unplayedCount` sur les séries et saisons (épisodes non vus).
+- `PUT /items/{id}/userdata` `{ played?, favorite?, rating?, positionMs? }` → `UserData`. `played: true/false` sur une série ou une saison s'applique à tous ses épisodes.
+- La progression est enregistrée par la lecture : `POST /playback/{id}` associe la session à l'utilisateur ; chaque `ping` `{ positionMs, paused }` enregistre la position ; `DELETE` de session (ou fin) : si position ≥ 90 % de la durée (ou reste < 2 min pour un film / < 30 s pour un épisode) → `played`, compteur +1, position remise à 0.
+- `GET /items` gagne : `played=true|false`, `favorite=true`, `inProgress=true`, `sort=lastPlayed`.
+
+### Accueil
+- `continueWatching: Item[]` — films/épisodes en cours (position > 0), du plus récent au plus ancien, ≤ 12.
+- `nextUp: Item[]` (nouveau) — pour chaque série commencée, le prochain épisode non vu après le dernier vu, ≤ 12.
+
+### Collections
+```ts
+type Collection = { id: string /* "c<id>" manuelle · "t<nom>" automatique TMDB */; name: string; kind: "manual" | "tmdb"
+                    count: number; images: Item["images"] /* poster/backdrop du premier élément si aucune */ ; ownerId?: number; shared: boolean }
+```
+- `GET /collections` → `Collection[]` (manuelles visibles par l'utilisateur + automatiques issues de `Item.collection` avec ≥ 2 éléments).
+- `GET /collections/{id}/items` → `{ collection: Collection, items: Item[] }`
+- `POST /collections` `{ name, shared? }` → `201 Collection` (partagée : admin seulement) · `PATCH /collections/{id}` `{ name?, shared? }` · `DELETE /collections/{id}`
+- `PUT /collections/{id}/items/{itemId}` → 204 · `DELETE /collections/{id}/items/{itemId}` → 204

@@ -16,6 +16,21 @@ type Chapter struct {
 	Title       string `json:"title"`
 }
 
+type Collection struct {
+	ID        int64         `json:"id"`
+	OwnerID   sql.NullInt64 `json:"ownerId"`
+	Name      string        `json:"name"`
+	Shared    int64         `json:"shared"`
+	CreatedAt int64         `json:"createdAt"`
+}
+
+type CollectionItem struct {
+	CollectionID int64 `json:"collectionId"`
+	ItemID       int64 `json:"itemId"`
+	Ord          int64 `json:"ord"`
+	AddedAt      int64 `json:"addedAt"`
+}
+
 type Genre struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
@@ -72,6 +87,7 @@ type Item struct {
 	Collection          sql.NullString  `json:"collection"`
 	IdentifyStatus      string          `json:"identifyStatus"`
 	MetadataRefreshedAt sql.NullInt64   `json:"metadataRefreshedAt"`
+	RatingAge           sql.NullInt64   `json:"ratingAge"`
 }
 
 type ItemGenre struct {
@@ -189,12 +205,13 @@ type Person struct {
 }
 
 type Session struct {
-	TokenHash  []byte `json:"tokenHash"`
-	UserID     int64  `json:"userId"`
-	DeviceName string `json:"deviceName"`
-	Client     string `json:"client"`
-	LastSeen   int64  `json:"lastSeen"`
-	CreatedAt  int64  `json:"createdAt"`
+	TokenHash  []byte        `json:"tokenHash"`
+	UserID     int64         `json:"userId"`
+	DeviceName string        `json:"deviceName"`
+	Client     string        `json:"client"`
+	LastSeen   int64         `json:"lastSeen"`
+	CreatedAt  int64         `json:"createdAt"`
+	ID         sql.NullInt64 `json:"id"`
 }
 
 type Studio struct {
@@ -203,10 +220,31 @@ type Studio struct {
 }
 
 type User struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	PasswordHash string `json:"passwordHash"`
-	IsAdmin      int64  `json:"isAdmin"`
-	Prefs        string `json:"prefs"`
-	CreatedAt    int64  `json:"createdAt"`
+	ID           int64         `json:"id"`
+	Name         string        `json:"name"`
+	PasswordHash string        `json:"passwordHash"`
+	IsAdmin      int64         `json:"isAdmin"`
+	Prefs        string        `json:"prefs"`
+	CreatedAt    int64         `json:"createdAt"`
+	AllLibraries int64         `json:"allLibraries"`
+	MaxRatingAge sql.NullInt64 `json:"maxRatingAge"`
+	BlockUnrated int64         `json:"blockUnrated"`
+	LastSeen     sql.NullInt64 `json:"lastSeen"`
+}
+
+type UserItemDatum struct {
+	UserID       int64           `json:"userId"`
+	ItemID       int64           `json:"itemId"`
+	PositionMs   int64           `json:"positionMs"`
+	Played       int64           `json:"played"`
+	PlayCount    int64           `json:"playCount"`
+	LastPlayedAt sql.NullInt64   `json:"lastPlayedAt"`
+	IsFavorite   int64           `json:"isFavorite"`
+	Rating       sql.NullFloat64 `json:"rating"`
+	UpdatedAt    int64           `json:"updatedAt"`
+}
+
+type UserLibraryAccess struct {
+	UserID    int64 `json:"userId"`
+	LibraryID int64 `json:"libraryId"`
 }

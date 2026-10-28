@@ -91,6 +91,10 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !s.visible(r, it.ID) {
+		writeError(w, http.StatusNotFound, "not_found", "élément introuvable")
+		return
+	}
 	var req playbackRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "corps JSON invalide")
@@ -161,6 +165,9 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if p := principalFrom(r); p != nil {
+		s.plays.start(sess.ID, &play{userID: p.user.ID, itemID: it.ID, kind: it.Kind, durationMs: sess.DurationMs})
+	}
 	d := sess.Decision
 	out := playbackInfo{
 		SessionID: sess.ID, Method: string(d.Method), Reasons: d.Reasons, MediaFileID: mf.ID,
@@ -207,7 +214,17 @@ func (s *Server) pingPlayback(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePlayback(w) {
 		return
 	}
-	if !s.Playback.Streams.Ping(r.PathValue("sid")) {
+	sid := r.PathValue("sid")
+	p, ok := s.plays.get(sid, principalFrom(r).user.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "session inconnue ou expirée")
+		return
+	}
+	var req pingRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&req); err == nil && req.PositionMs >= 0 {
+		s.record(r, p, req.PositionMs)
+	}
+	if !s.Playback.Streams.Ping(sid) {
 		writeError(w, http.StatusNotFound, "not_found", "session inconnue ou expirée")
 		return
 	}
@@ -218,12 +235,27 @@ func (s *Server) stopPlayback(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePlayback(w) {
 		return
 	}
-	s.Playback.Streams.Stop(r.PathValue("sid"))
+	sid := r.PathValue("sid")
+	p, ok := s.plays.get(sid, principalFrom(r).user.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "session inconnue ou expirée")
+		return
+	}
+	var req pingRequest // optional final position
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&req); err == nil && req.PositionMs > 0 {
+		s.record(r, p, req.PositionMs)
+	}
+	s.plays.end(sid)
+	s.Playback.Streams.Stop(sid)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) serveHLS(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePlayback(w) {
+		return
+	}
+	if _, ok := s.plays.get(r.PathValue("sid"), principalFrom(r).user.ID); !ok {
+		http.NotFound(w, r)
 		return
 	}
 	s.Playback.Streams.ServeHLS(w, r, r.PathValue("sid"), r.PathValue("name"))
@@ -236,7 +268,7 @@ func (s *Server) loadMediaFile(w http.ResponseWriter, r *http.Request) (db.GetMe
 		return db.GetMediaFileRow{}, false
 	}
 	mf, err := s.store.GetMediaFile(r.Context(), id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !s.visible(r, mf.ItemID)) {
 		http.NotFound(w, r)
 		return mf, false
 	}

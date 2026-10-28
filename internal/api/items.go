@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +50,8 @@ type itemDTO struct {
 	Images            map[string][]imageDTO `json:"images"`
 	ChildCount        *int64                `json:"childCount,omitempty"`
 	Available         bool                  `json:"available"`
+	UserData          *userDataDTO          `json:"userData,omitempty"`
+	UnplayedCount     *int64                `json:"unplayedCount,omitempty"`
 	Video             *videoDTO             `json:"video,omitempty"`
 }
 
@@ -98,7 +101,7 @@ type videoDTO struct {
 }
 
 var sortKeys = map[string]bool{"title": true, "dateAdded": true, "year": true, "rating": true,
-	"runtime": true, "premiereDate": true, "random": true}
+	"runtime": true, "premiereDate": true, "random": true, "lastPlayed": true}
 
 // listItems: GET /api/v1/items — see docs/API.md for parameters.
 func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +142,16 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	if k := q.Get("kind"); k != "" {
 		p.Kinds = strings.Split(k, ",")
 	}
+	switch q.Get("played") {
+	case "true":
+		t := true
+		p.Played = &t
+	case "false":
+		f := false
+		p.Played = &f
+	}
+	p.InProgress = q.Get("inProgress") == "true"
+	p.Favorite = q.Get("favorite") == "true"
 	if p.Sort == "" {
 		p.Sort = "title"
 	}
@@ -171,7 +184,7 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 		p.Seed = rand.Int64N(1 << 31)
 	}
 
-	rows, total, err := s.store.Browse(r.Context(), p)
+	rows, total, err := s.browse(r, p)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -188,6 +201,40 @@ func (s *Server) listItems(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+// browse lists items as seen by the requesting user.
+func (s *Server) browse(r *http.Request, p store.BrowseParams) ([]store.BrowseRow, int, error) {
+	p.Viewer = viewer(r)
+	return s.store.Browse(r.Context(), p)
+}
+
+// visible reports whether the requesting user may see an item.
+func (s *Server) visible(r *http.Request, itemID int64) bool {
+	rows, _, err := s.browse(r, store.BrowseParams{IDs: []int64{itemID}, Limit: 1})
+	return err == nil && len(rows) == 1
+}
+
+type userDataDTO struct {
+	PositionMs   int64      `json:"positionMs"`
+	Played       bool       `json:"played"`
+	PlayCount    int64      `json:"playCount"`
+	LastPlayedAt *time.Time `json:"lastPlayedAt,omitempty"`
+	Favorite     bool       `json:"favorite"`
+	Rating       *float64   `json:"rating,omitempty"`
+}
+
+func userDataOf(row store.BrowseRow) *userDataDTO {
+	ud := &userDataDTO{PositionMs: row.PositionMs, Played: row.Played, PlayCount: row.PlayCount, Favorite: row.Favorite}
+	if row.LastPlayedAt.Valid {
+		t := time.Unix(row.LastPlayedAt.Int64, 0).UTC()
+		ud.LastPlayedAt = &t
+	}
+	if row.UserRating.Valid {
+		v := row.UserRating.Float64
+		ud.Rating = &v
+	}
+	return ud
+}
+
 // itemDTOs converts browse rows, loading their images in one query.
 func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, error) {
 	ids := make([]int64, len(rows))
@@ -198,6 +245,7 @@ func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, e
 	if err != nil {
 		return nil, err
 	}
+	admin := isAdmin(r)
 	out := make([]itemDTO, 0, len(rows))
 	for _, row := range rows {
 		dto := toItemDTO(row.Item)
@@ -205,6 +253,14 @@ func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, e
 		cc := row.ChildCount
 		dto.ChildCount = &cc
 		dto.Available = row.Available
+		dto.UserData = userDataOf(row)
+		if row.UnplayedCount.Valid {
+			n := row.UnplayedCount.Int64
+			dto.UnplayedCount = &n
+		}
+		if !admin {
+			dto.Path = ""
+		}
 		if res := store.Resolution(row.VideoWidth, row.VideoHeight); res != "" {
 			dto.Video = &videoDTO{Resolution: res, HDR: row.HDR}
 		}
@@ -218,7 +274,7 @@ func (s *Server) browseIDs(r *http.Request, ids []int64) ([]itemDTO, error) {
 	if len(ids) == 0 {
 		return []itemDTO{}, nil
 	}
-	rows, _, err := s.store.Browse(r.Context(), store.BrowseParams{IDs: ids, Limit: len(ids)})
+	rows, _, err := s.browse(r, store.BrowseParams{IDs: ids, Limit: len(ids)})
 	if err != nil {
 		return nil, err
 	}
@@ -297,12 +353,13 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	rows, _, err := s.store.Browse(ctx, store.BrowseParams{IDs: []int64{id}, Limit: 1})
-	if err == nil && len(rows) == 0 {
-		err = fmt.Errorf("browse item %d: no row", id)
-	}
+	rows, _, err := s.browse(r, store.BrowseParams{IDs: []int64{id}, Limit: 1})
 	if err != nil {
 		s.internalError(w, err)
+		return
+	}
+	if len(rows) == 0 { // hidden from this user (library access, parental control)
+		writeError(w, http.StatusNotFound, "not_found", "élément introuvable")
 		return
 	}
 	dtos, err := s.itemDTOs(r, rows)
@@ -339,7 +396,11 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, f := range files {
-		dto := mediaFileDTO{ID: f.ID, Path: f.Path, Size: f.Size, Part: f.Part, Container: f.Container.String,
+		path := f.Path
+		if !isAdmin(r) {
+			path = filepath.Base(f.Path)
+		}
+		dto := mediaFileDTO{ID: f.ID, Path: path, Size: f.Size, Part: f.Part, Container: f.Container.String,
 			DurationMs: ptr(f.DurationMs), Bitrate: ptr(f.Bitrate), Probed: f.ProbedAt.Valid,
 			ProbeError: f.ProbeError.String, Streams: []mediaStreamDTO{}}
 		streams, err := s.store.ListMediaStreams(ctx, f.ID)
@@ -392,3 +453,5 @@ func decodeCursor(c string) (int, int64, error) {
 	}
 	return off, seed, nil
 }
+
+func storeIDs(ids ...int64) store.BrowseParams { return store.BrowseParams{IDs: ids, Limit: len(ids)} }

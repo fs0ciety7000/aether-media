@@ -375,6 +375,9 @@ func (r *Refresher) save(ctx context.Context, it db.Item, ids metadata.ProviderI
 		if err := q.ApplyItemMetadata(ctx, p); err != nil {
 			return err
 		}
+		if err := store.UpdateRatingAge(ctx, q, it.ID); err != nil {
+			return err
+		}
 		if err := saveCredits(ctx, q, it.ID, m); err != nil {
 			return err
 		}

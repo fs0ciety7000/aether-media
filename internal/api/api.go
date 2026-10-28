@@ -47,10 +47,12 @@ type Server struct {
 	store     *store.Store
 	log       *slog.Logger
 	startedAt time.Time
+	authState *authState
+	plays     *playTracker
 }
 
 func New(d Deps) *Server {
-	return &Server{Deps: d, store: d.Store, log: d.Log, startedAt: time.Now().UTC()}
+	return &Server{Deps: d, store: d.Store, log: d.Log, startedAt: time.Now().UTC(), authState: newAuthState(), plays: newPlayTracker()}
 }
 
 // Handler returns the root handler: API routes, health check and the SPA.
@@ -58,41 +60,65 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /api/v1/system/info", s.systemInfo)
+	// Accounts.
+	mux.HandleFunc("POST /api/v1/setup", s.setup)
+	mux.HandleFunc("POST /api/v1/auth/login", s.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.logout)
+	mux.HandleFunc("GET /api/v1/me", s.me)
+	mux.HandleFunc("PATCH /api/v1/me", s.patchMe)
+	mux.HandleFunc("GET /api/v1/me/sessions", s.mySessions)
+	mux.HandleFunc("DELETE /api/v1/me/sessions/{sid}", s.revokeSession)
+	mux.HandleFunc("GET /api/v1/users", s.admin(s.listUsers))
+	mux.HandleFunc("POST /api/v1/users", s.admin(s.postUser))
+	mux.HandleFunc("PATCH /api/v1/users/{uid}", s.admin(s.patchUser))
+	mux.HandleFunc("DELETE /api/v1/users/{uid}", s.admin(s.deleteUser))
+	// Libraries and sources.
 	mux.HandleFunc("GET /api/v1/libraries", s.listLibraries)
-	mux.HandleFunc("POST /api/v1/libraries", s.createLibrary)
+	mux.HandleFunc("POST /api/v1/libraries", s.admin(s.createLibrary))
 	mux.HandleFunc("GET /api/v1/libraries/{id}", s.getLibrary)
-	mux.HandleFunc("DELETE /api/v1/libraries/{id}", s.deleteLibrary)
-	mux.HandleFunc("POST /api/v1/libraries/{id}/scan", s.scanLibrary)
-	mux.HandleFunc("POST /api/v1/libraries/{id}/sources", s.addSource)
-	mux.HandleFunc("PATCH /api/v1/libraries/{id}/sources/{sid}", s.patchSource)
-	mux.HandleFunc("DELETE /api/v1/libraries/{id}/sources/{sid}", s.deleteSource)
-	mux.HandleFunc("POST /api/v1/libraries/{id}/sources/{sid}/test", s.testStoredSource)
-	mux.HandleFunc("POST /api/v1/sources/test", s.testSource)
-	mux.HandleFunc("GET /internal/vfs/{id}/{exp}/{sig}/{path...}", s.vfsProxy)
-	mux.HandleFunc("GET /api/v1/items", s.listItems)
+	mux.HandleFunc("DELETE /api/v1/libraries/{id}", s.admin(s.deleteLibrary))
+	mux.HandleFunc("POST /api/v1/libraries/{id}/scan", s.admin(s.scanLibrary))
+	mux.HandleFunc("POST /api/v1/libraries/{id}/sources", s.admin(s.addSource))
+	mux.HandleFunc("PATCH /api/v1/libraries/{id}/sources/{sid}", s.admin(s.patchSource))
+	mux.HandleFunc("DELETE /api/v1/libraries/{id}/sources/{sid}", s.admin(s.deleteSource))
+	mux.HandleFunc("POST /api/v1/libraries/{id}/sources/{sid}/test", s.admin(s.testStoredSource))
+	mux.HandleFunc("POST /api/v1/sources/test", s.admin(s.testSource))
 	mux.HandleFunc("GET /api/v1/libraries/{id}/filters", s.libraryFilters)
+	mux.HandleFunc("GET /internal/vfs/{id}/{exp}/{sig}/{path...}", s.vfsProxy)
+	// Browsing.
+	mux.HandleFunc("GET /api/v1/items", s.listItems)
 	mux.HandleFunc("GET /api/v1/home", s.home)
 	mux.HandleFunc("GET /api/v1/search", s.search)
 	mux.HandleFunc("GET /api/v1/items/{id}/similar", s.similar)
 	mux.HandleFunc("GET /api/v1/items/{id}", s.getItem)
-	mux.HandleFunc("PATCH /api/v1/items/{id}", s.patchItem)
-	mux.HandleFunc("POST /api/v1/items/{id}/refresh", s.refreshItem)
-	mux.HandleFunc("POST /api/v1/items/{id}/identify/search", s.identifySearch)
-	mux.HandleFunc("POST /api/v1/items/{id}/identify", s.identify)
 	mux.HandleFunc("GET /api/v1/items/{id}/images/{type}", s.itemImage)
+	mux.HandleFunc("PUT /api/v1/items/{id}/userdata", s.putUserData)
+	mux.HandleFunc("PATCH /api/v1/items/{id}", s.admin(s.patchItem))
+	mux.HandleFunc("POST /api/v1/items/{id}/refresh", s.admin(s.refreshItem))
+	mux.HandleFunc("POST /api/v1/items/{id}/identify/search", s.admin(s.identifySearch))
+	mux.HandleFunc("POST /api/v1/items/{id}/identify", s.admin(s.identify))
+	// Collections.
+	mux.HandleFunc("GET /api/v1/collections", s.listCollections)
+	mux.HandleFunc("POST /api/v1/collections", s.createCollection)
+	mux.HandleFunc("GET /api/v1/collections/{cid}/items", s.collectionItems)
+	mux.HandleFunc("PATCH /api/v1/collections/{cid}", s.patchCollection)
+	mux.HandleFunc("DELETE /api/v1/collections/{cid}", s.deleteCollection)
+	mux.HandleFunc("PUT /api/v1/collections/{cid}/items/{id}", s.addToCollection)
+	mux.HandleFunc("DELETE /api/v1/collections/{cid}/items/{id}", s.removeFromCollection)
+	// Playback.
 	mux.HandleFunc("POST /api/v1/playback/{id}", s.startPlayback)
 	mux.HandleFunc("POST /api/v1/playback/sessions/{sid}/ping", s.pingPlayback)
 	mux.HandleFunc("DELETE /api/v1/playback/sessions/{sid}", s.stopPlayback)
 	mux.HandleFunc("GET /api/v1/playback/sessions/{sid}/{name}", s.serveHLS)
 	mux.HandleFunc("GET /api/v1/media/{id}/stream", s.mediaStream)
 	mux.HandleFunc("GET /api/v1/media/{id}/subtitles/{file}", s.mediaSubtitle)
-	mux.HandleFunc("GET /api/v1/jobs", s.jobStats)
+	mux.HandleFunc("GET /api/v1/jobs", s.admin(s.jobStats))
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "route inconnue")
 	})
 	mux.Handle("/", web)
-	return s.recoverer(s.logRequests(mux))
+	return s.recoverer(s.logRequests(s.authenticate(mux)))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

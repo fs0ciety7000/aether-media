@@ -11,6 +11,7 @@ import (
 
 	"github.com/fs0ciety7000/aether-media/internal/metadata"
 	"github.com/fs0ciety7000/aether-media/internal/naming"
+	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 )
 
@@ -65,7 +66,7 @@ func (s *Server) itemImage(w http.ResponseWriter, r *http.Request) {
 	idx, _ := strconv.ParseInt(r.URL.Query().Get("idx"), 10, 64)
 	width, _ := strconv.Atoi(r.URL.Query().Get("w"))
 	img, err := s.store.GetItemImage(r.Context(), db.GetItemImageParams{ItemID: id, Type: r.PathValue("type"), Idx: idx})
-	if err != nil || !img.Hash.Valid {
+	if err != nil || !img.Hash.Valid || !s.visible(r, id) {
 		http.NotFound(w, r)
 		return
 	}
@@ -139,6 +140,10 @@ func (s *Server) patchItem(w http.ResponseWriter, r *http.Request) {
 	}
 	p.LockedFields = string(b)
 	if err := s.store.UpdateItemFields(r.Context(), p); err != nil {
+		s.internalError(w, err)
+		return
+	}
+	if err := store.UpdateRatingAge(r.Context(), s.store.Queries, it.ID); err != nil {
 		s.internalError(w, err)
 		return
 	}
