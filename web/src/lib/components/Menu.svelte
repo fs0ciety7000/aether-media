@@ -18,6 +18,9 @@
 
 	interface Props {
 		label: string;
+		/** The trigger snippet shows its own text (WCAG 2.5.3 label in name): the button takes
+		 *  its name from that content, `label` only names the menu. */
+		labelFromContent?: boolean;
 		items: MenuItem[];
 		/** Trigger icon. */
 		icon?: IconName;
@@ -32,7 +35,7 @@
 		header?: Snippet;
 	}
 
-	let { label, items, icon = 'more', text, align = 'end', variant = 'secondary', trigger: triggerContent, header }: Props = $props();
+	let { label, labelFromContent = false, items, icon = 'more', text, align = 'end', variant = 'secondary', trigger: triggerContent, header }: Props = $props();
 
 	const uid = $props.id();
 	let open = $state(false);
@@ -102,7 +105,7 @@
 		aria-haspopup="menu"
 		aria-expanded={open}
 		aria-controls="menu-{uid}"
-		aria-label={text ? undefined : label}
+		aria-label={text || labelFromContent ? undefined : label}
 		onclick={() => (open ? hide() : show())}
 		onkeydown={onTriggerKey}
 	>

@@ -34,7 +34,7 @@
 
 {#if user}
 	<div class="user-menu" class:compact>
-		<Menu label="Compte de {user.name} ({role})" {items} variant="bare" align="end">
+		<Menu label="Compte de {user.name}" labelFromContent={!compact} {items} variant="bare" align="end">
 			{#snippet trigger()}
 				<UserChip name={user.name} detail={compact ? undefined : role} {hue} {compact} href={null} />
 			{/snippet}

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/netguard"
 )
 
 // Sentinel errors. Use errors.Is.
@@ -33,10 +36,16 @@ const defaultMaxBytes = 25 << 20
 
 // Options configures a Cache.
 type Options struct {
-	Dir        string       // cache root, e.g. <data>/cache/images
-	HTTPClient *http.Client // for remote downloads; default with 30s timeout
-	UserAgent  string
-	MaxBytes   int64 // max source size, default 25 MiB
+	Dir string // cache root, e.g. <data>/cache/images
+	// HTTPClient downloads remote images. The default (netguard) only reaches
+	// public addresses, checked at connect time and on every redirect, with
+	// timeouts; a custom client bypasses that protection.
+	HTTPClient *http.Client
+	// AllowNetworks are exceptions to that protection (e.g. a LAN artwork
+	// server, or tests on loopback). Ignored with a custom HTTPClient.
+	AllowNetworks []netip.Prefix
+	UserAgent     string
+	MaxBytes      int64 // max source size, default 25 MiB
 }
 
 // Source describes an ingested original image.
@@ -86,7 +95,7 @@ func New(o Options) (*Cache, error) {
 		sem:      make(chan struct{}, max(2, runtime.GOMAXPROCS(0))),
 	}
 	if c.client == nil {
-		c.client = &http.Client{Timeout: 30 * time.Second}
+		c.client = netguard.NewClient(netguard.ClientOptions{Timeout: 30 * time.Second, Allow: o.AllowNetworks})
 	}
 	if c.maxBytes <= 0 {
 		c.maxBytes = defaultMaxBytes
@@ -160,6 +169,9 @@ func (c *Cache) fetch(ctx context.Context, src string) ([]byte, error) {
 	req.Header.Set("Accept", "image/webp,image/png,image/jpeg,image/gif,image/*;q=0.8")
 	resp, err := c.client.Do(req)
 	if err != nil {
+		if errors.Is(err, netguard.ErrBlocked) {
+			return nil, fmt.Errorf("%w: %s: %w", ErrBadSource, u.Redacted(), err)
+		}
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()

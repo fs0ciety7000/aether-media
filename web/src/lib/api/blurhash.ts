@@ -1,5 +1,5 @@
 // Small BlurHash decoder (https://blurha.sh, MIT algorithm) → cached PNG data URL.
-// Decoded at 32 px: the browser upscales it smoothly, which is all a placeholder needs.
+// Decoded at 16 px: the browser upscales it smoothly, which is all a placeholder needs.
 
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~';
 
@@ -81,8 +81,10 @@ const MAX_CACHE = 400;
 export function blurhashToDataURL(hash: string | undefined, ratio = 1): string | undefined {
 	if (!hash || typeof document === 'undefined') return undefined;
 	// Bucket the aspect so a poster and a backdrop of the same hash don't collide.
-	const w = ratio >= 1 ? 32 : Math.max(8, Math.round(32 * ratio));
-	const h = ratio >= 1 ? Math.max(8, Math.round(32 / ratio)) : 32;
+	// 16 px on the long side: blurhash keeps at most 9 components per axis and the
+	// image is shown blurred, so more pixels only cost decode + PNG time (4× more at 32 px).
+	const w = ratio >= 1 ? 16 : Math.max(6, Math.round(16 * ratio));
+	const h = ratio >= 1 ? Math.max(6, Math.round(16 / ratio)) : 16;
 	const key = `${hash}|${w}x${h}`;
 	const hit = cache.get(key);
 	if (hit !== undefined) return hit ?? undefined;

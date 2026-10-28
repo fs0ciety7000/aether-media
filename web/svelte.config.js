@@ -6,7 +6,14 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		// SPA : le serveur Go renvoie index.html pour toute route inconnue.
-		adapter: adapter({ pages: '../internal/webui/dist', assets: '../internal/webui/dist', fallback: 'index.html', strict: false })
+		// precompress : copies .br et .gz servies par internal/webui selon Accept-Encoding.
+		adapter: adapter({
+			pages: '../internal/webui/dist',
+			assets: '../internal/webui/dist',
+			fallback: 'index.html',
+			strict: false,
+			precompress: true
+		})
 	}
 };
 

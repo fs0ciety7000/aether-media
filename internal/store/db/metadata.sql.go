@@ -226,6 +226,23 @@ func (q *Queries) GetItemImage(ctx context.Context, arg GetItemImageParams) (Ima
 	return i, err
 }
 
+const getPersonImage = `-- name: GetPersonImage :one
+SELECT id, image_url, image_hash FROM people WHERE id = ?
+`
+
+type GetPersonImageRow struct {
+	ID        int64  `json:"id"`
+	ImageUrl  string `json:"imageUrl"`
+	ImageHash string `json:"imageHash"`
+}
+
+func (q *Queries) GetPersonImage(ctx context.Context, id int64) (GetPersonImageRow, error) {
+	row := q.db.QueryRowContext(ctx, getPersonImage, id)
+	var i GetPersonImageRow
+	err := row.Scan(&i.ID, &i.ImageUrl, &i.ImageHash)
+	return i, err
+}
+
 const listChildItems = `-- name: ListChildItems :many
 SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end, tagline, premiere_date, end_date, status, official_rating, community_rating, collection, identify_status, metadata_refreshed_at, rating_age FROM items WHERE parent_id = ? AND missing = 0 ORDER BY sort_title, id
 `
@@ -553,6 +570,22 @@ func (q *Queries) SetImageFetched(ctx context.Context, arg SetImageFetchedParams
 	return err
 }
 
+const setPersonImageHash = `-- name: SetPersonImageHash :exec
+UPDATE people SET image_hash = ? WHERE id = ? AND image_url = ?
+`
+
+type SetPersonImageHashParams struct {
+	ImageHash string `json:"imageHash"`
+	ID        int64  `json:"id"`
+	ImageUrl  string `json:"imageUrl"`
+}
+
+// Only if the source did not change while it was being fetched.
+func (q *Queries) SetPersonImageHash(ctx context.Context, arg SetPersonImageHashParams) error {
+	_, err := q.db.ExecContext(ctx, setPersonImageHash, arg.ImageHash, arg.ID, arg.ImageUrl)
+	return err
+}
+
 const updateItemFields = `-- name: UpdateItemFields :exec
 UPDATE items SET
     title          = COALESCE(?1, title),
@@ -655,7 +688,8 @@ INSERT INTO people (name, key, provider_ids, image_url) VALUES (?, ?, ?, ?)
 ON CONFLICT (key) DO UPDATE SET
     name = excluded.name,
     provider_ids = CASE WHEN excluded.provider_ids = '{}' THEN people.provider_ids ELSE excluded.provider_ids END,
-    image_url = CASE WHEN excluded.image_url = '' THEN people.image_url ELSE excluded.image_url END
+    image_url = CASE WHEN excluded.image_url = '' THEN people.image_url ELSE excluded.image_url END,
+    image_hash = CASE WHEN excluded.image_url = '' OR excluded.image_url = people.image_url THEN people.image_hash ELSE '' END
 RETURNING id
 `
 

@@ -12,9 +12,11 @@
 		sizes?: string;
 		/** Secondary line override. */
 		subtitle?: string;
+		/** First cards of a grid: no lazy loading (LCP). */
+		eager?: boolean;
 	}
 
-	let { item, sizes, subtitle }: Props = $props();
+	let { item, sizes, subtitle, eager = false }: Props = $props();
 
 	const square = $derived(item.kind === 'artist' || item.kind === 'album' || item.kind === 'track');
 	const image = $derived(firstImage(item, square ? 'poster' : 'poster', 'thumb'));
@@ -38,6 +40,7 @@
 	icon={KIND_ICON[item.kind]}
 	offline={isOffline(item)}
 	progress={progressOf(item)}
+	{eager}
 	played={isPlayed(item)}
 	unplayed={item.kind === 'series' || item.kind === 'season' ? item.unplayedCount : undefined}
 	{sizes}

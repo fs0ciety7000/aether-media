@@ -276,6 +276,7 @@ func (s *Server) deleteLibrary(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
+	s.store.InvalidateFacets()
 	if s.Sources != nil {
 		for _, src := range srcs {
 			s.Sources.Forget(src.ID)

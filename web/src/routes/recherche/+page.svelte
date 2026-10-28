@@ -213,7 +213,7 @@
 										<Avatar name={e.person.name} src={e.person.image} size={48} hue={hueFrom(e.person.name)} />
 									{:else}
 										<span class="thumb {g.key}">
-											<Artwork image={thumbFor(e)} ratio={ratioFor(g.key)} sizes="96px" placeholder={{ title: e.title, icon: e.item ? KIND_ICON[e.item.kind] : undefined }} />
+											<Artwork image={thumbFor(e)} ratio={ratioFor(g.key)} sizes="96px" eager={i < 4} placeholder={{ title: e.title, icon: e.item ? KIND_ICON[e.item.kind] : undefined }} />
 										</span>
 									{/if}
 									<span class="text">

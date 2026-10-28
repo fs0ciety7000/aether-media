@@ -128,7 +128,7 @@
 	}
 
 	.blur {
-		/* The 32 px decode is upscaled; a light blur hides the bilinear seams. */
+		/* The 16 px decode is upscaled; a light blur hides the bilinear seams. */
 		filter: blur(6px);
 		transform: scale(1.08);
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/fs0ciety7000/aether-media/internal/store"
 )
 
@@ -71,85 +73,93 @@ type homeDTO struct {
 	Recommended      []itemDTO     `json:"recommended"`
 }
 
-// home assembles the landing page in one request.
+// home assembles the landing page in one request. Its sections are
+// independent reads, run concurrently (WAL: readers do not block each other).
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	out := homeDTO{ContinueWatching: []itemDTO{}, NextUp: []itemDTO{}, RecentlyAdded: []recentRow{}, Categories: []categoryDTO{}}
 	browse := func(p store.BrowseParams) ([]itemDTO, error) {
+		p.NoTotal = true
 		rows, _, err := s.browse(r, p)
 		if err != nil {
 			return nil, err
 		}
 		return s.itemDTOs(r, rows)
 	}
-	var err error
-	if out.Hero, err = browse(store.BrowseParams{Kinds: []string{"movie", "series"}, HasImage: "backdrop", Sort: "dateAdded", Desc: true, Limit: 5}); err != nil {
-		s.internalError(w, err)
-		return
-	}
-
-	if out.ContinueWatching, err = browse(store.BrowseParams{Kinds: []string{"movie", "episode"}, InProgress: true, Sort: "lastPlayed", Limit: 12}); err != nil {
-		s.internalError(w, err)
-		return
-	}
-	if p := principalFrom(r); p != nil {
-		ids, err := s.store.NextUpIDs(ctx, p.user.ID, 12)
-		if err != nil {
-			s.internalError(w, err)
-			return
-		}
-		if out.NextUp, err = s.browseIDs(r, ids); err != nil {
-			s.internalError(w, err)
-			return
-		}
-	}
-
 	libs, err := s.visibleLibraries(r)
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	for _, l := range libs {
-		p := store.BrowseParams{LibraryID: l.ID, Sort: "dateAdded", Desc: true, Limit: 16}
-		switch l.Kind {
-		case "shows":
-			p.Kinds, p.Sort = []string{"series"}, "latest"
-		case "music":
-			p.Kinds = []string{"album"}
-		case "mixed":
-			p.Kinds = []string{"movie", "series", "album"}
-		}
-		items, err := browse(p)
-		if err != nil {
-			s.internalError(w, err)
-			return
-		}
-		if len(items) > 0 {
-			out.RecentlyAdded = append(out.RecentlyAdded, recentRow{Library: libraryRef{ID: l.ID, Name: l.Name, Kind: l.Kind}, Items: items})
-		}
-	}
-
-	genres, err := s.store.TopGenres(ctx, 8)
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
 	seed := rand.Int64N(1 << 31)
-	for _, g := range genres {
-		c := categoryDTO{Genre: g.Name, Count: g.Count}
-		if img, ok, err := s.store.GenreImage(ctx, g.Name, seed); err != nil {
-			s.internalError(w, err)
-			return
-		} else if ok {
-			dto := imageDTOFor(img.ItemID, img)
-			c.Image = &dto
-		}
-		out.Categories = append(out.Categories, c)
-	}
+	recent := make([][]itemDTO, len(libs))
 
-	if out.Recommended, err = browse(store.BrowseParams{Kinds: []string{"movie", "series"}, HasImage: "poster", Sort: "random", Seed: seed, Limit: 16}); err != nil {
+	var g errgroup.Group
+	g.SetLimit(4)
+	g.Go(func() (err error) {
+		out.Hero, err = browse(store.BrowseParams{Kinds: []string{"movie", "series"}, HasImage: "backdrop", Sort: "dateAdded", Desc: true, Limit: 5})
+		return err
+	})
+	g.Go(func() (err error) {
+		out.ContinueWatching, err = browse(store.BrowseParams{Kinds: []string{"movie", "episode"}, InProgress: true, Sort: "lastPlayed", Limit: 12})
+		return err
+	})
+	if p := principalFrom(r); p != nil {
+		g.Go(func() error {
+			ids, err := s.store.NextUpIDs(ctx, p.user.ID, 12)
+			if err != nil {
+				return err
+			}
+			out.NextUp, err = s.browseIDs(r, ids)
+			return err
+		})
+	}
+	for i, l := range libs {
+		g.Go(func() (err error) {
+			p := store.BrowseParams{LibraryID: l.ID, Sort: "dateAdded", Desc: true, Limit: 16}
+			switch l.Kind {
+			case "shows":
+				p.Kinds, p.Sort = []string{"series"}, "latest"
+			case "music":
+				p.Kinds = []string{"album"}
+			case "mixed":
+				p.Kinds = []string{"movie", "series", "album"}
+			}
+			recent[i], err = browse(p)
+			return err
+		})
+	}
+	g.Go(func() error {
+		genres, err := s.store.TopGenres(ctx, 8)
+		if err != nil {
+			return err
+		}
+		for _, gc := range genres {
+			c := categoryDTO{Genre: gc.Name, Count: gc.Count}
+			img, ok, err := s.store.GenreImage(ctx, gc.Name, seed)
+			if err != nil {
+				return err
+			}
+			if ok {
+				dto := imageDTOFor(img.ItemID, img)
+				c.Image = &dto
+			}
+			out.Categories = append(out.Categories, c)
+		}
+		return nil
+	})
+	g.Go(func() (err error) {
+		out.Recommended, err = browse(store.BrowseParams{Kinds: []string{"movie", "series"}, HasImage: "poster", Sort: "random", Seed: seed, Limit: 16})
+		return err
+	})
+	if err := g.Wait(); err != nil {
 		s.internalError(w, err)
 		return
+	}
+	for i, l := range libs {
+		if len(recent[i]) > 0 {
+			out.RecentlyAdded = append(out.RecentlyAdded, recentRow{Library: libraryRef{ID: l.ID, Name: l.Name, Kind: l.Kind}, Items: recent[i]})
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -200,7 +210,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, p := range ph {
-			people = append(people, personHitDTO{ID: p.ID, Name: p.Name, Image: p.ImageURL, Count: p.Count})
+			people = append(people, personHitDTO{ID: p.ID, Name: p.Name, Image: personImageURL(p.ID, p.ImageURL), Count: p.Count})
 		}
 	}
 	for _, k := range searchKinds {

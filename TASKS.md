@@ -59,9 +59,9 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-045 Flux « à identifier » + correction manuelle (API ; écran en M4)
 - [x] T-046 Validation TMDB en conditions réelles (films, série, saison, épisodes, casting, images, recherche manuelle)
 - [ ] T-04C Recherche manuelle sans année : le titre exact plus ancien peut être classé sous un homonyme récent (préremplir l'année dans l'UI)
-- [ ] T-047 Images des personnes (photos acteurs) servies via le cache, pas en URL distante
+- [x] T-047 Images des personnes (photos acteurs) servies via le cache, pas en URL distante : `GET /people/{id}/image` télécharge la photo au premier appel (client protégé), garde son empreinte (`people.image_hash`, migration 00010), sert les variantes ; avatars dimensionnés et repli sur les initiales
 - [ ] T-048 Rafraîchissement périodique des séries en cours (nouveaux épisodes)
-- [ ] T-049 Garde SSRF du téléchargeur d'images (bloquer IP privées/loopback pour les URL issues des NFO)
+- [x] T-049 Garde SSRF du téléchargeur d'images : `internal/netguard`, vérification à la connexion (`Dialer.Control`, après résolution DNS : résiste au DNS rebinding) et à chaque redirection, http/https seulement, plages non publiques refusées (boucle locale, privées, lien local et 169.254.169.254, ULA dont fd00::/8, multicast, CGNAT, réservées, IPv4 encapsulées), proxy sortant pris en compte, délais et 5 redirections au plus ; TMDB et Cover Art Archive vérifiés en réel
 - [ ] T-04A fanart.tv (logos, fonds d'artistes) — optionnel
 - [x] T-04B API système : indiquer si TMDB est actif (pour l'UI « à identifier »)
 
@@ -155,13 +155,32 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-082 PWA : manifest, icônes générées (192, 512, maskable, apple-touch-icon), service worker (app shell + assets versionnés, jamais /api ni flux), écran et page hors ligne, invitation discrète à installer, métadonnées iOS et zones sûres
 - [ ] T-087 Valider l’ajout à l’écran d’accueil sur un vrai iPhone / iPad (vérifié en émulation iPhone sous Chromium : métadonnées Apple, manifest, zones sûres ; pas d’appareil iOS ni de WebKit dans l’environnement de dev)
 - [ ] T-088 Accélération matérielle appliquée à chaud (aujourd’hui au redémarrage) et test sur vrai GPU (voir T-06A)
-- [ ] T-089 Contention SQLite (`database is locked`) pendant un rafraîchissement complet des métadonnées en parallèle d’un scan : les tâches sont réessayées et finissent, mais à étudier (pool d’écriture unique, `busy_timeout` plus long)
-- [ ] T-08A Garde SSRF des images d’NFO (T-049) : une URL `http://127.0.0.1/…` est encore suivie (vu dans l’E2E M7)
+- [x] T-089 Contention SQLite (`database is locked`) : cause racine = transactions `BEGIN DEFERRED` qui lisent puis écrivent ; si une autre connexion a validé entre-temps, la promotion en écriture échoue tout de suite (`SQLITE_BUSY_SNAPSHOT` 517, ou `SQLITE_BUSY` 5 pour éviter un interblocage), `busy_timeout` ne s’appliquant pas. Correctif : pool d’écriture d’une connexion pour `Store.Tx`, `_txlock=immediate`, `busy_timeout` 15 s ; test de stress `store.TestConcurrentWritersNoLock` (échoue avant, passe après, aussi avec `-race`)
+- [x] T-08A Garde SSRF des images d’NFO (T-049) : une URL `http://127.0.0.1/…` n’est plus suivie (`images.TestIngestRefusesPrivateDestinations`)
 - [ ] T-08B Changer la langue des métadonnées ne retraduit pas les titres déjà identifiés tant qu’on ne lance pas « Rafraîchir les métadonnées » (proposer de le lancer après l’enregistrement)
 - [ ] T-08C Nom du serveur utilisé aussi pour l’appairage des agents (aujourd’hui « Aether · nom d’hôte ») et dans le titre des pages
 - [x] T-083 Paquets : GoReleaser (linux amd64/arm64/armv7, darwin, windows ; tar.gz/zip ; .deb/.rpm avec compte `aether`, unités systemd, /var/lib/aether ; cask Homebrew ; images ghcr.io multi-arch via dockers_v2 ; SBOM ; checksums), workflow `release.yml` sur tag `v*`, docs/INSTALL.md
 - [ ] T-085 (LICENSE AGPL-3.0 ajoutée) Première release : créer le dépôt `homebrew-tap` (puis `skip_upload: false` + secret `HOMEBREW_TAP_TOKEN`), vérifier le workflow sur un tag de test, signature/notarisation macOS et Windows
-- [ ] T-084 Docs utilisateur + audit a11y / perfs → release v0.1.0
+- [x] T-084 Docs utilisateur + audit a11y / perfs : README réécrit, `docs/GUIDE.md`, `CHANGELOG.md`, `docs/AUDIT-v0.1.0.md` (Lighthouse + axe sur 10 écrans, desktop et mobile, avant / après ; latence API sur 20 000 éléments) ; correctifs : contraste et nom accessible du menu utilisateur, compression (brotli/gzip précompressés, gzip du JSON), images LCP non différées, rangées sans reflow forcé, blurhash 16 px, `system/info.authenticated` (plus de 401 en console), parcours en deux phases, contrôle parental réécrit, facettes en cache, accueil en parallèle
+
+## Release v0.1.0 — reste à faire avant le tag
+`goreleaser check` passe ; un binaire construit comme pour le tag `v0.1.0` affiche `aether 0.1.0 (<commit>)` ; licence cohérente partout (`LICENSE` AGPL-3.0, `license: AGPL-3.0-only` des paquets, label OCI de l’image, fichier `copyright` des paquets).
+- [ ] T-090 Faire tourner `ci.yml` sur GitHub pour la première fois (T-015) : lint, tests, build multi-OS, image Docker, `goreleaser check` ; corriger ce qui casse
+- [ ] T-091 Répétition de la release sur un tag de test (`v0.1.0-rc.1`, release en brouillon) : archives et `checksums.txt`, `.deb` / `.rpm` installés sur un Debian et un Fedora (service, compte `aether`, `aether version`), image `ghcr.io` amd64 + arm64 (`docker run`, healthcheck), SBOM ; puis supprimer le brouillon et le tag de test
+- [ ] T-092 Critère de sortie M7 : installation en moins de 5 minutes sur Linux, macOS et Windows en suivant `docs/INSTALL.md` (inclut T-0EA : service Windows et LaunchAgent macOS sur de vraies machines)
+- [ ] T-093 Décisions du PO pour la v0.1.0 : publication Homebrew (`homebrew-tap` + `skip_upload: false` + secret, ou report en v0.1.x comme l’annonce INSTALL.md), binaires macOS / Windows non signés (documenté : `xattr`, SmartScreen), validation visuelle T-02B
+- [ ] T-094 Dater l’entrée `[0.1.0]` de `CHANGELOG.md`, coller la section dans les notes de la release en brouillon, puis tagger `v0.1.0`
+
+## Après la v0.1.0
+- Validation sur matériel et services réels : T-018 (arm64, GPU), T-06A / T-088 (accélération matérielle sur vrai GPU, puis à chaud), T-087 (PWA sur iPhone / iPad), T-0C6 (Trakt / Simkl avec de vrais comptes), T-0E9 (découverte UDP sur un vrai LAN)
+- Fonctions reportées : T-039 (extras), T-03A, T-048 (nouveaux épisodes), T-04A (fanart.tv), T-04C, T-056, T-057 (page personne), T-068, T-069 (chapitres), T-06B (mini-lecteur audio), T-075, T-076, T-0B4 (transcodage par l’agent), T-0B9, T-0BA, T-0BB, T-0BC, T-0C7, T-0C8, T-0C9, T-0CA, T-0CC (Simkl AUTH V2, avant avril 2027), T-0CD, T-0CF, T-0CG, T-0CH, T-0E8, T-08B, T-08C, T-085 (signature / notarisation)
+- [ ] T-095 Commande de secours `aether user reset-password` (aujourd’hui, sans second administrateur, aucun moyen hors interface)
+- [ ] T-096 Variantes d’images WebP ou AVIF (Lighthouse « modern-image-formats » : pas d’encodeur WebP en Go pur, il faut passer par FFmpeg ou un encodeur dédié)
+- [ ] T-097 Performance mobile (Lighthouse simulé, CPU ×4 : 55 à 93 selon les pages, accueil 55 à 62) : TBT de 130 ms à 1,6 s à l’hydratation (accueil, bibliothèque, fiche), CSS global inutilisé à ~70 % (découper `0.css` par route), rangées hors écran de l’accueil rendues plus tard, LCP mobile 2,7 à 4,3 s ; mesurer sur un vrai téléphone
+- [ ] T-098 Netguard : liste d’exceptions configurable (serveur d’images sur le LAN cité dans des NFO) et photos d’acteurs locales (`.actors/`, chemins absolus des NFO) servies par le cache
+- [ ] T-099 Facettes et genres de l’accueil : premier calcul à froid ~170 ms sur 20 000 éléments (ensuite en cache) ; `TopGenres` compte aussi les éléments masqués par le contrôle parental (les compteurs, pas les éléments) ; précalcul à la fin d’un scan
+- [ ] T-09B `agent.TestDiscovery` instable quand toute la suite tourne en parallèle (« impossible d'envoyer la requête de découverte », diffusion UDP) ; passe seul
+- [ ] T-09A Pagination par clé (keyset) au lieu d’OFFSET pour les très grandes bibliothèques (page 100 : ~70 ms à 20 000 éléments, croît linéairement)
 
 ## M8 — Fédération (v1.1)
 - [ ] T-0D0 Appairage serveur ↔ serveur, bibliothèques partagées, droits par utilisateur
