@@ -76,8 +76,16 @@ INSERT INTO people (name, key, provider_ids, image_url) VALUES (?, ?, ?, ?)
 ON CONFLICT (key) DO UPDATE SET
     name = excluded.name,
     provider_ids = CASE WHEN excluded.provider_ids = '{}' THEN people.provider_ids ELSE excluded.provider_ids END,
-    image_url = CASE WHEN excluded.image_url = '' THEN people.image_url ELSE excluded.image_url END
+    image_url = CASE WHEN excluded.image_url = '' THEN people.image_url ELSE excluded.image_url END,
+    image_hash = CASE WHEN excluded.image_url = '' OR excluded.image_url = people.image_url THEN people.image_hash ELSE '' END
 RETURNING id;
+
+-- name: GetPersonImage :one
+SELECT id, image_url, image_hash FROM people WHERE id = ?;
+
+-- name: SetPersonImageHash :exec
+-- Only if the source did not change while it was being fetched.
+UPDATE people SET image_hash = ? WHERE id = ? AND image_url = ?;
 
 -- name: AddItemPerson :exec
 INSERT OR IGNORE INTO item_people (item_id, person_id, kind, role, ord) VALUES (?, ?, ?, ?, ?);

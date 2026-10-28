@@ -38,16 +38,18 @@
 		/** Files on an offline source: greyed with a "Hors ligne" badge. */
 		offline?: boolean;
 		class?: string;
+		/** Above the fold: load at once (no lazy loading, high priority). */
+		eager?: boolean;
 		/** Forces a visual state in the design gallery. */
 		'data-demo'?: string;
 	}
 
-	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, played = false, unplayed, offline = false, class: className, 'data-demo': demo }: Props = $props();
+	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, played = false, unplayed, offline = false, eager = false, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['poster-card', className, { offline }]} data-demo={demo} title={offline ? 'Source hors ligne' : undefined}>
 	<div class="frame" class:round>
-		<div class="art"><Artwork {image} {src} {color} {art} {ratio} {sizes} placeholder={{ title, year, icon }} alt="" /></div>
+		<div class="art"><Artwork {image} {src} {color} {art} {ratio} {sizes} {eager} placeholder={{ title, year, icon }} alt="" /></div>
 		{#if progress}<ProgressLine value={progress} />{/if}
 		{#if offline}<span class="off-badge"><OfflineBadge /></span>{/if}
 		{#if played || unplayed}<span class="watch"><WatchBadge {played} {unplayed} /></span>{/if}

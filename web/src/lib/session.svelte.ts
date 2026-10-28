@@ -80,6 +80,12 @@ class SessionStore {
 				this.status = 'setup';
 				return;
 			}
+			if (info?.authenticated === false) {
+				// No session: skip /me (a 401 that would only clutter the console).
+				this.user = null;
+				this.status = 'anonymous';
+				return;
+			}
 		} catch {
 			// system/info is public: failing means the server is down. /me will tell.
 		}

@@ -1,7 +1,7 @@
 # Aether — API HTTP v1
 
 Base : `/api/v1`. JSON UTF-8, camelCase. Erreurs : `{"error": {"code": "...", "message": "..."}}` avec le statut HTTP adéquat.
-Pas encore d'authentification (M6) : ne pas exposer le serveur sur un réseau non fiable.
+Authentification : voir [Comptes, progression, collections](#comptes-progression-collections-m6). Les réponses JSON sont compressées en gzip quand le client envoie `Accept-Encoding: gzip` (jamais les flux SSE, médias, segments HLS, sous-titres ni images).
 
 ## Types communs
 
@@ -45,7 +45,7 @@ type Library = { id: number; name: string; kind: "movies" | "shows" | "music" | 
 ```
 
 ## Système
-- `GET /system/info` → `{ name, version, commit, startedAt, setupRequired, metadata: { tmdb: boolean, musicbrainz: boolean } }`
+- `GET /system/info` → `{ name, version, commit, startedAt, setupRequired, authenticated, metadata: { tmdb: boolean, musicbrainz: boolean } }` (`authenticated` : la requête portait une session valide ; l'interface s'en sert pour ne pas appeler `/me` sans session)
 
 ## Bibliothèques
 - `GET /libraries` → `Library[]`
@@ -102,7 +102,7 @@ type Library = { id: number; name: string; kind: "movies" | "shows" | "music" | 
 ## Précisions
 - `genre` : une seule valeur (nom exact, insensible à la casse).
 - `Candidate.score` : 0 à 1.
-- `Person.image` : URL distante (TMDB) pour l'instant ; passera par le cache d'images (T-047).
+- `Person.image` : `/api/v1/people/{id}/image?v=<version>` (T-047). Au premier appel, la photo distante est téléchargée dans le cache d'images (client protégé contre le SSRF), puis servie comme les autres images : `&w=<px>` pour une variante, cache immuable. 404 sans photo ou si la source est injoignable (nouvel essai au plus une fois par heure).
 - `runtimeMs` : durée réelle du fichier (ffprobe) quand elle est connue, sinon celle des métadonnées.
 
 ## Lecture (M5)

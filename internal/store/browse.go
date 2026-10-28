@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -79,14 +80,19 @@ func (v Viewer) Visibility() (string, []any) {
 		conds = append(conds, "i.library_id IN ("+placeholders(len(v.LibraryIDs))+")")
 		args = append(args, anys(v.LibraryIDs)...)
 	}
-	// An item inherits the classification of its series/season.
-	const lineage = "a.id IN (i.id, i.parent_id, (SELECT p.parent_id FROM items p WHERE p.id = i.parent_id))"
+	// An item inherits the classification of its parent and grandparent
+	// (season, series). Written as direct primary-key lookups: the former
+	// "a.id IN (i.id, i.parent_id, (SELECT …))" form rebuilt an IN list per
+	// row and made every listing of a restricted user 4× slower (T-084 audit).
+	const ancestors = "SELECT 1 FROM items p LEFT JOIN items g ON g.id = p.parent_id WHERE p.id = i.parent_id AND "
 	if v.HasMaxAge {
-		conds = append(conds, "NOT EXISTS (SELECT 1 FROM items a WHERE "+lineage+" AND a.rating_age > ?)")
-		args = append(args, v.MaxAge)
+		conds = append(conds, "(i.rating_age IS NULL OR i.rating_age <= ?) AND (i.parent_id IS NULL OR NOT EXISTS ("+
+			ancestors+"(p.rating_age > ? OR g.rating_age > ?)))")
+		args = append(args, v.MaxAge, v.MaxAge, v.MaxAge)
 	}
 	if v.BlockUnrated {
-		conds = append(conds, "(i.kind IN ('artist', 'album', 'track') OR EXISTS (SELECT 1 FROM items a WHERE "+lineage+" AND a.rating_age IS NOT NULL))")
+		conds = append(conds, "(i.kind IN ('artist', 'album', 'track') OR i.rating_age IS NOT NULL OR (i.parent_id IS NOT NULL AND EXISTS ("+
+			ancestors+"(p.rating_age IS NOT NULL OR g.rating_age IS NOT NULL))))")
 	}
 	if len(conds) == 0 {
 		return "1", nil
@@ -118,6 +124,9 @@ type BrowseParams struct {
 	Seed       int64 // random order seed (stable across pages)
 	Limit      int
 	Offset     int
+	// NoTotal skips counting the matches (the returned total is 0): lets
+	// SQLite keep only the best Limit rows while sorting (home rows).
+	NoTotal bool
 }
 
 // BrowseRow is an item plus list-view facts.
@@ -205,12 +214,18 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	}
 	if p.Resolution != "" {
 		cond, ok := map[string]string{"4K": res4K, "1080p": res1080p, "720p": res720p, "SD": resSD}[p.Resolution]
-		if !ok {
+		switch {
+		case !ok:
 			return nil, 0, fmt.Errorf("unknown resolution %q", p.Resolution)
-		}
-		add(`EXISTS (SELECT 1 FROM (SELECT max(ms.width) AS vw, max(ms.height) AS vh FROM media_files mf
+		case p.Resolution == "4K":
+			// The top class needs no per-item maximum: any 4K stream will do.
+			add(`EXISTS (SELECT 1 FROM media_files mf JOIN media_streams ms ON ms.media_file_id = mf.id
+			     WHERE mf.item_id = i.id AND ms.type = 'video' AND (ms.width >= 3200 OR ms.height >= 1800))`)
+		default:
+			add(`EXISTS (SELECT 1 FROM (SELECT max(ms.width) AS vw, max(ms.height) AS vh FROM media_files mf
 		     JOIN media_streams ms ON ms.media_file_id = mf.id WHERE mf.item_id = i.id AND ms.type = 'video') v
 		     WHERE ` + cond + ")")
+		}
 	}
 	if p.HDR {
 		add(`EXISTS (SELECT 1 FROM media_files mf JOIN media_streams ms ON ms.media_file_id = mf.id
@@ -220,10 +235,6 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 
 	join := " LEFT JOIN user_item_data ud ON ud.item_id = i.id AND ud.user_id = ? "
 	joinArgs := []any{p.Viewer.UserID}
-	var total int
-	if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM items i"+join+"WHERE "+cond, append(joinArgs, args...)...).Scan(&total); err != nil {
-		return nil, 0, err
-	}
 
 	dir := "ASC"
 	if p.Desc {
@@ -259,16 +270,56 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	if limit <= 0 {
 		limit = 50
 	}
-	q := "SELECT " + itemColumns + browseExtras + userExtras + " FROM items i" + join + "WHERE " + cond +
+
+	// Phase 1: the page's ids, in order, and the number of matches. Only the
+	// sort key is computed for every match; the per-row extras (video, child
+	// counts, availability, viewer data) are computed in phase 2 for the page
+	// alone. Computing them for every match before LIMIT / OFFSET cost up to
+	// 300 ms on 20 000 items.
+	count := "count(*) OVER ()"
+	if p.NoTotal {
+		count = "0"
+	}
+	q1 := "SELECT i.id, " + count + " FROM items i" + join + "WHERE " + cond +
 		" ORDER BY " + order + ", i.id LIMIT ? OFFSET ?"
+	rows, err := s.DB.QueryContext(ctx, q1, append(append(slices.Clone(joinArgs), args...), limit, p.Offset)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	var ids []int64
+	total := 0
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id, &total); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(ids) == 0 {
+		if p.Offset == 0 || p.NoTotal {
+			return nil, 0, nil
+		}
+		// Past the end: the window gave no row to read the total from.
+		if err := s.DB.QueryRowContext(ctx, "SELECT count(*) FROM items i"+join+"WHERE "+cond, append(slices.Clone(joinArgs), args...)...).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+		return nil, total, nil
+	}
+
+	// Phase 2: full rows for the page.
+	q2 := "SELECT " + itemColumns + browseExtras + userExtras + " FROM items i" + join + "WHERE i.id IN (" + placeholders(len(ids)) + ")"
 	all := append([]any{p.Viewer.UserID, p.Viewer.UserID}, joinArgs...)
-	all = append(all, args...)
-	rows, err := s.DB.QueryContext(ctx, q, append(all, limit, p.Offset)...)
+	rows, err = s.DB.QueryContext(ctx, q2, append(all, anys(ids)...)...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []BrowseRow
+	byID := make(map[int64]BrowseRow, len(ids))
 	for rows.Next() {
 		var r BrowseRow
 		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available,
@@ -276,9 +327,18 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 			&r.SeriesID, &r.SeriesTitle)...); err != nil {
 			return nil, 0, err
 		}
-		out = append(out, r)
+		byID[r.ID] = r
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	out := make([]BrowseRow, 0, len(ids))
+	for _, id := range ids {
+		if r, ok := byID[id]; ok { // deleted between the two queries: skipped
+			out = append(out, r)
+		}
+	}
+	return out, total, nil
 }
 
 func itemDest(i *db.Item, extra ...any) []any {
@@ -318,8 +378,13 @@ type GenreCount struct {
 	Count int    `json:"count"`
 }
 
-// Filters computes facets over a library's top-level items.
+// Filters computes facets over a library's top-level items (cached until
+// the next write transaction).
 func (s *Store) Filters(ctx context.Context, libID int64) (LibraryFilters, error) {
+	return cachedFacet(s, fmt.Sprint("filters:", libID), func() (LibraryFilters, error) { return s.filters(ctx, libID) })
+}
+
+func (s *Store) filters(ctx context.Context, libID int64) (LibraryFilters, error) {
 	var f LibraryFilters
 	kinds := "('movie', 'series', 'artist', 'album')"
 	rows, err := s.DB.QueryContext(ctx, `SELECT g.name, count(*) FROM genres g
@@ -462,6 +527,10 @@ func (s *Store) SimilarIDs(ctx context.Context, itemID int64, kind string, limit
 
 // TopGenres returns the genres with the most top-level items.
 func (s *Store) TopGenres(ctx context.Context, limit int) ([]GenreCount, error) {
+	return cachedFacet(s, fmt.Sprint("topgenres:", limit), func() ([]GenreCount, error) { return s.topGenres(ctx, limit) })
+}
+
+func (s *Store) topGenres(ctx context.Context, limit int) ([]GenreCount, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT g.name, count(*) FROM genres g
 		JOIN item_genres ig ON ig.genre_id = g.id JOIN items i ON i.id = ig.item_id
 		WHERE i.missing = 0 AND i.kind IN ('movie', 'series')

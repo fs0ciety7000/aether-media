@@ -384,8 +384,8 @@
 		{/if}
 	{:else}
 		<ul class="grid" class:square={isMusic} role="list" aria-busy={loading || loadingMore}>
-			{#each items as it (it.id)}
-				<li><ItemCard item={it} {sizes} /></li>
+			{#each items as it, i (it.id)}
+				<li><ItemCard item={it} {sizes} eager={i < 6} /></li>
 			{/each}
 			{#if loading || loadingMore}
 				{#each Array.from({ length: loading ? 14 : 7 }, (_, i) => i) as i (i)}

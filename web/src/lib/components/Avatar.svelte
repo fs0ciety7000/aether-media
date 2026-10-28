@@ -10,6 +10,21 @@
 
 	let { name, src, size = 40, hue = 190 }: Props = $props();
 
+	// Server images (/api/v1/…) are resized on request: ask for about twice the
+	// displayed size (high-density screens), snapped to the server's widths.
+	const WIDTHS = [92, 154, 185, 342];
+	const sized = $derived.by(() => {
+		if (!src || !src.startsWith('/api/')) return src;
+		const want = size * 2;
+		const w = WIDTHS.find((x) => x >= want) ?? WIDTHS[WIDTHS.length - 1];
+		return src + (src.includes('?') ? '&' : '?') + 'w=' + w;
+	});
+	let failed = $state(false);
+	$effect(() => {
+		void sized;
+		failed = false;
+	});
+
 	const initials = $derived(
 		name
 			.split(/\s+/)
@@ -26,8 +41,16 @@
 	style:--h={hue}
 	aria-hidden="true"
 >
-	{#if src}
-		<img {src} alt="" />
+	{#if sized && !failed}
+		<img
+			src={sized}
+			alt=""
+			width={size}
+			height={size}
+			loading="lazy"
+			decoding="async"
+			onerror={() => (failed = true)}
+		/>
 	{:else}
 		<span class="initials">{initials}</span>
 	{/if}

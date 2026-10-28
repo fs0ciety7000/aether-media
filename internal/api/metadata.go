@@ -28,7 +28,7 @@ type personDTO struct {
 	Name  string `json:"name"`
 	Kind  string `json:"kind"`
 	Role  string `json:"role,omitempty"`
-	Image string `json:"image,omitempty"` // remote URL for now
+	Image string `json:"image,omitempty"` // /api/v1/people/{id}/image?v=… (cached copy)
 }
 
 // imageDTOs groups fetched images by type ("backdrop" may hold several).

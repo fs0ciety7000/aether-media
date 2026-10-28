@@ -202,6 +202,7 @@ type Person struct {
 	Key         string `json:"key"`
 	ProviderIds string `json:"providerIds"`
 	ImageUrl    string `json:"imageUrl"`
+	ImageHash   string `json:"imageHash"`
 }
 
 type RemoteAgent struct {

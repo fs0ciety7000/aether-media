@@ -396,7 +396,7 @@ func (s *Server) getItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, p := range people {
-		out.People = append(out.People, personDTO{ID: p.ID, Name: p.Name, Kind: p.Kind, Role: p.Role, Image: p.ImageUrl})
+		out.People = append(out.People, personDTO{ID: p.ID, Name: p.Name, Kind: p.Kind, Role: p.Role, Image: personImageURL(p.ID, p.ImageUrl)})
 	}
 	files, err := s.store.ListItemMediaFiles(ctx, id)
 	if err != nil {

@@ -24,8 +24,15 @@
 		if (q.trim() !== query.trim()) query = q;
 	});
 
+	// Read on the next frame, never synchronously: at mount, window.scrollY forced a
+	// full layout of the page being hydrated (the largest script cost on mobile).
+	let frame = 0;
 	function onScroll() {
-		scrolled = window.scrollY > 8;
+		if (frame) return;
+		frame = requestAnimationFrame(() => {
+			frame = 0;
+			scrolled = window.scrollY > 8;
+		});
 	}
 
 	function navigate(replace: boolean) {
@@ -58,7 +65,13 @@
 		toasts.show('Analyse en cours', { detail: names, action: session.isAdmin ? { label: 'Voir', run: () => goto('/reglages/bibliotheques') } : undefined });
 	}
 
-	$effect(onScroll);
+	$effect(() => {
+		onScroll();
+		return () => {
+			cancelAnimationFrame(frame);
+			frame = 0;
+		};
+	});
 </script>
 
 <svelte:window onscroll={onScroll} />

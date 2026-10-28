@@ -272,6 +272,8 @@ export interface SystemInfo {
 	serverName?: string;
 	/** M7, administrators only: the first-run assistant was left before its end. */
 	setupWizardPending?: boolean;
+	/** The request carried a valid session (absent on older servers). */
+	authenticated?: boolean;
 }
 
 export interface LibraryFilters {

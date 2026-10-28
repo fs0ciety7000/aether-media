@@ -66,6 +66,8 @@ type Server struct {
 	plays     *playTracker
 	probes    probeCache
 	jobsNote  jobsNotifier
+
+	personFails personFailures
 }
 
 func New(d Deps) *Server {
@@ -121,6 +123,7 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/v1/items/{id}/similar", s.similar)
 	mux.HandleFunc("GET /api/v1/items/{id}", s.getItem)
 	mux.HandleFunc("GET /api/v1/items/{id}/images/{type}", s.itemImage)
+	mux.HandleFunc("GET /api/v1/people/{id}/image", s.personImage)
 	mux.HandleFunc("PUT /api/v1/items/{id}/userdata", s.putUserData)
 	mux.HandleFunc("PATCH /api/v1/items/{id}", s.admin(s.patchItem))
 	mux.HandleFunc("POST /api/v1/items/{id}/refresh", s.admin(s.refreshItem))
@@ -162,7 +165,7 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 		writeError(w, http.StatusNotFound, "not_found", "route inconnue")
 	})
 	mux.Handle("/", web)
-	return s.recoverer(s.logRequests(s.authenticate(mux)))
+	return s.recoverer(s.logRequests(s.authenticate(compressJSON(mux))))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -186,6 +189,9 @@ type systemInfo struct {
 	// SetupWizardPending (administrators only): the first-run assistant was
 	// left before its end and should resume.
 	SetupWizardPending bool `json:"setupWizardPending,omitempty"`
+	// Authenticated: the request carried a valid session (lets the web
+	// client skip a /me call that would fail with 401 on the login page).
+	Authenticated bool `json:"authenticated"`
 }
 
 type syncInfo struct {
@@ -209,6 +215,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		Metadata:      s.Features,
 		Sync:          syncInfo{Trakt: s.Sync != nil && s.Sync.Available(r.Context(), "trakt"), Simkl: s.Sync != nil && s.Sync.Available(r.Context(), "simkl")},
 		ServerName:    "Aether",
+		Authenticated: principalFrom(r) != nil,
 	}
 	if s.Settings != nil {
 		info.Metadata.TMDB = s.Settings.TMDBEnabled()

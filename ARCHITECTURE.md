@@ -159,6 +159,12 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 5. Enfile des jobs : `probe` → `metadata` → `images` → (plus tard) `chapters`/`trickplay`.
 6. Événements SSE (`library.progress`, `item.added`) : l'UI se met à jour en direct.
 
+### 5.1 bis — Accès à la base (T-089)
+- `store.Store` ouvre deux pools sur le même fichier SQLite (WAL, `busy_timeout` 15 s, `_txlock=immediate`) : le pool principal pour les lectures et les écritures d'une seule instruction, et un **pool d'écriture d'une seule connexion** pour `Store.Tx`. Les transactions démarrent en `BEGIN IMMEDIATE` et s'enchaînent dans l'ordre d'arrivée, au lieu d'échouer quand une transaction `DEFERRED` qui avait lu tente d'écrire après le commit d'une autre (`SQLITE_BUSY_SNAPSHOT`, que `busy_timeout` ne couvre pas).
+- Le corps d'une transaction n'écrit que par le `q` reçu (une écriture par le pool principal attendrait le verrou qu'il détient), et le travail lent (réseau, ffprobe) se fait avant `Tx`.
+- Les agrégats coûteux (facettes de filtres, genres de l'accueil) sont mis en cache jusqu'à la prochaine transaction validée (2 min au plus).
+- Listes paginées en deux temps : identifiants triés et total (`count(*) OVER ()`), puis colonnes calculées (vidéo, enfants, disponibilité, données de l'utilisateur) pour la seule page.
+
 ### 5.2 Métadonnées
 > Implémenté en M3 : `internal/metadata` (contrat), `nfo` (local), `tmdb`, `musicbrainz`, `httpx` (client limité en débit + cache disque), `refresh` (orchestration), `internal/images` (cache adressé par contenu, variantes, blurhash). Statuts d'identification : `pending`, `matched`, `unmatched`, `manual`, `local`. Acceptation automatique : score ≥ 0,75 et avance ≥ 0,03 sur le 2ᵉ candidat. Sur une saison/un épisode, `providerIds.tmdb` est l'id TMDB de la saison/de l'épisode, pas de la série.
 
@@ -231,6 +237,7 @@ GET  /api/v1/events  (SSE)
 - Bibliothèques autorisées par utilisateur, contrôle parental par classification.
 - Chemins servis **uniquement** via les ids d'items : jamais de chemin brut accepté côté API (pas de path traversal).
 - Les arguments FFmpeg sont construits en liste, jamais via un shell.
+- **Requêtes sortantes vers des URL non fiables** (images des NFO et des fournisseurs, redirections) : client `internal/netguard`. Seuls http et https sont permis ; l'adresse est vérifiée **à la connexion** (`net.Dialer.Control`, après résolution DNS, donc résistant au DNS rebinding) et refusée si elle n'est pas publique (boucle locale, réseaux privés, lien local dont 169.254.169.254, ULA `fc00::/7` dont `fd00:ec2::254`, multicast, CGNAT, plages réservées, adresses IPv4 encapsulées en IPv6). Avec un proxy sortant configuré, la cible est vérifiée avant de lui être confiée. Délais (connexion, en-têtes, total), 5 redirections au plus, taille maximale lue par l'appelant (25 Mio pour les images).
 
 ## 8. Décisions ouvertes
 - [x] **Go vs Rust** → Go (validé)

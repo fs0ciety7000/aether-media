@@ -33,13 +33,31 @@
 		track.scrollBy({ left: direction * track.clientWidth * 0.8, behavior: reduced ? 'auto' : 'smooth' });
 	}
 
+	// Measured after layout (ResizeObserver, next frame), never synchronously while
+	// mounting: a forced reflow per row was the main cost of the home page on mobile.
+	let frame = 0;
+	function schedule() {
+		if (frame) return;
+		frame = requestAnimationFrame(() => {
+			frame = 0;
+			update();
+		});
+	}
+
 	$effect(() => {
 		if (!track) return;
-		items.length;
-		update();
-		const ro = new ResizeObserver(update);
+		const ro = new ResizeObserver(schedule);
 		ro.observe(track);
-		return () => ro.disconnect();
+		return () => {
+			ro.disconnect();
+			cancelAnimationFrame(frame);
+			frame = 0;
+		};
+	});
+
+	$effect(() => {
+		void items.length;
+		schedule();
 	});
 </script>
 
@@ -55,7 +73,7 @@
 		{/snippet}
 	</SectionHeader>
 
-	<ul class="track" role="list" bind:this={track} onscroll={update} style:--item-w={itemWidth}>
+	<ul class="track" role="list" bind:this={track} onscroll={schedule} style:--item-w={itemWidth}>
 		{#each items as it, i (key(it, i))}
 			<li>{@render item(it, i)}</li>
 		{/each}

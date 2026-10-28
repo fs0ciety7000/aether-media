@@ -52,6 +52,14 @@
 
 	const paused = $derived(userPaused || hovering || focusWithin || items.length < 2);
 	const current = $derived(items[index]);
+	// Only the shown slide and the next one get their image: hidden slides used to
+	// download four large backdrops at once on first paint.
+	let warmed = $state<Record<number, boolean>>({});
+	$effect(() => {
+		if (!items.length) return;
+		warmed[index] = true;
+		warmed[(index + 1) % items.length] = true;
+	});
 	const hint = $derived(typeof playHint === 'function' ? (current ? playHint(current) : undefined) : playHint);
 
 	// Time-based rotation; pausing freezes progress exactly where it is.
@@ -91,8 +99,8 @@
 				style:--mobile-pos={item.mobilePosition ?? '62% 50%'}
 				aria-hidden={i !== index}
 			>
-				{#if item.image}
-					<Artwork image={item.image} fill sizes="(max-width: 1023px) 100vw, 66vw" maxWidth={1920} eager={i === 0} />
+				{#if item.image && (i === index || warmed[i])}
+					<Artwork image={item.image} fill sizes="(max-width: 1023px) 100vw, 52vw" maxWidth={1920} eager={i === 0} />
 				{:else if item.src}
 					<img src={item.src} alt="" />
 				{:else if backdrop}

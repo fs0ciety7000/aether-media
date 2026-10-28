@@ -16,6 +16,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,6 +24,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fs0ciety7000/aether-media/internal/netguard"
 )
 
 // ---------- helpers ----------
@@ -401,7 +404,11 @@ func TestIngestRemote(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	c := newCache(t, func(o *Options) { o.UserAgent = "Aether/test"; o.MaxBytes = 2048 })
+	c := newCache(t, func(o *Options) {
+		o.UserAgent = "Aether/test"
+		o.MaxBytes = 2048
+		o.AllowNetworks = []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}
+	})
 	ctx := context.Background()
 
 	src, err := c.Ingest(ctx, srv.URL+"/ok.png")
@@ -428,6 +435,37 @@ func TestIngestRemote(t *testing.T) {
 	cancel()
 	if _, err := c.Ingest(cctx, srv.URL+"/ok.png"); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled ctx: %v", err)
+	}
+}
+
+// T-049: artwork URLs (NFO, providers) never reach the server's own network.
+func TestIngestRefusesPrivateDestinations(t *testing.T) {
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hit = true
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(encPNG(t, photo(4, 4)))
+	}))
+	defer srv.Close()
+	redirect := httptest.NewServer(http.RedirectHandler(srv.URL+"/poster.png", http.StatusFound))
+	defer redirect.Close()
+
+	c := newCache(t)
+	ctx := context.Background()
+	for _, u := range []string{
+		srv.URL + "/poster.png",
+		strings.Replace(srv.URL, "127.0.0.1", "localhost", 1) + "/poster.png",
+		"http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+		"http://[::1]/poster.png",
+		"http://10.0.0.1/poster.png",
+		redirect.URL,
+	} {
+		if _, err := c.Ingest(ctx, u); !errors.Is(err, ErrBadSource) || !errors.Is(err, netguard.ErrBlocked) {
+			t.Errorf("%s: err = %v, want ErrBadSource + ErrBlocked", u, err)
+		}
+	}
+	if hit {
+		t.Fatal("the loopback server was reached")
 	}
 }
 

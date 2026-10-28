@@ -123,7 +123,7 @@
 	.section {
 		margin: var(--sp-6) 0 var(--sp-2);
 		padding: 0 var(--sp-3);
-		color: var(--text-faint);
+		color: var(--text-muted); /* text-faint (3.8:1) fails AA for 12 px text */
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		white-space: nowrap;
