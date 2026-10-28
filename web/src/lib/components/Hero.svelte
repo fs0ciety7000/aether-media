@@ -15,11 +15,16 @@
 		logo?: string;
 		color?: string;
 		href?: string;
+		/** API backdrop (blurhash, srcset); preferred over `src`. */
+		image?: import('$lib/api/types').Image;
+		/** object-position of the backdrop on narrow screens (keeps the subject in frame). */
+		mobilePosition?: string;
 	}
 </script>
 
 <script lang="ts" generics="T extends HeroItem">
 	import type { Snippet } from 'svelte';
+	import Artwork from './Artwork.svelte';
 	import Button from './Button.svelte';
 	import Icon from './Icon.svelte';
 	import Tag from './Tag.svelte';
@@ -30,12 +35,14 @@
 		/** Rotation interval in ms. */
 		interval?: number;
 		onplay?: (item: T) => void;
+		/** When set, "Lecture" is shown unavailable with this explanation as tooltip. */
+		playHint?: string;
 		secondaryLabel?: string;
 		onsecondary?: (item: T) => void;
 		class?: string;
 	}
 
-	let { items, backdrop, interval = 9000, onplay, secondaryLabel = 'Plus d’infos', onsecondary, class: className }: Props = $props();
+	let { items, backdrop, interval = 9000, onplay, playHint, secondaryLabel = 'Plus d’infos', onsecondary, class: className }: Props = $props();
 
 	let index = $state(0);
 	let progress = $state(0);
@@ -76,8 +83,16 @@
 >
 	<div class="slides">
 		{#each items as item, i (item.id)}
-			<div class="slide" class:active={i === index} style:background-color={item.color} aria-hidden={i !== index}>
-				{#if item.src}
+			<div
+				class="slide"
+				class:active={i === index}
+				style:background-color={item.image?.dominant ?? item.color}
+				style:--mobile-pos={item.mobilePosition ?? '62% 50%'}
+				aria-hidden={i !== index}
+			>
+				{#if item.image}
+					<Artwork image={item.image} fill sizes="(max-width: 1023px) 100vw, 66vw" maxWidth={1920} eager={i === 0} />
+				{:else if item.src}
 					<img src={item.src} alt="" />
 				{:else if backdrop}
 					{@render backdrop(item)}
@@ -110,7 +125,15 @@
 
 	<div class="bottom">
 		<div class="actions">
-			<Button variant="primary" size="lg" icon="play" iconFilled onclick={() => onplay?.(current)}>Lecture</Button>
+			<Button
+				variant="primary"
+				size="lg"
+				icon="play"
+				iconFilled
+				aria-disabled={playHint ? 'true' : undefined}
+				title={playHint}
+				onclick={() => onplay?.(current)}>Lecture</Button
+			>
 			<Button variant="secondary" size="lg" href={current.href} onclick={() => onsecondary?.(current)}>{secondaryLabel}</Button>
 		</div>
 
@@ -272,6 +295,9 @@
 	.logo img {
 		max-height: 120px;
 		max-width: min(100%, 420px);
+		object-fit: contain;
+		object-position: left bottom;
+		filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.35));
 	}
 
 	.meta {
@@ -390,6 +416,10 @@
 
 		.title {
 			font-size: 1.75rem;
+		}
+
+		.slide :global(img) {
+			object-position: var(--mobile-pos);
 		}
 
 		.slide :global(svg) {

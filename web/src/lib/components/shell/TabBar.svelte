@@ -7,7 +7,7 @@
 <nav class="tabbar" aria-label="Navigation principale">
 	<ul role="list">
 		{#each tabs as item (item.href)}
-			{@const active = isActive(page.url.pathname, item.href)}
+			{@const active = isActive(page.url.pathname, item.match ?? item.href)}
 			<li>
 				<a href={item.href} class:active aria-current={active ? 'page' : undefined}>
 					<Icon name={item.icon} size={21} filled={active && item.icon === 'home'} />

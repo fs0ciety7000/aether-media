@@ -8,12 +8,13 @@
 	import Sidebar from '$lib/components/shell/Sidebar.svelte';
 	import TabBar from '$lib/components/shell/TabBar.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
+	import { libraries, scans, system, unmatched } from '$lib/api/stores.svelte';
 
 	let { children } = $props();
 
 	const SIDEBAR_KEY = 'aether:sidebar';
 	let collapsed = $state(readCollapsed());
-	let version = $state<string>();
+	const version = $derived(system.info?.version);
 
 	function readCollapsed() {
 		try {
@@ -32,16 +33,12 @@
 		}
 	}
 
-	// Server info is a nicety: the shell works without the API.
+	// Shared data: everything degrades gracefully when the API is unreachable.
 	onMount(() => {
-		const ctrl = new AbortController();
-		fetch('/api/v1/system/info', { signal: ctrl.signal, headers: { accept: 'application/json' } })
-			.then((r) => (r.ok ? r.json() : null))
-			.then((info) => {
-				if (info && typeof info.version === 'string') version = info.version;
-			})
-			.catch(() => {});
-		return () => ctrl.abort();
+		system.ensure();
+		libraries.ensure();
+		scans.ensure();
+		unmatched.ensure();
 	});
 </script>
 

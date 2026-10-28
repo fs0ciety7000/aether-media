@@ -33,7 +33,22 @@
 		bell: '<path d="M6.5 10a5.5 5.5 0 0 1 11 0v3.6l1.6 2.6a.5.5 0 0 1-.4.8H5.3a.5.5 0 0 1-.4-.8l1.6-2.6Z"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0"/>',
 		download: '<path d="M12 4v10.5M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 16v1.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V16"/>',
 		trending: '<path d="m3.5 16.5 5.5-5.5 4 4 7.5-7.5"/><path d="M15 7.5h5.5V13"/>',
-		'arrow-right': '<path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5"/>'
+		'arrow-right': '<path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5"/>',
+		'chevron-down': '<path d="m6 9.5 6 6 6-6"/>',
+		disc: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.25"/><path d="M12 6.5a5.5 5.5 0 0 0-5.5 5.5"/>',
+		more: '<circle cx="5.5" cy="12" r="1.1" fill="currentColor"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/><circle cx="18.5" cy="12" r="1.1" fill="currentColor"/>',
+		lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+		unlock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 6.8-1.2"/>',
+		trash: '<path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2"/><path d="M6.5 7l.8 11.2a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7"/>',
+		refresh: '<path d="M19.4 14.6A7.5 7.5 0 1 1 18 7.4"/><path d="M19 4v4h-4"/>',
+		edit: '<path d="M14.5 5.5 18.5 9.5"/><path d="M5 19l1-4L16 5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L9 18Z"/>',
+		alert: '<path d="M12 4.5 20.5 19h-17Z"/><path d="M12 10v4"/><circle cx="12" cy="16.6" r=".6" fill="currentColor"/>',
+		'sort-asc': '<path d="M7 18V6M3.5 9.5 7 6l3.5 3.5"/><path d="M13 7h7M13 12h5M13 17h3"/>',
+		'sort-desc': '<path d="M7 6v12M3.5 14.5 7 18l3.5-3.5"/><path d="M13 7h3M13 12h5M13 17h7"/>',
+		star: '<path d="m12 4.5 2.3 4.7 5.2.8-3.8 3.6.9 5.1L12 16.3l-4.6 2.4.9-5.1-3.8-3.6 5.2-.8Z"/>',
+		grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+		wand: '<path d="m4.5 19.5 10-10"/><path d="m13 8 3 3"/><path d="M17.5 3.5v3M16 5h3M19.5 10.5v2M18.5 11.5h2M9.5 3.5v2M8.5 4.5h2"/>',
+		key: '<circle cx="8" cy="15" r="3.5"/><path d="m10.5 12.5 8-8M16 7l2.5 2.5M14 9l1.5 1.5"/>'
 	} as const;
 
 	export type IconName = keyof typeof ICONS;

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { Image } from '$lib/api/types';
 	import Artwork from './Artwork.svelte';
 	import Icon from './Icon.svelte';
 	import ProgressLine from './ProgressLine.svelte';
@@ -11,7 +12,9 @@
 		/** Right-aligned detail, e.g. "Reste 34 min". */
 		detail?: string;
 		href?: string;
+		image?: Image;
 		src?: string;
+		sizes?: string;
 		color?: string;
 		art?: Snippet;
 		progress?: number;
@@ -22,12 +25,12 @@
 		'data-demo'?: string;
 	}
 
-	let { title, eyebrow, detail, href, src, color, art, progress, playable = true, class: className, 'data-demo': demo }: Props = $props();
+	let { title, eyebrow, detail, href, image, src, sizes = '(max-width: 767px) 80vw, 300px', color, art, progress, playable = true, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['thumb-card', className]} data-demo={demo}>
 	<div class="frame">
-		<Artwork {src} {color} {art} ratio="16 / 9" />
+		<Artwork {image} {src} {color} {art} {sizes} ratio="16 / 9" placeholder={{ title }} />
 		{#if playable}
 			<span class="play" aria-hidden="true"><Icon name="play" size={18} filled /></span>
 		{/if}

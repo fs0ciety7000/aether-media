@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { discover, isActive, library, settings, type NavItem } from '$lib/nav';
+	import { libraries as librariesStore, unmatched } from '$lib/api/stores.svelte';
+	import { libraryKindInfo } from '$lib/media';
+	import { collections, discover, identify, isActive, settings, type NavItem } from '$lib/nav';
 	import Logo from '../brand/Logo.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -11,10 +13,13 @@
 	}
 
 	let { collapsed, ontoggle, version }: Props = $props();
+
+	const libs = $derived(librariesStore.list);
+	const showIdentify = $derived(unmatched.count > 0 || isActive(page.url.pathname, identify.href));
 </script>
 
-{#snippet link(item: NavItem)}
-	{@const active = isActive(page.url.pathname, item.href)}
+{#snippet link(item: NavItem, badge?: number)}
+	{@const active = isActive(page.url.pathname, item.match ?? item.href)}
 	<li>
 		<a
 			class="link"
@@ -25,6 +30,9 @@
 		>
 			<Icon name={item.icon} size={18} filled={active && item.icon === 'home'} />
 			<span class="label">{item.label}</span>
+			{#if badge}
+				<span class="count tabular" aria-label="{badge} en attente">{badge > 99 ? '99+' : badge}</span>
+			{/if}
 		</a>
 	</li>
 {/snippet}
@@ -39,13 +47,26 @@
 			{#each discover as item (item.href)}{@render link(item)}{/each}
 		</ul>
 
-		<ul role="list" class="group" aria-label="Bibliothèque">
-			{#each library as item (item.href)}{@render link(item)}{/each}
+		<p class="section micro" id="nav-libs">Bibliothèques</p>
+		<ul role="list" class="libs" aria-labelledby="nav-libs">
+			{#each libs as lib (lib.id)}
+				{@render link({ href: `/bibliotheque/${lib.id}`, label: lib.name, icon: libraryKindInfo(lib.kind).icon })}
+			{/each}
+			{#if librariesStore.loaded && !libs.length}
+				<li>
+					<a class="link add" href="/reglages/bibliotheques?ajouter=1" title={collapsed ? 'Ajouter une bibliothèque' : undefined}>
+						<Icon name="plus" size={18} />
+						<span class="label">Ajouter une bibliothèque</span>
+					</a>
+				</li>
+			{/if}
+			{@render link(collections)}
 		</ul>
 	</nav>
 
 	<div class="bottom">
 		<ul role="list">
+			{#if showIdentify}{@render link(identify, unmatched.count)}{/if}
 			{@render link(settings)}
 		</ul>
 
@@ -97,8 +118,35 @@
 		gap: var(--sp-2);
 	}
 
-	.group {
-		margin-top: var(--sp-6);
+	.section {
+		margin: var(--sp-6) 0 var(--sp-2);
+		padding: 0 var(--sp-3);
+		color: var(--text-faint);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		white-space: nowrap;
+		transition: opacity var(--dur-base) var(--ease);
+	}
+
+	.link.add {
+		background: none;
+		color: var(--text-muted);
+		box-shadow: inset 0 0 0 1px var(--line);
+		border: 0;
+	}
+
+	.count {
+		margin-left: auto;
+		min-width: 22px;
+		height: 20px;
+		padding: 0 6px;
+		border-radius: var(--r-full);
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+		font-size: var(--fs-micro);
+		font-weight: var(--fw-bold);
+		line-height: 20px;
+		text-align: center;
 	}
 
 	.link {
@@ -215,6 +263,29 @@
 
 	.collapsed .link {
 		padding: 0 14px;
+	}
+
+	.collapsed .count {
+		position: absolute;
+		top: 4px;
+		right: 6px;
+		min-width: 8px;
+		width: 8px;
+		height: 8px;
+		padding: 0;
+		font-size: 0;
+		background: var(--accent);
+	}
+
+	.collapsed .link {
+		position: relative;
+	}
+
+	.collapsed .section {
+		opacity: 0;
+		height: 0;
+		margin: var(--sp-5) 0 0;
+		overflow: hidden;
 	}
 
 	.collapsed .label,

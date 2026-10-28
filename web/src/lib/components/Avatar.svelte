@@ -44,8 +44,8 @@
 		border-radius: 50%;
 		overflow: hidden;
 		background:
-			radial-gradient(circle at 30% 25%, hsl(calc(var(--h) + 30) 55% 62%), transparent 60%),
-			linear-gradient(150deg, hsl(var(--h) 48% 40%), hsl(calc(var(--h) + 50) 45% 22%));
+			radial-gradient(circle at 30% 25%, hsl(calc(var(--h) + 20) 32% 52%), transparent 60%),
+			linear-gradient(150deg, hsl(var(--h) 30% 34%), hsl(calc(var(--h) + 30) 32% 18%));
 		box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line-strong);
 		color: #f6ffff;
 	}

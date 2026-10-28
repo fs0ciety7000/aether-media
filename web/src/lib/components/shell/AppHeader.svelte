@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import { libraries, scans } from '$lib/api/stores.svelte';
 	import { currentUser } from '$lib/demo/data';
 	import { toasts } from '$lib/toast.svelte';
 	import Logo from '../brand/Logo.svelte';
@@ -10,15 +12,50 @@
 
 	let scrolled = $state(false);
 	let query = $state('');
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	const onSearchPage = $derived(page.url.pathname === '/recherche');
+	const running = $derived(Object.entries(scans.byLibrary).filter(([, s]) => s.running));
+
+	// Mirror the URL on the search page (back/forward, links), without fighting the user's typing.
+	$effect(() => {
+		if (!onSearchPage) return;
+		const q = page.url.searchParams.get('q') ?? '';
+		if (q.trim() !== query.trim()) query = q;
+	});
 
 	function onScroll() {
 		scrolled = window.scrollY > 8;
 	}
 
+	function navigate(replace: boolean) {
+		const q = query.trim();
+		goto(q ? `/recherche?q=${encodeURIComponent(q)}` : '/recherche', { keepFocus: true, noScroll: true, replaceState: replace });
+	}
+
+	function onInput() {
+		clearTimeout(timer);
+		if (onSearchPage) {
+			// Already there: keep the URL in step (the page debounces the request itself).
+			timer = setTimeout(() => navigate(true), 60);
+		} else if (query.trim().length >= 2) {
+			timer = setTimeout(() => navigate(false), 250);
+		}
+	}
+
 	function submit(e: SubmitEvent) {
 		e.preventDefault();
-		const q = query.trim();
-		goto(q ? `/recherche?q=${encodeURIComponent(q)}` : '/recherche');
+		clearTimeout(timer);
+		navigate(onSearchPage);
+	}
+
+	function notifications() {
+		if (!running.length) {
+			toasts.show('Aucune notification', { detail: 'Les analyses de bibliothèques apparaîtront ici.' });
+			return;
+		}
+		const names = running.map(([id]) => libraries.get(Number(id))?.name ?? `#${id}`).join(', ');
+		toasts.show('Analyse en cours', { detail: names, action: { label: 'Voir', run: () => goto('/reglages/bibliotheques') } });
 	}
 
 	$effect(onScroll);
@@ -30,16 +67,16 @@
 	<a class="brand" href="/" aria-label="Aether — accueil"><Logo size={26} /></a>
 
 	<form class="search" role="search" onsubmit={submit}>
-		<SearchField bind:value={query} size="lg" shortcut placeholder="Rechercher un film, un réalisateur, un acteur…" />
+		<SearchField bind:value={query} size="lg" shortcut placeholder="Rechercher un film, une série, un artiste…" oninput={onInput} />
 	</form>
 
 	<div class="end">
 		<ThemeSwitcher />
 		<IconButton
 			icon="bell"
-			badge
-			aria-label="Notifications (2 nouvelles)"
-			onclick={() => toasts.show('2 nouveaux titres', { detail: 'La bibliothèque « Films » a été analysée.' })}
+			badge={running.length > 0}
+			aria-label={running.length ? `Notifications (${running.length} analyse${running.length > 1 ? 's' : ''} en cours)` : 'Notifications'}
+			onclick={notifications}
 		/>
 		<span class="user-full"><UserChip name={currentUser.name} detail={currentUser.email} hue={currentUser.hue} /></span>
 		<span class="user-compact"><UserChip name={currentUser.name} hue={currentUser.hue} compact /></span>

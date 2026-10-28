@@ -203,8 +203,12 @@ func resolveTrack(libID int64, f file) (resolved, bool) {
 	}
 	// Folder layout fallback: <root>/<Artist>/<Album>/[CDn/]track.
 	artist := t.Artist
-	if artist == "" && albumDir != f.root && filepath.Dir(albumDir) != f.root {
-		artist = filepath.Base(filepath.Dir(albumDir))
+	artistDir := ""
+	if albumDir != f.root && filepath.Dir(albumDir) != f.root {
+		artistDir = filepath.Dir(albumDir) // lets local providers find artist.jpg / folder.jpg
+		if artist == "" {
+			artist = filepath.Base(artistDir)
+		}
 	}
 	if artist == "" {
 		artist = "Artiste inconnu"
@@ -222,7 +226,7 @@ func resolveTrack(libID int64, f file) (resolved, bool) {
 		title = strings.TrimSuffix(filepath.Base(f.path), filepath.Ext(f.path))
 	}
 
-	artistNode := node{key: fmt.Sprintf("artist:%d:%s", libID, strings.ToLower(artist)), kind: "artist", title: artist}
+	artistNode := node{key: fmt.Sprintf("artist:%d:%s", libID, strings.ToLower(artist)), kind: "artist", title: artist, path: artistDir}
 	albumNode := node{key: "album:" + albumDir + "|" + strings.ToLower(album), kind: "album", title: album, year: t.Year, path: albumDir}
 	track := node{key: "track:" + f.path, kind: "track", title: title, path: f.path}
 	if t.Number > 0 {

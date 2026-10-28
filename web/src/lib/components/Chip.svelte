@@ -7,10 +7,12 @@
 		selected?: boolean;
 		/** Optional count shown after the label. */
 		count?: number;
+		/** Flip `selected` on click (off for controlled, radio-like chips). */
+		toggle?: boolean;
 		children: Snippet;
 	}
 
-	let { selected = $bindable(false), count, children, class: className, onclick, ...rest }: Props = $props();
+	let { selected = $bindable(false), count, toggle = true, children, class: className, onclick, ...rest }: Props = $props();
 </script>
 
 <button

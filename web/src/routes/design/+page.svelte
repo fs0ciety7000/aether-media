@@ -16,6 +16,14 @@
 	import Tag from '$lib/components/Tag.svelte';
 	import ThumbCard from '$lib/components/ThumbCard.svelte';
 	import UserChip from '$lib/components/UserChip.svelte';
+	import Artwork from '$lib/components/Artwork.svelte';
+	import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
+	import Dialog from '$lib/components/Dialog.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import Menu from '$lib/components/Menu.svelte';
+	import Select from '$lib/components/Select.svelte';
+	import TitleArt from '$lib/components/TitleArt.svelte';
+	import type { Image } from '$lib/api/types';
 	import BackdropArt from '$lib/demo/BackdropArt.svelte';
 	import PosterArt from '$lib/demo/PosterArt.svelte';
 	import { currentUser, dominant, films, genres } from '$lib/demo/data';
@@ -94,6 +102,11 @@
 	let played = $state(false);
 
 	const sample = films.slice(0, 5);
+
+	// M4 components. An image without URL shows its decoded blurhash alone.
+	const blurOnly: Image = { url: '', blurhash: 'T74of_t7M{X=M{j@XUt8ogbct7of', dominant: '#233953', width: 600, height: 900 };
+	let sortValue = $state('title');
+	let dialogOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -458,6 +471,65 @@
 		</div>
 	</section>
 
+	<!-- M4 : parcourir -->
+	<section class="block" aria-labelledby="s-browse">
+		<div class="heading">
+			<span class="num tabular">11</span>
+			<h2 id="s-browse">Parcourir (M4)</h2>
+			<p>Images réelles : couleur dominante, puis blurhash décodé, puis fondu de l’image. Sans image, le titre est composé sur une tuile teintée.</p>
+		</div>
+		<div class="m4-art">
+			<figure>
+				<div class="m4-frame"><Artwork image={blurOnly} ratio="2 / 3" /></div>
+				<figcaption class="micro">Blurhash</figcaption>
+			</figure>
+			<figure>
+				<div class="m4-frame"><Artwork ratio="2 / 3" placeholder={{ title: 'Les Heures claires', year: 2019, icon: 'film' }} /></div>
+				<figcaption class="micro">Sans affiche</figcaption>
+			</figure>
+			<figure>
+				<div class="m4-frame square"><Artwork ratio="1 / 1" placeholder={{ title: 'Nocturnes', icon: 'disc' }} /></div>
+				<figcaption class="micro">Album</figcaption>
+			</figure>
+			<figure>
+				<div class="m4-frame round"><Artwork ratio="1 / 1" placeholder={{ title: 'Lune Pâle' }} /></div>
+				<figcaption class="micro">Artiste</figcaption>
+			</figure>
+			<figure class="wide">
+				<div class="m4-frame wide"><div class="m4-wide"><TitleArt title="Grande Marée" year="S2 · É3" icon="tv" layout="wide" /></div></div>
+				<figcaption class="micro">Vignette d’épisode</figcaption>
+			</figure>
+		</div>
+		<div class="row-inline">
+			<Breadcrumbs items={[{ label: 'Séries', href: '/design' }, { label: 'Les Veilleurs', href: '/design' }, { label: 'Saison 1' }]} />
+		</div>
+		<div class="row-inline">
+			<div style="width: 200px"><Select label="Trier par" bind:value={sortValue} options={[{ value: 'title', label: 'Titre' }, { value: 'dateAdded', label: 'Date d’ajout' }, { value: 'year', label: 'Année' }]} /></div>
+			<Menu
+				label="Plus d’actions"
+				text="Plus"
+				items={[
+					{ label: 'Actualiser les métadonnées', icon: 'refresh', onselect: () => toasts.show('Actualisation demandée') },
+					{ label: 'Identifier…', icon: 'wand', onselect: () => toasts.show('Identifier') },
+					{ label: 'Modifier…', icon: 'edit', onselect: () => toasts.show('Modifier') }
+				]}
+			/>
+			<Button variant="primary" icon="play" iconFilled aria-disabled="true" title="Lecture disponible en M5">Lecture</Button>
+			<Button variant="secondary" onclick={() => (dialogOpen = true)}>Ouvrir une boîte de dialogue</Button>
+			<Tag variant="accent" icon="wand">À identifier</Tag>
+		</div>
+		<EmptyState icon="search" title="Aucun résultat pour « zzz »" compact>
+			<p>Vérifiez l’orthographe, essayez un autre mot-clé ou le titre original.</p>
+		</EmptyState>
+		<Dialog bind:open={dialogOpen} title="Boîte de dialogue" description="Focus piégé, Échap pour fermer, retour du focus au déclencheur." size="sm">
+			<p class="m4-dialog-text">Le fond de page est inerte tant que la boîte est ouverte.</p>
+			{#snippet footer()}
+				<Button variant="tertiary" onclick={() => (dialogOpen = false)}>Annuler</Button>
+				<Button variant="primary" onclick={() => (dialogOpen = false)}>Valider</Button>
+			{/snippet}
+		</Dialog>
+	</section>
+
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
@@ -481,6 +553,44 @@
 </div>
 
 <style>
+	.m4-art {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: var(--gap);
+		margin-bottom: var(--sp-5);
+	}
+
+	.m4-art figure {
+		display: grid;
+		gap: var(--sp-2);
+		width: 150px;
+		color: var(--text-muted);
+	}
+
+	.m4-art figure.wide {
+		width: 280px;
+	}
+
+	.m4-frame {
+		border-radius: var(--r-lg);
+		overflow: hidden;
+		box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+	}
+
+	.m4-frame.round {
+		border-radius: 50%;
+	}
+
+	.m4-wide {
+		position: relative;
+		aspect-ratio: 16 / 9;
+	}
+
+	.m4-dialog-text {
+		color: var(--text-muted);
+	}
+
 	.design {
 		display: grid;
 		gap: var(--sp-8);

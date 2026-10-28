@@ -19,3 +19,48 @@ export function formatClock(totalSeconds: number): string {
 	const sec = String(s % 60).padStart(2, '0');
 	return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
+
+/** Runtime in milliseconds → "2 h 12" / "48 min" (undefined when unknown). */
+export function formatRuntime(ms: number | undefined | null): string | undefined {
+	if (!ms || ms <= 0) return undefined;
+	return formatDuration(Math.max(1, Math.round(ms / 60000)));
+}
+
+/** Track duration in milliseconds → "3:42". */
+export function formatTrackTime(ms: number | undefined | null): string | undefined {
+	if (!ms || ms <= 0) return undefined;
+	return formatClock(ms / 1000);
+}
+
+/** 1 536 000 000 → "1,4 Go". */
+export function formatBytes(bytes: number | undefined | null): string | undefined {
+	if (!bytes || bytes <= 0) return undefined;
+	const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+	let v = bytes;
+	let i = 0;
+	while (v >= 1024 && i < units.length - 1) {
+		v /= 1024;
+		i++;
+	}
+	return `${v.toLocaleString('fr-FR', { maximumFractionDigits: v < 10 && i > 0 ? 1 : 0 })} ${units[i]}`;
+}
+
+/** 8 400 000 → "8,4 Mb/s". */
+export function formatBitrate(bps: number | undefined | null): string | undefined {
+	if (!bps || bps <= 0) return undefined;
+	if (bps >= 1_000_000) return `${(bps / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mb/s`;
+	return `${Math.round(bps / 1000)} kb/s`;
+}
+
+/** "2024-03-07" → "7 mars 2024". */
+export function formatDate(iso: string | undefined | null): string | undefined {
+	if (!iso) return undefined;
+	const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** 1 → "1 film", 3 → "3 films". */
+export function plural(n: number, one: string, many: string): string {
+	return `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
+}

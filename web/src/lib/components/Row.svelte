@@ -48,8 +48,8 @@
 		{#snippet actions()}
 			{#if canPrev || canNext}
 				<span class="arrows">
-					<IconButton icon="chevron-left" size="sm" aria-label="Précédents" tabindex={-1} disabled={!canPrev} onclick={() => page(-1)} />
-					<IconButton icon="chevron-right" size="sm" aria-label="Suivants" tabindex={-1} disabled={!canNext} onclick={() => page(1)} />
+					<IconButton icon="chevron-left" size="sm" aria-label="Précédents — {title}" aria-disabled={!canPrev} onclick={() => canPrev && page(-1)} />
+					<IconButton icon="chevron-right" size="sm" aria-label="Suivants — {title}" aria-disabled={!canNext} onclick={() => canNext && page(1)} />
 				</span>
 			{/if}
 		{/snippet}

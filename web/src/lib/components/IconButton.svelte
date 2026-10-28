@@ -67,7 +67,7 @@
 		box-shadow: inset 0 0 0 1px var(--line);
 	}
 
-	.surface:hover:not(:disabled),
+	.surface:hover:not(:disabled):not([aria-disabled='true']),
 	.surface[data-demo='hover'],
 	.surface[aria-expanded='true'] {
 		color: var(--text);
@@ -92,8 +92,10 @@
 		background: color-mix(in srgb, var(--text) 7%, transparent);
 	}
 
-	.icon-btn:disabled {
+	.icon-btn:disabled,
+	.icon-btn[aria-disabled='true'] {
 		opacity: 0.4;
+		cursor: default;
 	}
 
 	.badge {

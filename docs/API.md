@@ -93,4 +93,13 @@ type Library = { id: number; name: string; kind: "movies" | "shows" | "music" | 
 
 ## Tâches & événements
 - `GET /jobs` → `{ [kind]: { [status]: count } }`
-- `GET /events` (SSE) : `library.scan.started|progress|finished`, `item.updated` `{id, kind}`, `item.image` `{id, type}`
+- `GET /events` (SSE), chaque message : `{ type, time, data }`
+  - `library.scan.started` `{ libraryId, name }` · `library.scan.progress` `{ libraryId, processed, total }`
+  - `library.scan.finished` `{ libraryId, files, added, updated, unchanged, removed, skipped, unavailable?, durationMs }`
+  - `item.updated` `{ id, kind }` · `item.image` `{ id, type }`
+
+## Précisions
+- `genre` : une seule valeur (nom exact, insensible à la casse).
+- `Candidate.score` : 0 à 1.
+- `Person.image` : URL distante (TMDB) pour l'instant ; passera par le cache d'images (T-047).
+- `runtimeMs` : durée réelle du fichier (ffprobe) quand elle est connue, sinon celle des métadonnées.

@@ -111,7 +111,7 @@
 		background: var(--accent);
 		color: var(--accent-contrast);
 	}
-	.primary:hover:not(:disabled),
+	.primary:hover:not(:disabled):not([aria-disabled='true']),
 	.primary[data-demo='hover'] {
 		background: color-mix(in srgb, var(--accent) 86%, var(--text));
 	}
@@ -144,6 +144,16 @@
 	.btn:disabled {
 		opacity: 0.4;
 		box-shadow: none;
+	}
+
+	/* Unavailable but still focusable (keeps its tooltip reachable). */
+	.btn[aria-disabled='true'] {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+
+	.btn[aria-disabled='true']:active {
+		transform: none;
 	}
 
 	.label {

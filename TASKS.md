@@ -26,8 +26,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-022 Composants : Button, Card (poster/thumb), Row, Hero, Input, Chip, Skeleton, Toast
 - [x] T-023 App shell (sidebar / barre basse, header au scroll)
 - [x] T-024 Page `/design` (galerie de composants) + test de contraste en CI
-- [ ] T-025 Images réelles dans le Hero : `object-position` mobile, logos de titre
-- [ ] T-026 Flèches des rangées accessibles au clavier
+- [x] T-025 Images réelles dans le Hero : `object-position` mobile, logos de titre
+- [x] T-026 Flèches des rangées accessibles au clavier
 
 ## M1b — Refonte UI (référence Nexify) ✅
 - [x] T-027 Thème « Nuit » par défaut (bleu nuit + teal adouci), 5 thèmes alternatifs adaptés
@@ -64,13 +64,17 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-048 Rafraîchissement périodique des séries en cours (nouveaux épisodes)
 - [ ] T-049 Garde SSRF du téléchargeur d'images (bloquer IP privées/loopback pour les URL issues des NFO)
 - [ ] T-04A fanart.tv (logos, fonds d'artistes) — optionnel
-- [ ] T-04B API système : indiquer si TMDB est actif (pour l'UI « à identifier »)
+- [x] T-04B API système : indiquer si TMDB est actif (pour l'UI « à identifier »)
 
-## M4 — Parcourir & rechercher
-- [ ] T-050 API items (filtres, tri, curseur), home, détail
-- [ ] T-051 FTS5 + endpoint de recherche
-- [ ] T-052 Pages Accueil, Bibliothèque, Détail
-- [ ] T-053 Page Recherche (instantanée, résultats groupés)
+## M4 — Parcourir & rechercher ✅
+- [x] T-050 API items (filtres, tri, curseur), home, détail
+- [x] T-051 FTS5 + endpoint de recherche
+- [x] T-052 Pages Accueil, Bibliothèque, Détail
+- [x] T-053 Page Recherche (instantanée, résultats groupés)
+- [x] T-054 Écran « À identifier » (recherche de candidats, choix), édition d'un élément, gestion des bibliothèques (ajout, scan en direct, suppression)
+- [x] T-055 Script de bibliothèque de démonstration (`web/scripts/demo-library.sh`)
+- [ ] T-056 Défilement infini testé sur une grosse bibliothèque (> 60 éléments)
+- [ ] T-057 Page personne (filmographie) au lieu de `/parcourir?personne=`
 
 ## M5 — Lecture
 - [ ] T-060 Détection des capacités du navigateur
