@@ -22,7 +22,7 @@ func (q *Queries) CountChildren(ctx context.Context, parentID sql.NullInt64) (in
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end FROM items WHERE id = ?
+SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end, tagline, premiere_date, end_date, status, official_rating, community_rating, collection, identify_status, metadata_refreshed_at FROM items WHERE id = ?
 `
 
 func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
@@ -53,6 +53,15 @@ func (q *Queries) GetItem(ctx context.Context, id int64) (Item, error) {
 		&i.Edition,
 		&i.AirDate,
 		&i.IndexNumberEnd,
+		&i.Tagline,
+		&i.PremiereDate,
+		&i.EndDate,
+		&i.Status,
+		&i.OfficialRating,
+		&i.CommunityRating,
+		&i.Collection,
+		&i.IdentifyStatus,
+		&i.MetadataRefreshedAt,
 	)
 	return i, err
 }
@@ -90,21 +99,23 @@ func (q *Queries) LibraryStats(ctx context.Context, libraryID int64) ([]LibraryS
 }
 
 const listItems = `-- name: ListItems :many
-SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end FROM items
+SELECT id, library_id, parent_id, kind, title, sort_title, original_title, year, overview, path, size, mtime, runtime_ms, index_number, parent_index_number, provider_ids, locked_fields, missing, date_added, date_updated, "key", edition, air_date, index_number_end, tagline, premiere_date, end_date, status, official_rating, community_rating, collection, identify_status, metadata_refreshed_at FROM items
 WHERE library_id = COALESCE(?1, library_id)
   AND kind = COALESCE(?2, kind)
   AND IFNULL(parent_id, 0) = COALESCE(CAST(?3 AS INTEGER), IFNULL(parent_id, 0))
   AND missing = 0
-  AND (sort_title > ?4
-       OR (sort_title = ?4 AND id > CAST(?5 AS INTEGER)))
+  AND identify_status = COALESCE(?4, identify_status)
+  AND (sort_title > ?5
+       OR (sort_title = ?5 AND id > CAST(?6 AS INTEGER)))
 ORDER BY sort_title, id
-LIMIT ?6
+LIMIT ?7
 `
 
 type ListItemsParams struct {
 	LibraryID      sql.NullInt64  `json:"libraryId"`
 	Kind           sql.NullString `json:"kind"`
 	ParentID       sql.NullInt64  `json:"parentId"`
+	IdentifyStatus sql.NullString `json:"identifyStatus"`
 	AfterSortTitle string         `json:"afterSortTitle"`
 	AfterID        int64          `json:"afterId"`
 	Lim            int64          `json:"lim"`
@@ -115,6 +126,7 @@ func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]Item, e
 		arg.LibraryID,
 		arg.Kind,
 		arg.ParentID,
+		arg.IdentifyStatus,
 		arg.AfterSortTitle,
 		arg.AfterID,
 		arg.Lim,
@@ -151,6 +163,15 @@ func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]Item, e
 			&i.Edition,
 			&i.AirDate,
 			&i.IndexNumberEnd,
+			&i.Tagline,
+			&i.PremiereDate,
+			&i.EndDate,
+			&i.Status,
+			&i.OfficialRating,
+			&i.CommunityRating,
+			&i.Collection,
+			&i.IdentifyStatus,
+			&i.MetadataRefreshedAt,
 		); err != nil {
 			return nil, err
 		}

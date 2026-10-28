@@ -21,3 +21,10 @@ format = "text"   # text | json
 scan_interval  = "6h"    # rescan périodique de sécurité
 watch_debounce = "30s"   # délai de calme après une modification de fichiers
 probe_workers  = 2       # analyses ffprobe simultanées
+
+[metadata]
+# Clé API TMDB (v3) ou jeton de lecture (v4) : https://www.themoviedb.org/settings/api
+# Sans clé, seuls les NFO et images locales sont utilisés pour films et séries.
+# tmdb_api_key = ""
+language = "fr-FR"
+# disable_musicbrainz = false

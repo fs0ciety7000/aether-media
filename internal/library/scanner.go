@@ -39,6 +39,9 @@ type Scanner struct {
 	jobs  *jobs.Runner
 	hub   *events.Hub
 	log   *slog.Logger
+	// AfterScan, when set, runs after each successful scan (e.g. to queue
+	// metadata refreshes for new items).
+	AfterScan func(ctx context.Context, libID int64)
 }
 
 func NewScanner(s *store.Store, r *jobs.Runner, hub *events.Hub, log *slog.Logger) *Scanner {
@@ -170,6 +173,9 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 		"updated", res.Updated, "unchanged", res.Unchanged, "removed", res.Removed,
 		"skipped", res.Skipped, "duration_ms", res.DurationMs)
 	s.hub.Publish("library.scan.finished", res)
+	if s.AfterScan != nil {
+		s.AfterScan(ctx, libID)
+	}
 	return res, nil
 }
 

@@ -37,6 +37,7 @@ WHERE library_id = COALESCE(sqlc.narg(library_id), library_id)
   AND kind = COALESCE(sqlc.narg(kind), kind)
   AND IFNULL(parent_id, 0) = COALESCE(CAST(sqlc.narg(parent_id) AS INTEGER), IFNULL(parent_id, 0))
   AND missing = 0
+  AND identify_status = COALESCE(sqlc.narg(identify_status), identify_status)
   AND (sort_title > sqlc.arg(after_sort_title)
        OR (sort_title = sqlc.arg(after_sort_title) AND id > CAST(sqlc.arg(after_id) AS INTEGER)))
 ORDER BY sort_title, id

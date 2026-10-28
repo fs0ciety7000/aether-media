@@ -9,6 +9,7 @@ import (
 
 	"github.com/fs0ciety7000/aether-media/internal/events"
 	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/version"
 )
@@ -21,6 +22,14 @@ type Deps struct {
 	Scanner *library.Scanner
 	Watcher *library.Watcher
 	Hub     *events.Hub
+	// Refresher and Images are optional (nil disables the related routes).
+	Refresher *refresh.Refresher
+	Images    ImageServer
+}
+
+// ImageServer serves cached image renditions.
+type ImageServer interface {
+	ServeVariant(w http.ResponseWriter, r *http.Request, hash string, width int)
 }
 
 type Server struct {
@@ -46,6 +55,11 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/v1/libraries/{id}/scan", s.scanLibrary)
 	mux.HandleFunc("GET /api/v1/items", s.listItems)
 	mux.HandleFunc("GET /api/v1/items/{id}", s.getItem)
+	mux.HandleFunc("PATCH /api/v1/items/{id}", s.patchItem)
+	mux.HandleFunc("POST /api/v1/items/{id}/refresh", s.refreshItem)
+	mux.HandleFunc("POST /api/v1/items/{id}/identify/search", s.identifySearch)
+	mux.HandleFunc("POST /api/v1/items/{id}/identify", s.identify)
+	mux.HandleFunc("GET /api/v1/items/{id}/images/{type}", s.itemImage)
 	mux.HandleFunc("GET /api/v1/jobs", s.jobStats)
 	mux.HandleFunc("GET /api/v1/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

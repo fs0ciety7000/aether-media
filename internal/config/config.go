@@ -18,10 +18,20 @@ import (
 )
 
 type Config struct {
-	Server  ServerConfig  `toml:"server"`
-	Paths   PathsConfig   `toml:"paths"`
-	Log     LogConfig     `toml:"log"`
-	Library LibraryConfig `toml:"library"`
+	Server   ServerConfig   `toml:"server"`
+	Paths    PathsConfig    `toml:"paths"`
+	Log      LogConfig      `toml:"log"`
+	Library  LibraryConfig  `toml:"library"`
+	Metadata MetadataConfig `toml:"metadata"`
+}
+
+type MetadataConfig struct {
+	// TMDB API key (v3) or read access token (v4). Empty disables TMDB.
+	TMDBAPIKey string `toml:"tmdb_api_key"`
+	// Preferred metadata language (BCP-47), default "fr-FR".
+	Language string `toml:"language"`
+	// Disable MusicBrainz lookups (on by default; no key needed).
+	DisableMusicBrainz bool `toml:"disable_musicbrainz"`
 }
 
 type LibraryConfig struct {
@@ -77,6 +87,7 @@ func Default() Config {
 			WatchDebounce: Duration{30 * time.Second},
 			ProbeWorkers:  2,
 		},
+		Metadata: MetadataConfig{Language: "fr-FR"},
 	}
 }
 
@@ -124,6 +135,8 @@ func applyEnv(cfg *Config) error {
 		"AETHER_FFPROBE":       &cfg.Paths.FFprobe,
 		"AETHER_LOG_LEVEL":     &cfg.Log.Level,
 		"AETHER_LOG_FORMAT":    &cfg.Log.Format,
+		"AETHER_TMDB_API_KEY":  &cfg.Metadata.TMDBAPIKey,
+		"AETHER_LANGUAGE":      &cfg.Metadata.Language,
 	}
 	for k, dst := range str {
 		if v := os.Getenv(k); v != "" {

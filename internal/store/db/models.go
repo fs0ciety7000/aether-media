@@ -16,31 +16,80 @@ type Chapter struct {
 	Title       string `json:"title"`
 }
 
+type Genre struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type Image struct {
+	ID         int64          `json:"id"`
+	ItemID     int64          `json:"itemId"`
+	Type       string         `json:"type"`
+	Idx        int64          `json:"idx"`
+	Source     string         `json:"source"`
+	IsLocal    int64          `json:"isLocal"`
+	Provider   string         `json:"provider"`
+	Language   string         `json:"language"`
+	Hash       sql.NullString `json:"hash"`
+	Width      int64          `json:"width"`
+	Height     int64          `json:"height"`
+	Blurhash   string         `json:"blurhash"`
+	Dominant   string         `json:"dominant"`
+	FetchError string         `json:"fetchError"`
+}
+
 type Item struct {
-	ID                int64          `json:"id"`
-	LibraryID         int64          `json:"libraryId"`
-	ParentID          sql.NullInt64  `json:"parentId"`
-	Kind              string         `json:"kind"`
-	Title             string         `json:"title"`
-	SortTitle         string         `json:"sortTitle"`
-	OriginalTitle     sql.NullString `json:"originalTitle"`
-	Year              sql.NullInt64  `json:"year"`
-	Overview          sql.NullString `json:"overview"`
-	Path              sql.NullString `json:"path"`
-	Size              sql.NullInt64  `json:"size"`
-	Mtime             sql.NullInt64  `json:"mtime"`
-	RuntimeMs         sql.NullInt64  `json:"runtimeMs"`
-	IndexNumber       sql.NullInt64  `json:"indexNumber"`
-	ParentIndexNumber sql.NullInt64  `json:"parentIndexNumber"`
-	ProviderIds       string         `json:"providerIds"`
-	LockedFields      string         `json:"lockedFields"`
-	Missing           int64          `json:"missing"`
-	DateAdded         int64          `json:"dateAdded"`
-	DateUpdated       int64          `json:"dateUpdated"`
-	Key               sql.NullString `json:"key"`
-	Edition           sql.NullString `json:"edition"`
-	AirDate           sql.NullString `json:"airDate"`
-	IndexNumberEnd    sql.NullInt64  `json:"indexNumberEnd"`
+	ID                  int64           `json:"id"`
+	LibraryID           int64           `json:"libraryId"`
+	ParentID            sql.NullInt64   `json:"parentId"`
+	Kind                string          `json:"kind"`
+	Title               string          `json:"title"`
+	SortTitle           string          `json:"sortTitle"`
+	OriginalTitle       sql.NullString  `json:"originalTitle"`
+	Year                sql.NullInt64   `json:"year"`
+	Overview            sql.NullString  `json:"overview"`
+	Path                sql.NullString  `json:"path"`
+	Size                sql.NullInt64   `json:"size"`
+	Mtime               sql.NullInt64   `json:"mtime"`
+	RuntimeMs           sql.NullInt64   `json:"runtimeMs"`
+	IndexNumber         sql.NullInt64   `json:"indexNumber"`
+	ParentIndexNumber   sql.NullInt64   `json:"parentIndexNumber"`
+	ProviderIds         string          `json:"providerIds"`
+	LockedFields        string          `json:"lockedFields"`
+	Missing             int64           `json:"missing"`
+	DateAdded           int64           `json:"dateAdded"`
+	DateUpdated         int64           `json:"dateUpdated"`
+	Key                 sql.NullString  `json:"key"`
+	Edition             sql.NullString  `json:"edition"`
+	AirDate             sql.NullString  `json:"airDate"`
+	IndexNumberEnd      sql.NullInt64   `json:"indexNumberEnd"`
+	Tagline             sql.NullString  `json:"tagline"`
+	PremiereDate        sql.NullString  `json:"premiereDate"`
+	EndDate             sql.NullString  `json:"endDate"`
+	Status              sql.NullString  `json:"status"`
+	OfficialRating      sql.NullString  `json:"officialRating"`
+	CommunityRating     sql.NullFloat64 `json:"communityRating"`
+	Collection          sql.NullString  `json:"collection"`
+	IdentifyStatus      string          `json:"identifyStatus"`
+	MetadataRefreshedAt sql.NullInt64   `json:"metadataRefreshedAt"`
+}
+
+type ItemGenre struct {
+	ItemID  int64 `json:"itemId"`
+	GenreID int64 `json:"genreId"`
+}
+
+type ItemPerson struct {
+	ItemID   int64  `json:"itemId"`
+	PersonID int64  `json:"personId"`
+	Kind     string `json:"kind"`
+	Role     string `json:"role"`
+	Ord      int64  `json:"ord"`
+}
+
+type ItemStudio struct {
+	ItemID   int64 `json:"itemId"`
+	StudioID int64 `json:"studioId"`
 }
 
 type Job struct {
@@ -113,6 +162,14 @@ type MediaStream struct {
 	Bitrate           int64   `json:"bitrate"`
 }
 
+type Person struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Key         string `json:"key"`
+	ProviderIds string `json:"providerIds"`
+	ImageUrl    string `json:"imageUrl"`
+}
+
 type Session struct {
 	TokenHash  []byte `json:"tokenHash"`
 	UserID     int64  `json:"userId"`
@@ -120,6 +177,11 @@ type Session struct {
 	Client     string `json:"client"`
 	LastSeen   int64  `json:"lastSeen"`
 	CreatedAt  int64  `json:"createdAt"`
+}
+
+type Studio struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 type User struct {
