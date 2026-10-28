@@ -1,0 +1,786 @@
+---
+import { Picture, getImage } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+
+import accueil from '../assets/shots/accueil.png';
+import film from '../assets/shots/film.png';
+import lecteur from '../assets/shots/lecteur.png';
+import agent from '../assets/shots/agent.png';
+import sources from '../assets/shots/sources.png';
+import mobileCode from '../assets/shots/mobile-code.png';
+import utilisateur from '../assets/shots/utilisateur.png';
+import reprendre from '../assets/shots/reprendre.png';
+import collections from '../assets/shots/collections.png';
+import mobileAccueil from '../assets/shots/mobile-accueil.png';
+import synchro from '../assets/shots/synchro.png';
+
+const REPO = 'https://github.com/fs0ciety7000/aether-media';
+const fmt = ['avif', 'webp'] as const;
+
+const modes = [
+  {
+    id: 'direct',
+    label: 'Direct',
+    title: 'Lecture directe',
+    text: 'Le navigateur sait lire le fichier : il part tel quel. Aucun calcul côté serveur, la qualité d’origine, le son d’origine.',
+    stats: [
+      ['Méthode', '<b>Lecture directe</b> <span>· fichier compatible</span>'],
+      ['Vidéo', 'H.264 · 1920×1080 <span>· d’origine</span>'],
+      ['Audio', 'Français · Stéréo AAC'],
+      ['Débit', '8,2 Mb/s'],
+      ['Charge serveur', '<span>aucune</span>'],
+    ],
+  },
+  {
+    id: 'remux',
+    label: 'Remux',
+    title: 'Remux',
+    text: 'Seul l’emballage pose problème : Aether recopie l’image sans la réencoder vers un flux HLS fMP4, et ne convertit que le son si besoin.',
+    stats: [
+      ['Méthode', '<b>Remux</b> <span>· codec audio non pris en charge</span>'],
+      ['Vidéo', 'VP9 · 1280×720 <span>· copiée</span>'],
+      ['Audio', 'Anglais · Commentaires · 5.1 AC3'],
+      ['Débit', '800 kb/s <span>· réseau ≈ 615 Mb/s</span>'],
+      ['Moteur', 'hls.js (MSE)'],
+    ],
+  },
+  {
+    id: 'transcode',
+    label: 'Transcodage',
+    title: 'Transcodage HLS',
+    text: 'Quand il le faut vraiment : HLS à la demande, accéléré par VAAPI, QSV, NVENC ou VideoToolbox, avec une conversion HDR vers SDR fidèle et les sous-titres PGS ou ASS incrustés.',
+    stats: [
+      ['Méthode', '<b>Transcodage</b> <span>· HDR non affichable</span>'],
+      ['Vidéo', 'HEVC · HDR10 → SDR <span>· transcodée</span>'],
+      ['Accélération', 'VAAPI · tonemap zscale'],
+      ['Débit', '4,2 Mb/s <span>· réseau ≈ 734 Mb/s</span>'],
+      ['Images perdues', '0 / 80'],
+    ],
+  },
+];
+
+const installs = [
+  {
+    id: 'docker',
+    label: 'Docker',
+    intro: 'Image multi-arch (amd64, arm64) avec jellyfin-ffmpeg 7 : VAAPI, QSV, NVENC, conversion HDR et sous-titres incrustés. Non root, avec un healthcheck.',
+    code: `docker run -d --name aether -p 8096:8096 \\
+  -v ./data:/data \\
+  -v /srv/media:/media:ro \\
+  ghcr.io/fs0ciety7000/aether`,
+  },
+  {
+    id: 'deb',
+    label: 'Debian / Ubuntu',
+    intro: 'Le paquet installe le binaire, un compte système et deux services systemd (serveur et agent). FFmpeg est recommandé.',
+    code: `curl -fLO https://github.com/fs0ciety7000/aether-media/releases/download/v0.1.0/aether_0.1.0_amd64.deb
+sudo apt install ./aether_0.1.0_amd64.deb
+sudo systemctl enable --now aether`,
+  },
+  {
+    id: 'rpm',
+    label: 'Fedora / RHEL',
+    intro: 'Même contenu que le .deb, pour x86_64, aarch64 et armv7hl. FFmpeg complet via RPM Fusion.',
+    code: `sudo dnf install https://github.com/fs0ciety7000/aether-media/releases/download/v0.1.0/aether-0.1.0-1.x86_64.rpm
+sudo systemctl enable --now aether`,
+  },
+  {
+    id: 'brew',
+    label: 'Homebrew',
+    intro: 'Pour macOS (Intel et Apple Silicon) et Linux. Le service démarre avec votre session.',
+    code: `brew install --cask fs0ciety7000/tap/aether
+brew install ffmpeg
+aether service install --user`,
+    note: 'Le tap sera publié avec la première version. En attendant, le binaire seul s’installe en deux commandes (voir la documentation).',
+  },
+  {
+    id: 'windows',
+    label: 'Windows',
+    intro: 'Extrayez aether.exe dans C:\\Program Files\\Aether, installez FFmpeg (winget install Gyan.FFmpeg), puis, dans un terminal administrateur :',
+    code: `& "C:\\Program Files\\Aether\\aether.exe" service install
+New-NetFirewallRule -DisplayName "Aether" -Direction Inbound -Protocol TCP -LocalPort 8096 -Action Allow`,
+  },
+];
+
+const code = 'K7PQ4XRM'.split('');
+
+// Écran du hero : capture desktop, ou capture mobile dans un téléphone sous 640 px
+const heroWidths = [800, 1180, 1440];
+const heroDesk = await Promise.all(
+  (['avif', 'webp'] as const).map(async (f) => ({
+    type: `image/${f}`,
+    srcset: (await Promise.all(heroWidths.map((w) => getImage({ src: accueil, width: w, format: f, quality: 60 })))).map((r, i) => `${r.src} ${heroWidths[i]}w`).join(', '),
+  })),
+);
+const heroMob = await Promise.all(
+  (['avif', 'webp'] as const).map(async (f) => ({
+    type: `image/${f}`,
+    srcset: (await Promise.all([300, 600].map((w) => getImage({ src: mobileAccueil, width: w, format: f, quality: 60 })))).map((r, i) => `${r.src} ${[300, 600][i]}w`).join(', '),
+  })),
+);
+const heroFallback = await getImage({ src: accueil, width: 1180, format: 'webp', quality: 60 });
+---
+
+<Base
+  title="Aether · serveur multimédia self-hosted"
+  description="Aether est un serveur multimédia libre et self-hosted : films, séries et musique, lecture directe ou transcodage matériel, sources distantes, multi-utilisateurs, synchronisation Trakt et Simkl."
+>
+  <header class="nav" aria-label="Navigation principale">
+    <a class="brand" href="#top" aria-label="Aether, haut de page">
+      <svg viewBox="0 0 32 32" aria-hidden="true"
+        ><path d="M13 4h6l10 24h-6Z" fill="#38797B"></path><path d="M13 4h6L9 28H3Z" fill="#5EC4C0"></path><path
+          d="M12.54 19.5h6.92l1.25 3H11.29Z"
+          fill="#38797B"></path></svg
+      >
+      Aether
+    </a>
+    <nav aria-label="Sections">
+      <ul class="nav__links">
+        <li><a href="#bibliotheque">Bibliothèque</a></li>
+        <li><a href="#lecture">Lecture</a></li>
+        <li><a href="#sources">Sources</a></li>
+        <li><a href="#foyer">Foyer</a></li>
+      </ul>
+    </nav>
+    <div class="nav__end">
+      <a class="icon-btn" href={REPO} aria-label="Code source sur GitHub"><Icon name="github" /></a>
+      <a class="btn btn--primary btn--sm" href="#installer">Installer</a>
+    </div>
+  </header>
+
+  <main id="contenu">
+    <section class="hero" id="top" aria-labelledby="titre">
+      <div class="wrap">
+        <p class="pill enter" style="--d:100ms"><b>Libre</b><span><span class="hide-sm">Serveur multimédia </span>self-hosted · AGPL-3.0</span></p>
+        <h1 class="h1" id="titre">
+          <span class="line"><span style="--d:180ms">Vos films méritent</span></span>
+          <span class="line"><span class="dim" style="--d:300ms">une salle privée.</span></span>
+        </h1>
+        <p class="lede enter" style="--d:300ms">
+          Aether range vos films, séries et musique où qu’ils dorment (disque local, NAS, seedbox, autre machine)
+          et les rejoue partout, <strong>en qualité d’origine</strong> dès que l’appareil le permet.
+        </p>
+        <div class="hero__cta enter" style="--d:380ms">
+          <a class="btn btn--primary" href="#installer">Installer Aether <Icon name="arrow" class="nudge" /></a>
+          <a class="btn btn--ghost" href={REPO}><Icon name="github" /> Code source</a>
+        </div>
+      </div>
+
+      <div class="wrap">
+        <div class="screen-stage" data-screen>
+          <figure class="screen">
+            <picture>
+              {heroMob.map((x) => <source media="(max-width: 640px)" type={x.type} srcset={x.srcset} sizes="260px" />)}
+              {heroDesk.map((x) => <source type={x.type} srcset={x.srcset} sizes="(max-width: 1240px) calc(100vw - 32px), 1180px" />)}
+              <img
+                src={heroFallback.src}
+                width="1440"
+                height="845"
+                alt="Accueil d’Aether : un film mis en avant, le panneau des catégories et la mosaïque « Reprendre » avec la progression de chaque titre."
+                loading="eager"
+                fetchpriority="high"
+                decoding="async"
+              />
+            </picture>
+          </figure>
+        </div>
+        <p class="screen__caption">Capture réelle de l’interface, thème Nuit.</p>
+      </div>
+    </section>
+
+    <section class="wrap" aria-label="En bref">
+      <div class="facts">
+        <div class="fact reveal">
+          <div class="fact__n">1</div>
+          <p class="fact__l"><b>binaire</b>serveur et agent, Linux, macOS, Windows</p>
+        </div>
+        <div class="fact reveal" style="--d:90ms">
+          <div class="fact__n">3</div>
+          <p class="fact__l"><b>types de sources</b>dossier, agent Aether, SFTP</p>
+        </div>
+        <div class="fact reveal" style="--d:180ms">
+          <div class="fact__n">6</div>
+          <p class="fact__l"><b>thèmes</b>Nuit par défaut, Lin pour le jour</p>
+        </div>
+        <div class="fact reveal" style="--d:270ms">
+          <div class="fact__n">0</div>
+          <p class="fact__l"><b>compte cloud</b>et aucune télémétrie par défaut</p>
+        </div>
+      </div>
+      <p class="alt reveal">Une alternative libre à Plex, Emby et Jellyfin, pensée pour être belle, calme et fiable.</p>
+    </section>
+
+    <!-- 01 Bibliothèque -->
+    <section class="chapter wrap" id="bibliotheque" aria-labelledby="t-biblio">
+      <div class="chapter__head">
+        <p class="eyebrow reveal">01 · Bibliothèque</p>
+        <h2 class="h2 reveal" id="t-biblio">Pointez un dossier.<br /><span class="dim">Retrouvez une cinémathèque.</span></h2>
+        <p class="lede reveal" style="--d:90ms">
+          Aether reconnaît les noms de fichiers des outils *arr, surveille vos dossiers et va chercher affiches, synopsis
+          et casting. Ce qui est déjà décrit sur votre disque passe en premier.
+        </p>
+      </div>
+      <div class="split">
+        <div class="frame reveal" data-crop style="--fp: 74% 50%">
+          <Picture
+            src={film}
+            alt="Fiche d’un film dans Aether : affiche, année, durée, classification, synopsis, genres et distribution."
+            widths={[640, 960, 1280]}
+            sizes="(max-width: 960px) calc(100vw - 32px), 720px"
+            formats={['avif', 'webp']}
+            quality={60}
+          />
+        </div>
+        <ul class="feature-list">
+          <li class="reveal">
+            <span class="glyph"><Icon name="scan" /></span>
+            <div><h3>Scan et surveillance</h3><p>Les nouveaux fichiers apparaissent d’eux-mêmes ; un rescan sans changement prend quelques secondes.</p></div>
+          </li>
+          <li class="reveal" style="--d:90ms">
+            <span class="glyph"><Icon name="tag" /></span>
+            <div><h3>TMDB et NFO</h3><p>Métadonnées TMDB pour les films et séries, fichiers NFO de Kodi prioritaires, champs verrouillables.</p></div>
+          </li>
+          <li class="reveal" style="--d:180ms">
+            <span class="glyph"><Icon name="music" /></span>
+            <div><h3>MusicBrainz</h3><p>Artistes, albums et pochettes via MusicBrainz et Cover Art Archive.</p></div>
+          </li>
+          <li class="reveal" style="--d:270ms">
+            <span class="glyph"><Icon name="search" /></span>
+            <div><h3>« À identifier »</h3><p>Un titre mal reconnu ? Vous choisissez le bon candidat, la correction est conservée.</p></div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 02 Lecture -->
+    <section class="chapter wrap" id="lecture" aria-labelledby="t-lecture">
+      <div class="chapter__head chapter__head--flip">
+        <p class="eyebrow reveal">02 · Lecture</p>
+        <h2 class="h2 reveal" id="t-lecture">La meilleure image<br /><span class="dim">que l’écran accepte.</span></h2>
+        <p class="lede reveal" style="--d:90ms">
+          Pour chaque lecture, Aether compare le fichier aux capacités de l’appareil et choisit le chemin le plus léger.
+          Vous voyez toujours lequel, et pourquoi.
+        </p>
+      </div>
+
+      <div class="player">
+        <div class="player__media reveal">
+          <div class="frame">
+            <Picture
+              src={lecteur}
+              alt="Lecteur d’Aether avec le panneau des réglages (audio, sous-titres, qualité) et les informations de lecture."
+              widths={[640, 960, 1280, 1440]}
+              sizes="(max-width: 1240px) calc(100vw - 32px), 1240px"
+              formats={['avif', 'webp']}
+              quality={55}
+            />
+          </div>
+          <div class="stats">
+            {
+              modes.map((m, i) => (
+                <dl class="mode-panel" id={`stats-${m.id}`} hidden={i !== 1}>
+                  {m.stats.map(([k, v]) => (
+                    <>
+                      <dt>{k}</dt>
+                      <dd set:html={v} />
+                    </>
+                  ))}
+                </dl>
+              ))
+            }
+          </div>
+        </div>
+
+        <div class="player__controls reveal">
+          <div class="seg" role="tablist" aria-label="Méthode de lecture" data-tabs>
+            {
+              modes.map((m, i) => (
+                <button
+                  role="tab"
+                  id={`tab-${m.id}`}
+                  aria-selected={i === 1 ? 'true' : 'false'}
+                  aria-controls={`mode-${m.id} stats-${m.id}`}
+                  tabindex={i === 1 ? 0 : -1}
+                 
+                >
+                  {m.label}
+                </button>
+              ))
+            }
+          </div>
+          <div class="mode-copy">
+            {
+              modes.map((m, i) => (
+                <div class="mode-panel" role="tabpanel" tabindex="0" id={`mode-${m.id}`} aria-describedby={`stats-${m.id}`} aria-labelledby={`tab-${m.id}`} hidden={i !== 1}>
+                  <h3>{m.title}</h3>
+                  <p>{m.text}</p>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+        <ul class="chips reveal" aria-label="Aussi dans le lecteur">
+          <li class="chip">Sous-titres SRT, ASS, PGS</li>
+          <li class="chip">Choix des pistes audio</li>
+          <li class="chip">Reprise au bon endroit</li>
+          <li class="chip">HDR → SDR fidèle</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 03 Sources -->
+    <section class="chapter wrap" id="sources" aria-labelledby="t-sources">
+      <div class="chapter__head">
+        <p class="eyebrow reveal">03 · Sources distantes</p>
+        <h2 class="h2 reveal" id="t-sources">Vos fichiers restent<br /><span class="dim">où ils sont.</span></h2>
+        <p class="lede reveal" style="--d:90ms">
+          Un NAS au salon, une seedbox, le PC du bureau : une bibliothèque Aether peut réunir plusieurs machines.
+          Rien à monter, rien à copier.
+        </p>
+      </div>
+
+      <div class="sources">
+        <div>
+          <ol class="steps">
+            <li class="reveal">
+              <h3>Installez l’agent</h3>
+              <p>Le même binaire, lancé en <code>aether agent</code> sur la machine qui garde les fichiers. Pas de base de données, pas de configuration.</p>
+            </li>
+            <li class="reveal" style="--d:90ms">
+              <h3>Aether le trouve</h3>
+              <p>La découverte réseau le repère sur le réseau local ; sinon, saisissez son adresse.</p>
+            </li>
+            <li class="reveal" style="--d:180ms">
+              <h3>Tapez son code</h3>
+              <p>Comme pour appairer une télé : un code de huit caractères, valable dix minutes, qui change après chaque appairage.</p>
+            </li>
+          </ol>
+          <div class="code-card reveal" data-code>
+            <p class="code-card__label" id="code-label">Code affiché par l’agent</p>
+            <div class="code" role="img" aria-label="Exemple de code d’appairage : K7PQ-4XRM">
+              {code.slice(0, 4).map((c) => <span aria-hidden="true" data-c={c}>{c}</span>)}
+              <span class="sep" aria-hidden="true">-</span>
+              {code.slice(4).map((c) => <span aria-hidden="true" data-c={c}>{c}</span>)}
+            </div>
+            <div class="code-card__foot">
+              <span class="status" data-status><Icon name="check" /> Agent appairé</span>
+              <span>Choisissez ensuite les dossiers à partager.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sources__visual">
+          <div class="frame reveal">
+            <Picture
+              src={agent}
+              alt="Assistant « Ajouter une bibliothèque » : l’agent est découvert sur le réseau, avec les étapes Agent, Code, Dossier, Vérification."
+              widths={[640, 880, 1200]}
+              sizes="(max-width: 960px) calc(100vw - 32px), 600px"
+              formats={['avif', 'webp']}
+              quality={60}
+            />
+          </div>
+          <div class="frame reveal" style="--d:90ms">
+            <Picture
+              src={sources}
+              alt="Une bibliothèque Films qui combine un agent et une seedbox SFTP, chacun testé avec succès."
+              widths={[640, 880, 1200]}
+              sizes="(max-width: 960px) calc(100vw - 32px), 600px"
+              formats={['avif', 'webp']}
+              quality={60}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="trio">
+        <article class="tile reveal">
+          <span class="glyph"><Icon name="server" /></span>
+          <h3>Agent Aether</h3>
+          <p>Analyse les fichiers sur place et transcode près d’eux : moins de bande passante, des scans rapides.</p>
+        </article>
+        <article class="tile reveal" style="--d:90ms">
+          <span class="glyph"><Icon name="cloud" /></span>
+          <h3>SFTP et seedbox</h3>
+          <p>Clé ou mot de passe, empreinte de l’hôte confirmée, lecture par plages. Rien à installer là-bas.</p>
+        </article>
+        <article class="tile reveal" style="--d:180ms">
+          <span class="glyph"><Icon name="layers" /></span>
+          <h3>Plusieurs serveurs par bibliothèque</h3>
+          <p>Une source hors ligne ? Ses titres restent visibles, grisés, et reviennent avec elle.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- 04 Foyer -->
+    <section class="chapter wrap" id="foyer" aria-labelledby="t-foyer">
+      <div class="chapter__head chapter__head--flip">
+        <p class="eyebrow reveal">04 · Foyer</p>
+        <h2 class="h2 reveal" id="t-foyer">Un serveur.<br /><span class="dim">Chacun sa séance.</span></h2>
+        <p class="lede reveal" style="--d:90ms">
+          Chaque membre a ses comptes, sa progression et ses favoris. Vous décidez qui voit quelles bibliothèques, et
+          jusqu’à quel âge.
+        </p>
+      </div>
+
+      <div class="bento">
+        <article class="cell cell--users reveal">
+          <div class="cell__text">
+            <h3>Multi-utilisateurs et contrôle parental</h3>
+            <p>Accès par bibliothèque, classification maximale, contenus non classés masquables.</p>
+          </div>
+          <ul class="mini">
+            <li><Icon name="check" /> Historique, favoris et progression propres à chacun</li>
+            <li><Icon name="check" /> Rôles administrateur et membre, mots de passe argon2id</li>
+            <li><Icon name="check" /> Bibliothèques autorisées choisies une à une</li>
+            <li><Icon name="check" /> Plafond d’âge hérité des séries aux épisodes</li>
+          </ul>
+          <div class="cell__media">
+            <Picture
+              src={utilisateur}
+              alt="Fenêtre de modification d’un membre : accès limité aux Films et aux Séries, classification maximale de 12 ans."
+              widths={[480, 720, 1000]}
+              sizes="(max-width: 960px) calc(100vw - 80px), 460px"
+              formats={['avif', 'webp']}
+              quality={60}
+            />
+          </div>
+        </article>
+        <article class="cell cell--resume reveal" style="--d:90ms">
+          <div class="cell__text">
+            <h3>Reprendre et À suivre</h3>
+            <p>Reprenez à la seconde près d’un appareil à l’autre ; l’épisode suivant vous attend déjà.</p>
+          </div>
+          <div class="cell__media">
+            <Picture
+              src={reprendre}
+              alt="Fiche d’un film en cours : bouton « Reprendre à 42:10 » et barre de progression."
+              widths={[640, 960, 1280]}
+              sizes="(max-width: 960px) calc(100vw - 80px), 660px"
+              formats={['avif', 'webp']}
+              quality={60}
+            />
+          </div>
+        </article>
+        <article class="cell cell--coll reveal" style="--d:180ms">
+          <div class="cell__text">
+            <h3>Collections</h3>
+            <p>Les vôtres, à la main, et celles de TMDB, réunies automatiquement : une saga se range toute seule.</p>
+          </div>
+          <div class="cell__media">
+            <Picture
+              src={collections}
+              alt="Page Collections d’Aether."
+              widths={[640, 960, 1280]}
+              sizes="(max-width: 960px) calc(100vw - 80px), 660px"
+              formats={['avif', 'webp']}
+              quality={60}
+            />
+          </div>
+        </article>
+        <article class="cell cell--pwa reveal">
+          <div class="cell__text">
+            <h3>Partout, même sans application</h3>
+            <p>
+              Une interface pensée pour le téléphone autant que pour la télé du salon, installable comme une application (PWA)
+              sur ordinateur et mobile.
+            </p>
+            <div class="tags"><span class="tag">PWA</span><span class="tag">6 thèmes</span><span class="tag">Clavier et lecteurs d’écran</span></div>
+          </div>
+          <div class="cell__media">
+            <div class="phone">
+              <Picture
+                src={mobileAccueil}
+                alt="Accueil d’Aether sur mobile."
+                widths={[220, 440]}
+                sizes="220px"
+                formats={['avif', 'webp']}
+                quality={60}
+              />
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 05 Synchronisation -->
+    <section class="chapter wrap" id="synchro" aria-labelledby="t-sync">
+      <div class="chapter__head chapter__head--solo">
+        <p class="eyebrow reveal">05 · Synchronisation</p>
+        <h2 class="h2 reveal" id="t-sync">Ce que vous regardez ici<br /><span class="dim">compte aussi là-bas.</span></h2>
+      </div>
+      <div class="sync">
+        <div>
+          <ul class="services reveal" aria-label="Services pris en charge">
+            <li class="service"><i aria-hidden="true">T</i>Trakt</li>
+            <li class="service"><i aria-hidden="true">S</i>Simkl</li>
+          </ul>
+          <ul class="feature-list">
+            <li class="reveal">
+              <span class="glyph"><Icon name="radar" /></span>
+              <div><h3>Suivi en direct</h3><p>Début, pause et fin de lecture sont signalés au fil de l’eau.</p></div>
+            </li>
+            <li class="reveal" style="--d:90ms">
+              <span class="glyph"><Icon name="layers" /></span>
+              <div><h3>Dans les deux sens</h3><p>Historique « vu », progression de reprise, watchlist et notes.</p></div>
+            </li>
+            <li class="reveal" style="--d:180ms">
+              <span class="glyph"><Icon name="key" /></span>
+              <div><h3>Un compte par membre</h3><p>Connexion par code, jetons chiffrés ; en cas de conflit, la modification la plus récente l’emporte.</p></div>
+            </li>
+          </ul>
+        </div>
+        <div class="frame reveal" data-crop style="--fp: 52% 28%">
+          <Picture
+            src={synchro}
+            alt="Page Synchronisation du profil : compte Trakt connecté, éléments synchronisés et journal ; Simkl prêt à configurer."
+            widths={[640, 960, 1280]}
+            sizes="(max-width: 960px) calc(100vw - 32px), 700px"
+            formats={['avif', 'webp']}
+            quality={60}
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- Installer -->
+    <section class="chapter wrap" id="installer" aria-labelledby="t-install">
+      <div class="chapter__head">
+        <p class="eyebrow reveal">Installer</p>
+        <h2 class="h2 reveal" id="t-install">Cinq minutes,<br /><span class="dim">sur votre machine.</span></h2>
+        <p class="lede reveal" style="--d:90ms">
+          Docker, paquets Linux, Homebrew ou Windows. Ensuite, ouvrez <strong>http://votre-machine:8096</strong> :
+          l’assistant crée le compte administrateur.
+        </p>
+      </div>
+
+      <div class="install reveal">
+        <div class="install__tabs" role="tablist" aria-label="Méthode d’installation" data-tabs>
+          {
+            installs.map((m, i) => (
+              <button
+                role="tab"
+                id={`itab-${m.id}`}
+                aria-selected={i === 0 ? 'true' : 'false'}
+                aria-controls={`ipanel-${m.id}`}
+                tabindex={i === 0 ? 0 : -1}
+              >
+                {m.label}
+              </button>
+            ))
+          }
+        </div>
+        {
+          installs.map((m, i) => (
+            <div class="install__panel" role="tabpanel" id={`ipanel-${m.id}`} aria-labelledby={`itab-${m.id}`} hidden={i !== 0}>
+              <p>{m.intro}</p>
+              <div class="code-block">
+                <pre tabindex="0" role="region" aria-label={`Commandes ${m.label}`}><code>{m.code}</code></pre>
+                <button class="copy" type="button" aria-label={`Copier les commandes ${m.label}`}>
+                  <Icon name="copy" class="i-copy" />
+                  <Icon name="check" class="i-check" />
+                </button>
+                <span class="sr-only" role="status" aria-live="polite" />
+              </div>
+              {m.note && <p class="note">{m.note}</p>}
+            </div>
+          ))
+        }
+      </div>
+      <div class="after-install reveal">
+        <span><Icon name="cpu" /> GPU Intel, AMD et NVIDIA</span>
+        <span><Icon name="globe" /> Linux amd64, arm64, armv7 · macOS · Windows</span>
+        <span><Icon name="monitor" /> Agent sur une autre machine : <code>aether agent install</code></span>
+      </div>
+      <p class="note reveal">
+        Toutes les options, mises à jour et sauvegardes :
+        <a href={`${REPO}/blob/HEAD/docs/INSTALL.md`}>guide d’installation complet</a>.
+      </p>
+    </section>
+
+    <section class="finale" aria-labelledby="t-fin">
+      <div class="wrap">
+        <h2 class="h2 reveal" id="t-fin">La salle est prête.<br /><span class="dim">Il ne manque que vos films.</span></h2>
+        <div class="hero__cta reveal" style="--d:120ms">
+          <a class="btn btn--primary" href="#installer">Installer Aether <Icon name="arrow" class="nudge" /></a>
+          <a class="btn btn--ghost" href={REPO}><Icon name="github" /> Suivre le projet</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__row">
+        <a class="brand" href="#top" aria-label="Aether, haut de page">
+          <svg viewBox="0 0 32 32" aria-hidden="true"
+            ><path d="M13 4h6l10 24h-6Z" fill="#38797B"></path><path d="M13 4h6L9 28H3Z" fill="#5EC4C0"></path><path
+              d="M12.54 19.5h6.92l1.25 3H11.29Z"
+              fill="#38797B"></path></svg
+          >
+          Aether
+        </a>
+        <nav aria-label="Liens du pied de page">
+          <a href={REPO}>GitHub</a>
+          <a href={`${REPO}/blob/HEAD/docs/INSTALL.md`}>Installation</a>
+          <a href={`${REPO}/blob/HEAD/LICENSE`}>Licence AGPL-3.0</a>
+        </nav>
+      </div>
+      <small>
+        Aether est un logiciel libre distribué sous licence GNU AGPL-3.0. Trakt, Simkl, TMDB, MusicBrainz, Plex, Emby et
+        Jellyfin sont des marques de leurs propriétaires respectifs ; Aether n’y est pas affilié. Ce produit utilise l’API
+        TMDB sans être approuvé ni certifié par TMDB.
+      </small>
+    </div>
+  </footer>
+</Base>
+
+<script>
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+
+  // Apparitions au défilement
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      }
+    },
+    { threshold: 0.15, rootMargin: '0px 0px -40px 0px' },
+  );
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+  // Écran signature : se redresse et s'éclaire au défilement
+  const stage = document.querySelector<HTMLElement>('[data-screen]');
+  if (stage) {
+    const clamp = (v: number) => Math.min(1, Math.max(0, v));
+    let target = 0;
+    let smooth = 0;
+    let ticking = false;
+    let init = false;
+    const frame = () => {
+      ticking = false;
+      const r = stage.getBoundingClientRect();
+      const vh = innerHeight;
+      // 0 quand le haut de l'écran est en bas du viewport, 1 quand il atteint 28 % du haut
+      target = clamp((vh - r.top) / (vh * 0.72));
+      smooth = !init || reduce.matches ? target : smooth + (target - smooth) * 0.14;
+      init = true;
+      if (Math.abs(target - smooth) < 0.001) smooth = target;
+      const p = 1 - Math.pow(1 - smooth, 2);
+      stage.style.setProperty('--tilt', `${(22 * (1 - p)).toFixed(2)}deg`);
+      stage.style.setProperty('--s', (0.9 + 0.1 * p).toFixed(4));
+      stage.style.setProperty('--lum', (0.55 + 0.45 * p).toFixed(3));
+      stage.style.setProperty('--lift', `${(-24 * p).toFixed(1)}px`);
+      if (smooth !== target) request();
+    };
+    const request = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(frame);
+      }
+    };
+    addEventListener('scroll', request, { passive: true });
+    addEventListener('resize', request);
+    request();
+  }
+
+  // Onglets accessibles (lecture et installation)
+  document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((list) => {
+    const tabs = [...list.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const select = (tab: HTMLButtonElement, focus = false) => {
+      for (const t of tabs) {
+        const on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        for (const id of (t.getAttribute('aria-controls') ?? '').split(' ')) {
+          const panel = document.getElementById(id);
+          if (panel) panel.hidden = !on;
+        }
+      }
+      if (focus) tab.focus();
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(t));
+      t.addEventListener('keydown', (e) => {
+        const k = e.key;
+        let n = -1;
+        if (k === 'ArrowRight') n = (i + 1) % tabs.length;
+        else if (k === 'ArrowLeft') n = (i - 1 + tabs.length) % tabs.length;
+        else if (k === 'Home') n = 0;
+        else if (k === 'End') n = tabs.length - 1;
+        if (n >= 0) {
+          e.preventDefault();
+          select(tabs[n], true);
+        }
+      });
+    });
+  });
+
+  // Copier les commandes
+  document.querySelectorAll<HTMLButtonElement>('.copy').forEach((btn) => {
+    const status = btn.parentElement?.querySelector('[role="status"]');
+    btn.addEventListener('click', async () => {
+      const text = btn.parentElement?.querySelector('code')?.textContent ?? '';
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.classList.add('done');
+        if (status) status.textContent = 'Commandes copiées';
+        setTimeout(() => {
+          btn.classList.remove('done');
+          if (status) status.textContent = '';
+        }, 1800);
+      } catch {
+        /* presse-papiers indisponible : la sélection manuelle reste possible */
+      }
+    });
+  });
+
+  // Code d'appairage : les caractères se composent un à un
+  const card = document.querySelector<HTMLElement>('[data-code]');
+  if (card && !reduce.matches) {
+    const cells = [...card.querySelectorAll<HTMLElement>('[data-c]')];
+    const status = card.querySelector<HTMLElement>('[data-status]');
+    const pool = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    cells.forEach((c) => (c.textContent = '·'));
+    if (status) status.style.opacity = '0';
+    const run = () => {
+      cells.forEach((cell, i) => {
+        let n = 0;
+        const start = i * 120;
+        const tick = () => {
+          n++;
+          if (n < 7) {
+            cell.textContent = pool[Math.floor(Math.random() * pool.length)];
+            setTimeout(tick, 45);
+          } else {
+            cell.textContent = cell.dataset.c!;
+            cell.classList.add('on');
+          }
+        };
+        setTimeout(tick, start);
+      });
+      if (status) {
+        setTimeout(() => {
+          status.style.transition = 'opacity .5s ease';
+          status.style.opacity = '1';
+        }, cells.length * 120 + 500);
+      }
+    };
+    const co = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) {
+          co.disconnect();
+          run();
+        }
+      },
+      { threshold: 0.6 },
+    );
+    co.observe(card);
+  } else if (card) {
+    card.querySelectorAll('[data-c]').forEach((c) => c.classList.add('on'));
+  }
+</script>
