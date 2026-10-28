@@ -7,7 +7,7 @@
 	import { events } from '$lib/api/events.svelte';
 	import { firstImage } from '$lib/api/images';
 	import { libraries } from '$lib/api/stores.svelte';
-	import type { Item, ItemDetail } from '$lib/api/types';
+	import type { Item, ItemDetail, UserDataChangedEvent } from '$lib/api/types';
 	import Button from '$lib/components/Button.svelte';
 	import CastRow from '$lib/components/detail/CastRow.svelte';
 	import DetailHeader from '$lib/components/detail/DetailHeader.svelte';
@@ -111,6 +111,29 @@
 		const want = id;
 		return events.debounced(['item.updated', 'item.image'], () => load(true), 700, (ev) => (ev.data as { id?: number } | undefined)?.id === want);
 	});
+
+	// M6b: this user's data changed elsewhere (Trakt / Simkl import, another device): reload in place.
+	// Episodes of a series or season shown here are refreshed too.
+	$effect(() => {
+		const want = id;
+		return events.debounced(
+			'userdata.changed',
+			(ev) => {
+				const d = ev.data as UserDataChangedEvent;
+				if (d.itemId === want || item?.kind === 'season') load(true);
+				else episodesVersion++;
+			},
+			900,
+			(ev) => {
+				const d = ev.data as UserDataChangedEvent | undefined;
+				if (!d || (session.user && d.userId !== session.user.id)) return false;
+				if (d.itemId === want) return Date.now() - lastOwnChange > 1500;
+				return untrack(() => (item?.kind === 'series' ? episodes : item?.kind === 'season' ? children : []).some((e) => e.id === d.itemId));
+			}
+		);
+	});
+	/** Our own toggles also come back as userdata.changed: skip those. */
+	let lastOwnChange = 0;
 
 	// ——— Series: seasons as tabs ———
 	const seasonParam = $derived(page.url.searchParams.get('saison'));
@@ -265,6 +288,7 @@
 		const want = !played;
 		const before = { userData: it.userData, unplayedCount: it.unplayedCount };
 		savingWatch = true;
+		lastOwnChange = Date.now();
 		// Optimistic: the button flips at once.
 		if (it.kind === 'series' || it.kind === 'season') it.unplayedCount = want ? 0 : Math.max(1, it.unplayedCount ?? 1);
 		else it.userData = { ...normalizeUserData(it.userData), played: want, positionMs: want ? 0 : (it.userData?.positionMs ?? 0) };
@@ -286,11 +310,40 @@
 		}
 	}
 
+	// ——— Ma liste (M6b) ———
+	const canWatchlist = $derived(!!item && (item.kind === 'movie' || item.kind === 'series'));
+	const inWatchlist = $derived(!!item?.userData?.inWatchlist);
+	let savingList = $state(false);
+
+	async function toggleWatchlist(want = !inWatchlist) {
+		if (!item || savingList) return;
+		const it = item;
+		const before = it.userData;
+		savingList = true;
+		lastOwnChange = Date.now();
+		it.userData = { ...normalizeUserData(it.userData), inWatchlist: want };
+		try {
+			await (want ? api.addToWatchlist(it.id) : api.removeFromWatchlist(it.id));
+			lastOwnChange = Date.now();
+			toasts.show(want ? 'Ajouté à « Ma liste »' : 'Retiré de « Ma liste »', {
+				detail: it.title,
+				duration: 4000,
+				action: { label: 'Annuler', run: () => item?.id === it.id && toggleWatchlist(!want) }
+			});
+		} catch (err) {
+			it.userData = before;
+			toasts.show('Modification impossible', { detail: errorMessage(err) });
+		} finally {
+			savingList = false;
+		}
+	}
+
 	async function toggleFavorite() {
 		if (!item) return;
 		const it = item;
 		const want = !favorite;
 		const before = it.userData;
+		lastOwnChange = Date.now();
 		it.userData = { ...normalizeUserData(it.userData), favorite: want };
 		try {
 			it.userData = await api.putUserData(it.id, { favorite: want });
@@ -470,6 +523,18 @@
 						aria-busy={savingWatch}
 						title={played ? 'Marquer comme non vu' : undefined}
 						onclick={togglePlayed}>{played ? 'Vu' : 'Marquer comme vu'}</Button
+					>
+				{/if}
+				{#if canWatchlist}
+					<Button
+						size="lg"
+						icon="bookmark"
+						iconFilled={inWatchlist}
+						class={inWatchlist ? 'is-on' : undefined}
+						aria-pressed={inWatchlist}
+						aria-busy={savingList}
+						title={inWatchlist ? 'Retirer de Ma liste' : 'Ajouter à Ma liste'}
+						onclick={() => toggleWatchlist()}>{inWatchlist ? 'Dans ma liste' : 'Ma liste'}</Button
 					>
 				{/if}
 				{#if canFavorite}

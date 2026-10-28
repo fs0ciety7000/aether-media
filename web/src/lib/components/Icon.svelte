@@ -61,6 +61,11 @@
 		smartphone: '<rect x="7" y="3.5" width="10" height="17" rx="2.5"/><path d="M11 17.5h2"/>',
 		'list-plus': '<path d="M4 6.5h11M4 11.5h11M4 16.5h6"/><path d="M17.5 14v6M14.5 17h6"/>',
 		'check-circle': '<circle cx="12" cy="12" r="8"/><path d="m8.5 12.3 2.3 2.3 4.7-4.9"/>',
+		upload: '<path d="M12 15.5V5M7.5 9.5 12 5l4.5 4.5"/><path d="M4.5 16v1.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V16"/>',
+		bookmark: '<path d="M7 4.5h10a1 1 0 0 1 1 1v14l-6-3.8-6 3.8v-14a1 1 0 0 1 1-1Z"/>',
+		'bookmark-check': '<path d="M7 4.5h10a1 1 0 0 1 1 1v14l-6-3.8-6 3.8v-14a1 1 0 0 1 1-1Z"/><path d="m9.3 10.2 2 2 3.6-3.7"/>',
+		external: '<path d="M13.5 4.5h6v6M19.5 4.5l-8 8"/><path d="M17.5 13.5v4a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h4"/>',
+		link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 		key: '<circle cx="8" cy="15" r="3.5"/><path d="m10.5 12.5 8-8M16 7l2.5 2.5M14 9l1.5 1.5"/>',
 		// Player
 		volume: '<path d="M4 9.5h3l4.5-4v13l-4.5-4H4a.5.5 0 0 1-.5-.5v-4a.5.5 0 0 1 .5-.5Z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/>',

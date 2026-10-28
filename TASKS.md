@@ -132,7 +132,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle (fusion à trois points, la date la plus récente gagne)
 - [x] T-0C3 Progression de reprise (Trakt playback) bidirectionnelle
 - [x] T-0C4 Watchlist (nouvelle, locale par utilisateur, API + `inWatchlist`) et notes
-- [ ] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits, watchlist, identifiants d'application (admin)
+- [x] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits, watchlist, identifiants d'application (admin)
 - [ ] T-0C6 Valider contre les vrais api.trakt.tv / api.simkl.com avec de vrais identifiants — vérification faite le 2026-10-28 contre la documentation officielle (developer.trakt.tv + son openapi.json, api.simkl.org + son openapi.json) et faux serveurs alignés ; reste l'essai réel avec de vrais identifiants (aucun appel authentifié fait)
 - [ ] T-0C7 Simkl : synchronisation des points de reprise (`GET /sync/playback`, `DELETE /sync/playback/{id}`) — non prise en charge aujourd'hui (Simkl ne note pas les épisodes)
 - [ ] T-0CC Simkl : passer à AUTH V2 (`/oauth2/device`, jetons de 7 jours + refresh, `/oauth2/revoke`) avant le retrait d'AUTH V1 annoncé vers avril 2027 ; un client_id V2 est refusé par le flux PIN

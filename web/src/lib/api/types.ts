@@ -252,6 +252,8 @@ export interface SystemInfo {
 	startedAt: string;
 	setupRequired: boolean;
 	metadata?: { tmdb: boolean; musicbrainz: boolean };
+	/** M6b: synchronisation service usable (application credentials configured). */
+	sync?: { trakt: boolean; simkl: boolean };
 }
 
 export interface LibraryFilters {
@@ -279,6 +281,8 @@ export interface ItemQuery {
 	played?: boolean;
 	favorite?: boolean;
 	inProgress?: boolean;
+	/** M6b */
+	watchlist?: boolean;
 	sort?: SortKey;
 	order?: SortOrder;
 	limit?: number;
@@ -468,6 +472,8 @@ export interface UserData {
 	favorite: boolean;
 	/** 0–10 */
 	rating?: number;
+	/** M6b: in the user's watchlist ("Ma liste"). Movies and series only. */
+	inWatchlist?: boolean;
 }
 
 export interface AuthResult {
@@ -506,7 +512,8 @@ export interface UserInput {
 export interface UserDataPatch {
 	played?: boolean;
 	favorite?: boolean;
-	rating?: number;
+	/** null clears the rating (M6b). */
+	rating?: number | null;
 	positionMs?: number;
 }
 
@@ -520,4 +527,84 @@ export interface Collection {
 	images: Item['images'];
 	ownerId?: number;
 	shared: boolean;
+}
+
+// ——— Synchronisation Trakt / Simkl (M6b) ———
+
+export type SyncService = 'trakt' | 'simkl';
+export type SyncFeature = 'scrobble' | 'history' | 'progress' | 'watchlist' | 'ratings';
+export type SyncStatus = 'disconnected' | 'pending' | 'connected' | 'reauth_required';
+
+export interface DeviceCode {
+	/** Shown large (e.g. "A1B2C3D4"). */
+	userCode: string;
+	verificationUrl: string;
+	/** ISO 8601. */
+	expiresAt: string;
+	/** Minimal seconds between two /poll calls. */
+	interval: number;
+}
+
+export interface SyncConnection {
+	service: SyncService;
+	/** Application credentials configured by an administrator. */
+	available: boolean;
+	status: SyncStatus;
+	account?: { username: string };
+	supported: SyncFeature[];
+	/** Only the supported features. */
+	features: Partial<Record<SyncFeature, boolean>>;
+	/** A synchronisation is queued or running. */
+	syncing: boolean;
+	connectedAt?: string;
+	lastSyncAt?: string;
+	/** User-facing text, no secret. */
+	lastError?: string;
+	lastErrorAt?: string;
+	/** Pairing in progress (status "pending", or a reconnection of an existing account). */
+	pending?: DeviceCode;
+}
+
+export type SyncPollStatus = 'pending' | 'slow_down' | 'connected' | 'expired' | 'denied';
+
+export interface SyncPollResult {
+	status: SyncPollStatus;
+	interval: number;
+	connection: SyncConnection;
+}
+
+export interface SyncEvent {
+	id: number;
+	time: string;
+	kind: 'conflict' | 'error' | 'import' | 'export';
+	feature: SyncFeature;
+	itemId?: number;
+	itemTitle?: string;
+	/** Conflicts: side kept (most recent date). */
+	winner?: 'local' | 'remote';
+	message: string;
+}
+
+export interface SyncApp {
+	configured: boolean;
+	source: 'config' | 'database' | 'none';
+	/** Masked ("abcd…wxyz"). */
+	clientId?: string;
+}
+
+export type SyncApps = Partial<Record<SyncService, SyncApp>>;
+
+/** SSE `sync.status`. */
+export interface SyncStatusEvent {
+	userId: number;
+	service: SyncService;
+	status: SyncStatus;
+	syncing: boolean;
+	lastError?: string;
+}
+
+/** SSE `userdata.changed`. */
+export interface UserDataChangedEvent {
+	userId: number;
+	itemId: number;
 }

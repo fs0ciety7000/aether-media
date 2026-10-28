@@ -66,6 +66,7 @@
 	const view = $derived(sp.get('vue') === 'albums' ? 'albums' : 'artistes');
 	const watch = $derived(WATCH_FILTERS.find((w) => w.value === sp.get('vu')));
 	const favorite = $derived(sp.get('favoris') === '1');
+	const inList = $derived(sp.get('liste') === '1');
 	const isMusic = $derived(library?.kind === 'music');
 	const isVideo = $derived(!isMusic);
 
@@ -98,12 +99,13 @@
 		yearTo,
 		...(isVideo ? watch?.query : undefined),
 		favorite: favorite || undefined,
+		watchlist: (isVideo && inList) || undefined,
 		sort,
 		order: order === defaultOrder ? undefined : order,
 		limit: PAGE
 	});
 	const queryKey = $derived(JSON.stringify(query));
-	const activeFilters = $derived(!!(genre || resolution || hdr || yearFrom || yearTo || watch || favorite));
+	const activeFilters = $derived(!!(genre || resolution || hdr || yearFrom || yearTo || watch || favorite || inList));
 
 	function update(changes: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -115,7 +117,7 @@
 	}
 
 	function clearFilters() {
-		update({ genre: undefined, res: undefined, hdr: undefined, de: undefined, a: undefined, vu: undefined, favoris: undefined });
+		update({ genre: undefined, res: undefined, hdr: undefined, de: undefined, a: undefined, vu: undefined, favoris: undefined, liste: undefined });
 	}
 
 	// ——— Filters available in this library ———
@@ -194,6 +196,24 @@
 		void queryKey;
 		load();
 		return () => ctrl?.abort();
+	});
+
+	// The user's data changed elsewhere (Trakt / Simkl import, another device) while a watch filter
+	// is on: the set of matching titles may have moved.
+	$effect(() => {
+		const filtered = !!(watch || favorite || inList);
+		if (!filtered) return;
+		return events.debounced(
+			'userdata.changed',
+			() => {
+				if (pages <= 1) load(true);
+			},
+			1500,
+			(ev) => {
+				const uid = (ev.data as { userId?: number } | undefined)?.userId;
+				return !session.user || uid === session.user.id;
+			}
+		);
 	});
 
 	// Fresh scan or metadata: reload quietly while the user is still on the first page.
@@ -293,6 +313,7 @@
 							<Chip toggle={false} selected={watch?.value === w.value} onclick={() => update({ vu: watch?.value === w.value ? undefined : w.value })}>{w.label}</Chip>
 						{/each}
 						<Chip toggle={false} selected={favorite} onclick={() => update({ favoris: favorite ? undefined : '1' })}>Favoris</Chip>
+						<Chip toggle={false} selected={inList} onclick={() => update({ liste: inList ? undefined : '1' })}>Ma liste</Chip>
 					</span>
 				{/if}
 				{#if filters?.years}

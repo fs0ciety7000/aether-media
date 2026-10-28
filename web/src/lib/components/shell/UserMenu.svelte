@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Signed-in user in the top bar: avatar, name and role; menu with Profil, Réglages (admins), Se déconnecter.
+	// Signed-in user in the top bar: avatar, name and role; menu with Profil, Ma liste, Synchronisation, Réglages (admins), Se déconnecter.
 	import { goto } from '$app/navigation';
 	import { hueFrom } from '$lib/media';
 	import { ROLE_LABEL, session } from '$lib/session.svelte';
@@ -25,6 +25,8 @@
 
 	const items = $derived<MenuItem[]>([
 		{ label: 'Profil', icon: 'user', onselect: () => goto('/profil') },
+		{ label: 'Ma liste', icon: 'bookmark', onselect: () => goto('/ma-liste') },
+		{ label: 'Synchronisation', icon: 'refresh', onselect: () => goto('/profil/synchronisation') },
 		...(session.isAdmin ? [{ label: 'Réglages', icon: 'settings' as const, onselect: () => goto('/reglages/bibliotheques') }] : []),
 		{ label: 'Se déconnecter', icon: 'log-out', onselect: logout, separated: true }
 	]);

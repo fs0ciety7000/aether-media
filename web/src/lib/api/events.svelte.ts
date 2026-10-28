@@ -10,7 +10,9 @@ export const EVENT_TYPES = [
 	'item.updated',
 	'item.image',
 	'source.status',
-	'agent.status'
+	'agent.status',
+	'sync.status',
+	'userdata.changed'
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];

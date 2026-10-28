@@ -30,7 +30,15 @@ import type {
 	UserData,
 	UserDataPatch,
 	UserInput,
-	MePatch
+	MePatch,
+	SyncApp,
+	SyncApps,
+	SyncConnection,
+	SyncEvent,
+	SyncFeature,
+	SyncPollResult,
+	SyncService,
+	DeviceCode
 } from './types';
 
 export const API_BASE = '/api/v1';
@@ -68,7 +76,14 @@ const CODE_MESSAGES: Record<string, string> = {
 	name_taken: 'Ce nom est déjà utilisé.',
 	last_admin: 'Impossible : c’est le dernier administrateur.',
 	already_setup: 'Aether est déjà configuré.',
-	bad_origin: 'Requête refusée (origine inattendue).'
+	bad_origin: 'Requête refusée (origine inattendue).',
+	// M6b — synchronisation
+	sync_unavailable: 'Ce service n’est pas configuré sur ce serveur.',
+	not_connected: 'Aucun compte n’est relié à ce service.',
+	not_pending: 'Aucun appairage en cours : demandez un nouveau code.',
+	reauth_required: 'Le service a refusé l’accès : reconnectez votre compte.',
+	managed_by_config: 'Ces identifiants sont définis par la configuration du serveur.',
+	invalid_kind: 'Seuls les films et les séries peuvent aller dans « Ma liste ».'
 };
 
 /** Human message for any thrown value (French UI copy). */
@@ -357,8 +372,41 @@ export const api = {
 	deleteCollection: (id: string) => request<void>(`/collections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 	addToCollection: (id: string, itemId: number) => request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'PUT' }),
 	removeFromCollection: (id: string, itemId: number) =>
-		request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'DELETE' })
+		request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'DELETE' }),
+
+	// ——— Watchlist (M6b) ———
+	watchlist: async (signal?: AbortSignal) => ((await request<Item[]>('/watchlist', s(signal))) ?? []).map(normalizeItem),
+	addToWatchlist: (itemId: number) => request<void>(`/watchlist/${itemId}`, { method: 'PUT' }),
+	removeFromWatchlist: (itemId: number) => request<void>(`/watchlist/${itemId}`, { method: 'DELETE' }),
+
+	// ——— Synchronisation Trakt / Simkl (M6b) ———
+	mySync: async (signal?: AbortSignal) => ((await request<SyncConnection[]>('/me/sync', s(signal))) ?? []).map(normalizeSync),
+	syncConnect: (service: SyncService) => request<DeviceCode>(`/me/sync/${service}/connect`, { method: 'POST' }),
+	syncPoll: async (service: SyncService, signal?: AbortSignal) => {
+		const r = await request<SyncPollResult>(`/me/sync/${service}/poll`, { method: 'POST', signal });
+		r.connection = normalizeSync(r.connection);
+		return r;
+	},
+	syncFeatures: async (service: SyncService, features: Partial<Record<SyncFeature, boolean>>) =>
+		normalizeSync(await request<SyncConnection>(`/me/sync/${service}`, { method: 'PATCH', body: { features } })),
+	syncRun: (service: SyncService, full = false) =>
+		request<{ queued: boolean }>(`/me/sync/${service}/run`, { method: 'POST', body: full ? { full } : {} }),
+	syncDisconnect: (service: SyncService) => request<void>(`/me/sync/${service}`, { method: 'DELETE' }),
+	syncEvents: async (service: SyncService, limit = 50, signal?: AbortSignal) =>
+		(await request<SyncEvent[]>(`/me/sync/${service}/events`, { params: { limit }, signal })) ?? [],
+	syncApps: async (signal?: AbortSignal) => (await request<SyncApps>('/sync/apps', s(signal))) ?? {},
+	setSyncApp: (service: SyncService, body: { clientId: string; clientSecret?: string }) =>
+		request<SyncApp>(`/sync/apps/${service}`, { method: 'PUT', body }),
+	deleteSyncApp: (service: SyncService) => request<void>(`/sync/apps/${service}`, { method: 'DELETE' })
 };
+
+export function normalizeSync(c: SyncConnection): SyncConnection {
+	c.supported ??= [];
+	c.features ??= {};
+	c.status ??= 'disconnected';
+	c.syncing ??= false;
+	return c;
+}
 
 export function normalizeAgent(a: Agent): Agent {
 	a.status ??= 'unknown';
@@ -385,7 +433,7 @@ function normalizeAuth(r: AuthResult): AuthResult {
 }
 
 export function normalizeUserData(d: UserData | undefined): UserData {
-	return { positionMs: 0, played: false, playCount: 0, favorite: false, ...(d ?? {}) };
+	return { positionMs: 0, played: false, playCount: 0, favorite: false, inWatchlist: false, ...(d ?? {}) };
 }
 
 function normalizeCollection(c: Collection): Collection {

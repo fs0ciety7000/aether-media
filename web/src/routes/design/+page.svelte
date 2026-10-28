@@ -47,6 +47,12 @@
 	import CollectionCard from '$lib/components/collections/CollectionCard.svelte';
 	import ProgressLine from '$lib/components/ProgressLine.svelte';
 	import { toasts } from '$lib/toast.svelte';
+	import CopyCode from '$lib/components/sync/CopyCode.svelte';
+	import DeviceCodePanel from '$lib/components/sync/DeviceCodePanel.svelte';
+	import ServiceMark from '$lib/components/sync/ServiceMark.svelte';
+	import SyncJournal from '$lib/components/sync/SyncJournal.svelte';
+	import SubNav from '$lib/components/shell/SubNav.svelte';
+	import type { SyncEvent } from '$lib/api/types';
 
 	const colorTokens = [
 		['--bg', 'Fond de l’application'],
@@ -132,6 +138,21 @@
 		{ id: 1, kind: 'local', name: '/srv/media/films', root: '/srv/media/films', status: 'online', lastSeen: ago(0) },
 		{ id: 2, kind: 'agent', name: 'Salon · films', root: '4K', status: 'online', lastSeen: ago(1), agent: { url: 'http://salon.local:8097', share: 'films', hostname: 'salon', version: '0.6.0' } },
 		{ id: 3, kind: 'sftp', name: 'Seedbox', root: '/home/moi/downloads', status: 'offline', lastError: 'timeout', lastSeen: ago(42), sftp: { host: 'sb.example.net', port: 22, user: 'moi', auth: 'key', hostKey: 'SHA256:3f9K…' } }
+	];
+	// M6b synchronisation: static examples (no API).
+	let syncNow = $state(Date.now());
+	$effect(() => {
+		const t = setInterval(() => (syncNow = Date.now()), 1000);
+		return () => clearInterval(t);
+	});
+	const demoCode = { userCode: 'A1B2C3D4', verificationUrl: 'https://trakt.tv/activate', expiresAt: new Date(Date.now() + 7 * 60_000).toISOString(), interval: 5 };
+	const demoExpired = { ...demoCode, userCode: 'Q7RT9XKP', expiresAt: ago(1) };
+	const demoEvents: SyncEvent[] = [
+		{ id: 5, time: ago(3), kind: 'conflict', feature: 'history', itemId: 1, itemTitle: 'Nord magnétique', winner: 'remote', message: 'Vu sur Trakt après avoir été marqué non vu ici.' },
+		{ id: 4, time: ago(3), kind: 'import', feature: 'watchlist', itemId: 2, itemTitle: 'Marée basse', message: 'Ajouté à Ma liste.' },
+		{ id: 3, time: ago(35), kind: 'export', feature: 'ratings', itemId: 3, itemTitle: 'Les Veilleurs', message: 'Note 8/10 envoyée.' },
+		{ id: 2, time: ago(64), kind: 'conflict', feature: 'progress', itemId: 4, itemTitle: 'Lisière', winner: 'local', message: 'Reprise à 42 min conservée (plus récente).' },
+		{ id: 1, time: ago(190), kind: 'error', feature: 'history', message: 'Trakt ne répond pas (503) ; nouvel essai dans 30 minutes.' }
 	];
 	let secretDemo = $state('s3cr3t-jeton');
 	let pickedKind = $state<string | null>(null);
@@ -730,6 +751,42 @@
 		</div>
 	</section>
 
+	<!-- M6b : synchronisation Trakt / Simkl, Ma liste -->
+	<section class="block" aria-labelledby="s-m6b">
+		<div class="heading">
+			<span class="num tabular">15</span>
+			<h2 id="s-m6b">Synchronisation et Ma liste (M6b)</h2>
+			<p>
+				Pastille de service (initiale sur tuile sobre, jamais le logo ni la couleur de la marque), code d’appairage copiable, panneau d’appairage avec
+				compte à rebours, journal compact (conflits avec le côté retenu, imports, exports, erreurs), onglets de section et bouton « Ma liste ».
+			</p>
+		</div>
+		<div class="m5b-grid">
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">ServiceMark · CopyCode</p>
+				<div class="row-inline"><ServiceMark name="Trakt" /><ServiceMark name="Simkl" /><ServiceMark name="Simkl" muted /></div>
+				<CopyCode code="A1B2C3D4" label="Code d’exemple" />
+				<p class="micro m5b-cap">SubNav (onglets de section)</p>
+				<SubNav items={[{ href: '/design', label: 'Compte', icon: 'user' }, { href: '/design/sync', label: 'Synchronisation', icon: 'refresh' }]} label="Exemple d’onglets" exact={['/design']} />
+				<p class="micro m5b-cap">Ma liste (fiche d’un film)</p>
+				<div class="row-inline">
+					<Button size="lg" icon="bookmark">Ma liste</Button>
+					<Button size="lg" icon="bookmark" iconFilled class="m6b-on">Dans ma liste</Button>
+				</div>
+			</div>
+			<div class="m5b-panel panel">
+				<p class="micro m5b-cap">DeviceCodePanel (en attente)</p>
+				<DeviceCodePanel code={demoCode} service="Trakt" phase="waiting" now={syncNow} lifetime={10 * 60_000} oncancel={() => toasts.show('Appairage annulé')} onrestart={() => {}} />
+				<p class="micro m5b-cap">DeviceCodePanel (expiré)</p>
+				<DeviceCodePanel code={demoExpired} service="Simkl" phase="expired" now={syncNow} oncancel={() => {}} onrestart={() => toasts.show('Nouveau code demandé')} />
+			</div>
+		</div>
+		<div class="m5b-panel panel">
+			<p class="micro m5b-cap">SyncJournal</p>
+			<SyncJournal events={demoEvents} service="trakt" now={syncNow} step={4} />
+		</div>
+	</section>
+
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
@@ -990,6 +1047,14 @@
 		font-size: var(--fs-micro);
 		font-weight: var(--fw-bold);
 		transform: translateY(-3px);
+	}
+
+	:global(.btn.secondary.m6b-on) {
+		color: var(--accent-ink);
+	}
+
+	:global(.btn.secondary.m6b-on svg) {
+		color: var(--accent);
 	}
 
 	.row-inline {

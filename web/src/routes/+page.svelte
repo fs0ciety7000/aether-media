@@ -27,6 +27,8 @@
 	import { session } from '$lib/session.svelte';
 
 	let home = $state<HomeData | null>(null);
+	/** M6b: "Ma liste" row (hidden when empty or on servers without a watchlist). */
+	let watchlist = $state<Item[]>([]);
 	let error = $state<unknown>(null);
 	let loading = $state(true);
 
@@ -35,7 +37,9 @@
 	async function load(silent = false) {
 		if (!silent) loading = true;
 		try {
-			home = await api.home();
+			const [h, w] = await Promise.all([api.home(), api.watchlist().catch(() => watchlist)]);
+			home = h;
+			watchlist = w;
 			seriesTitles.resolve([...home.continueWatching, ...home.nextUp]);
 			error = null;
 		} catch (err) {
@@ -49,11 +53,19 @@
 		load();
 		// New items or artwork: refresh quietly once the burst is over.
 		const off = events.debounced(['library.scan.finished', 'item.updated', 'item.image', 'source.status'], () => load(true), 1500);
+		// Progress, watched state or watchlist changed elsewhere (Trakt / Simkl import, another device).
+		const offUser = events.debounced(
+			'userdata.changed',
+			() => load(true),
+			2000,
+			(ev) => !session.user || (ev.data as { userId?: number } | undefined)?.userId === session.user.id
+		);
 		// Back from the player in another tab / after a while: progress moved on.
 		const onVisible = () => document.visibilityState === 'visible' && load(true);
 		document.addEventListener('visibilitychange', onVisible);
 		return () => {
 			off();
+			offUser();
 			document.removeEventListener('visibilitychange', onVisible);
 		};
 	});
@@ -185,6 +197,12 @@
 						offline={isOffline(ep)}
 					/>
 				{/snippet}
+			</Row>
+		{/if}
+
+		{#if watchlist.length}
+			<Row title="Ma liste" href="/ma-liste" items={watchlist.slice(0, 20)} key={(it) => it.id}>
+				{#snippet item(it)}<ItemCard item={it} />{/snippet}
 			</Row>
 		{/if}
 

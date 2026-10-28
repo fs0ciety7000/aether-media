@@ -114,7 +114,7 @@ Barre d'onglets en bas : Accueil, Explorer, Recherche, Favoris, Profil. Le hero 
 4. **Vous aimerez aussi** et **Récemment ajoutés** : rangées horizontales.
 
 ### Inventaire
-`Logo`, `Button` (pilule : primaire, secondaire, tertiaire), `IconButton`, `Avatar`, `UserChip`, `Tag`, `Chip`, `Input`, `SearchField`, `SectionHeader`, `Hero`, `CategoryTile`, `CategoriesPanel`, `ContinueTile`, `ContinueBento`, `PosterCard`, `ThumbCard`, `Row`, `ProgressLine`, `Skeleton`, `Toaster`, `ThemeSwitcher`, `Stepper` (parcours guidés), `FolderPicker` (explorateur de dossiers : fil d'Ariane, dossiers seulement), ainsi que le shell (`Sidebar`, `AppHeader`, `TabBar`).
+`Logo`, `Button` (pilule : primaire, secondaire, tertiaire), `IconButton`, `Avatar`, `UserChip`, `Tag`, `Chip`, `Input`, `SearchField`, `SectionHeader`, `Hero`, `CategoryTile`, `CategoriesPanel`, `ContinueTile`, `ContinueBento`, `PosterCard`, `ThumbCard`, `Row`, `ProgressLine`, `Skeleton`, `Toaster`, `ThemeSwitcher`, `Stepper` (parcours guidés), `FolderPicker` (explorateur de dossiers : fil d'Ariane, dossiers seulement), `SubNav` (onglets de section en pilules : Réglages, Profil), `ServiceMark` (pastille d'un service tiers : initiale sur tuile sobre, jamais le logo ni la couleur de la marque), `CopyCode` (code court affiché en grand, copiable), `DeviceCodePanel` (appairage par code avec compte à rebours), `SyncJournal` (journal compact filtrable), ainsi que le shell (`Sidebar`, `AppHeader`, `TabBar`).
 
 ## 9. Écrans v1
 1. Connexion / assistant de premier lancement
