@@ -92,6 +92,11 @@ type ItemStudio struct {
 	StudioID int64 `json:"studioId"`
 }
 
+type ItemsFt struct {
+	Title         string `json:"title"`
+	OriginalTitle string `json:"originalTitle"`
+}
+
 type Job struct {
 	ID        int64  `json:"id"`
 	Kind      string `json:"kind"`
@@ -160,6 +165,10 @@ type MediaStream struct {
 	IsExternal        int64   `json:"isExternal"`
 	ExternalPath      string  `json:"externalPath"`
 	Bitrate           int64   `json:"bitrate"`
+}
+
+type PeopleFt struct {
+	Name string `json:"name"`
 }
 
 type Person struct {

@@ -103,3 +103,45 @@ type Library = { id: number; name: string; kind: "movies" | "shows" | "music" | 
 - `Candidate.score` : 0 à 1.
 - `Person.image` : URL distante (TMDB) pour l'instant ; passera par le cache d'images (T-047).
 - `runtimeMs` : durée réelle du fichier (ffprobe) quand elle est connue, sinon celle des métadonnées.
+
+## Lecture (M5)
+
+```ts
+// Capacités détectées par le navigateur (MediaSource.isTypeSupported / canPlayType).
+type ClientProfile = {
+  containers: string[]        // lecture directe possible : "mp4", "webm", "mov", "mkv"(rare), "ogg", "mp3", "flac", "m4a", "wav"
+  videoCodecs: string[]       // "h264", "hevc", "av1", "vp9", "vp8"
+  audioCodecs: string[]       // "aac", "mp3", "opus", "vorbis", "flac", "ac3", "eac3", "alac", "pcm"
+  hdr: boolean                // affichage HDR (matchMedia("(dynamic-range: high)") + codec 10 bits)
+  maxHeight?: number          // ex. 2160, 1080 (écran / choix utilisateur)
+  maxBitrate?: number         // bits/s, choix utilisateur (« Qualité »), 0 = illimité
+  hls: "native" | "mse"       // Safari natif, sinon hls.js (MSE)
+}
+
+type Track = { index: number; language?: string; title?: string; codec: string; channels?: number
+               default: boolean; forced?: boolean; external?: boolean }
+
+type PlaybackInfo = {
+  sessionId: string
+  method: "direct" | "remux" | "transcode"
+  reasons: string[]           // pourquoi pas « direct » (ex. "container", "videoCodec", "audioCodec", "bitrate", "hdr", "subtitleBurn")
+  url: string                 // direct : /api/v1/media/{fileId}/stream ; sinon : master.m3u8 de la session
+  mediaFileId: number
+  durationMs: number
+  startMs: number             // position réelle de départ (alignée sur un segment en HLS)
+  audioTracks: Track[]
+  subtitleTracks: (Track & { delivery: "vtt" | "burn"; url?: string })[]   // url pour delivery "vtt"
+  selectedAudio: number       // index de piste (stream index ffprobe)
+  selectedSubtitle: number    // -1 = aucun
+  video?: { codec: string; width: number; height: number; hdr?: string; copied: boolean }
+}
+```
+
+- `POST /playback/{itemId}` `{ profile: ClientProfile, mediaFileId?, audioIndex?, subtitleIndex?, startMs? }` → `PlaybackInfo`
+  - Changer de piste audio/sous-titre (burn) ou de qualité = nouvel appel (l'ancienne session est arrêtée avec `DELETE`).
+  - 503 `transcode_busy` si le nombre maximal de transcodages simultanés est atteint.
+- `POST /playback/sessions/{sid}/ping` `{ positionMs, paused }` → 204 (toutes les 10 s ; une session sans ping depuis 60 s est arrêtée)
+- `DELETE /playback/sessions/{sid}` → 204
+- HLS : `GET /playback/sessions/{sid}/master.m3u8`, `.../main.m3u8`, `.../init.mp4`, `.../{n}.m4s` (segments générés à la demande ; un segment lointain relance FFmpeg à cette position)
+- `GET /media/{fileId}/stream` : fichier brut, HTTP Range (lecture directe)
+- `GET /media/{fileId}/subtitles/{index}.vtt` : sous-titre texte converti en WebVTT (interne ou externe)

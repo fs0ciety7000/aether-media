@@ -46,3 +46,13 @@ DELETE FROM chapters WHERE media_file_id = ?;
 
 -- name: InsertChapter :exec
 INSERT INTO chapters (media_file_id, idx, start_ms, end_ms, title) VALUES (?, ?, ?, ?, ?);
+
+-- name: DeleteExternalStreams :exec
+DELETE FROM media_streams WHERE media_file_id = ? AND is_external = 1;
+
+-- name: InsertExternalStream :exec
+INSERT INTO media_streams (media_file_id, idx, type, codec, language, title, is_forced, is_hearing_impaired, is_external, external_path)
+VALUES (?, ?, 'subtitle', ?, ?, ?, ?, ?, 1, ?);
+
+-- name: GetMediaStream :one
+SELECT * FROM media_streams WHERE media_file_id = ? AND idx = ?;

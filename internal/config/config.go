@@ -18,11 +18,20 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `toml:"server"`
-	Paths    PathsConfig    `toml:"paths"`
-	Log      LogConfig      `toml:"log"`
-	Library  LibraryConfig  `toml:"library"`
-	Metadata MetadataConfig `toml:"metadata"`
+	Server    ServerConfig    `toml:"server"`
+	Paths     PathsConfig     `toml:"paths"`
+	Log       LogConfig       `toml:"log"`
+	Library   LibraryConfig   `toml:"library"`
+	Metadata  MetadataConfig  `toml:"metadata"`
+	Transcode TranscodeConfig `toml:"transcode"`
+}
+
+type TranscodeConfig struct {
+	// Concurrent FFmpeg sessions (remux and transcode), default 2.
+	MaxSessions int `toml:"max_sessions"`
+	// Hardware acceleration: none | auto | vaapi | qsv | nvenc | videotoolbox.
+	HWAccel     string `toml:"hwaccel"`
+	VAAPIDevice string `toml:"vaapi_device"`
 }
 
 type MetadataConfig struct {
@@ -87,7 +96,8 @@ func Default() Config {
 			WatchDebounce: Duration{30 * time.Second},
 			ProbeWorkers:  2,
 		},
-		Metadata: MetadataConfig{Language: "fr-FR"},
+		Metadata:  MetadataConfig{Language: "fr-FR"},
+		Transcode: TranscodeConfig{MaxSessions: 2, HWAccel: "none", VAAPIDevice: "/dev/dri/renderD128"},
 	}
 }
 
@@ -137,6 +147,7 @@ func applyEnv(cfg *Config) error {
 		"AETHER_LOG_FORMAT":    &cfg.Log.Format,
 		"AETHER_TMDB_API_KEY":  &cfg.Metadata.TMDBAPIKey,
 		"AETHER_LANGUAGE":      &cfg.Metadata.Language,
+		"AETHER_HWACCEL":       &cfg.Transcode.HWAccel,
 	}
 	for k, dst := range str {
 		if v := os.Getenv(k); v != "" {
@@ -165,6 +176,14 @@ func (c *Config) validate() error {
 	}
 	if c.Library.ProbeWorkers < 1 || c.Library.ProbeWorkers > 32 {
 		return fmt.Errorf("library.probe_workers: %d (1 à 32)", c.Library.ProbeWorkers)
+	}
+	if c.Transcode.MaxSessions < 1 || c.Transcode.MaxSessions > 64 {
+		return fmt.Errorf("transcode.max_sessions: %d (1 à 64)", c.Transcode.MaxSessions)
+	}
+	switch c.Transcode.HWAccel {
+	case "none", "auto", "vaapi", "qsv", "nvenc", "videotoolbox":
+	default:
+		return fmt.Errorf("transcode.hwaccel: %q (none, auto, vaapi, qsv, nvenc, videotoolbox)", c.Transcode.HWAccel)
 	}
 	if f := c.Log.Format; f != "text" && f != "json" {
 		return fmt.Errorf("log.format: %q (expected text or json)", f)

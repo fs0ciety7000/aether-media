@@ -19,6 +19,15 @@ func (q *Queries) DeleteChapters(ctx context.Context, mediaFileID int64) error {
 	return err
 }
 
+const deleteExternalStreams = `-- name: DeleteExternalStreams :exec
+DELETE FROM media_streams WHERE media_file_id = ? AND is_external = 1
+`
+
+func (q *Queries) DeleteExternalStreams(ctx context.Context, mediaFileID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteExternalStreams, mediaFileID)
+	return err
+}
+
 const deleteMediaFile = `-- name: DeleteMediaFile :exec
 DELETE FROM media_files WHERE id = ?
 `
@@ -78,6 +87,47 @@ func (q *Queries) GetMediaFile(ctx context.Context, id int64) (GetMediaFileRow, 
 	return i, err
 }
 
+const getMediaStream = `-- name: GetMediaStream :one
+SELECT id, media_file_id, idx, type, codec, profile, level, width, height, frame_rate, bit_depth, hdr, channels, channel_layout, sample_rate, language, title, is_default, is_forced, is_hearing_impaired, is_image_sub, is_external, external_path, bitrate FROM media_streams WHERE media_file_id = ? AND idx = ?
+`
+
+type GetMediaStreamParams struct {
+	MediaFileID int64 `json:"mediaFileId"`
+	Idx         int64 `json:"idx"`
+}
+
+func (q *Queries) GetMediaStream(ctx context.Context, arg GetMediaStreamParams) (MediaStream, error) {
+	row := q.db.QueryRowContext(ctx, getMediaStream, arg.MediaFileID, arg.Idx)
+	var i MediaStream
+	err := row.Scan(
+		&i.ID,
+		&i.MediaFileID,
+		&i.Idx,
+		&i.Type,
+		&i.Codec,
+		&i.Profile,
+		&i.Level,
+		&i.Width,
+		&i.Height,
+		&i.FrameRate,
+		&i.BitDepth,
+		&i.Hdr,
+		&i.Channels,
+		&i.ChannelLayout,
+		&i.SampleRate,
+		&i.Language,
+		&i.Title,
+		&i.IsDefault,
+		&i.IsForced,
+		&i.IsHearingImpaired,
+		&i.IsImageSub,
+		&i.IsExternal,
+		&i.ExternalPath,
+		&i.Bitrate,
+	)
+	return i, err
+}
+
 const insertChapter = `-- name: InsertChapter :exec
 INSERT INTO chapters (media_file_id, idx, start_ms, end_ms, title) VALUES (?, ?, ?, ?, ?)
 `
@@ -97,6 +147,36 @@ func (q *Queries) InsertChapter(ctx context.Context, arg InsertChapterParams) er
 		arg.StartMs,
 		arg.EndMs,
 		arg.Title,
+	)
+	return err
+}
+
+const insertExternalStream = `-- name: InsertExternalStream :exec
+INSERT INTO media_streams (media_file_id, idx, type, codec, language, title, is_forced, is_hearing_impaired, is_external, external_path)
+VALUES (?, ?, 'subtitle', ?, ?, ?, ?, ?, 1, ?)
+`
+
+type InsertExternalStreamParams struct {
+	MediaFileID       int64  `json:"mediaFileId"`
+	Idx               int64  `json:"idx"`
+	Codec             string `json:"codec"`
+	Language          string `json:"language"`
+	Title             string `json:"title"`
+	IsForced          int64  `json:"isForced"`
+	IsHearingImpaired int64  `json:"isHearingImpaired"`
+	ExternalPath      string `json:"externalPath"`
+}
+
+func (q *Queries) InsertExternalStream(ctx context.Context, arg InsertExternalStreamParams) error {
+	_, err := q.db.ExecContext(ctx, insertExternalStream,
+		arg.MediaFileID,
+		arg.Idx,
+		arg.Codec,
+		arg.Language,
+		arg.Title,
+		arg.IsForced,
+		arg.IsHearingImpaired,
+		arg.ExternalPath,
 	)
 	return err
 }

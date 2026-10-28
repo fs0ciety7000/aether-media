@@ -90,6 +90,11 @@ func saveProbe(ctx context.Context, q *db.Queries, mf db.GetMediaFileRow, info *
 			return err
 		}
 	}
+	if mf.ItemKind != "track" {
+		if err := saveSidecars(ctx, q, mf.ID, mf.Path); err != nil {
+			return err
+		}
+	}
 	if info.DurationMs > 0 && mf.Part <= 1 {
 		if err := q.SetItemRuntime(ctx, db.SetItemRuntimeParams{RuntimeMs: sql.NullInt64{Int64: info.DurationMs, Valid: true}, ID: mf.ItemID}); err != nil {
 			return err

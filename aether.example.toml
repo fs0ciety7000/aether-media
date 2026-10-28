@@ -28,3 +28,8 @@ probe_workers  = 2       # analyses ffprobe simultanées
 # tmdb_api_key = ""
 language = "fr-FR"
 # disable_musicbrainz = false
+
+[transcode]
+max_sessions = 2          # remux/transcodages FFmpeg simultanés
+hwaccel      = "none"     # none | auto | vaapi | qsv | nvenc | videotoolbox
+# vaapi_device = "/dev/dri/renderD128"
