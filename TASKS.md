@@ -58,7 +58,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-043 Provider MusicBrainz + Cover Art Archive
 - [x] T-044 Cache d'images, redimensionnement, blurhash, couleur dominante
 - [x] T-045 Flux « à identifier » + correction manuelle (API ; écran en M4)
-- [ ] T-046 Validation TMDB en conditions réelles avec une clé API (testé uniquement sur faux serveur)
+- [x] T-046 Validation TMDB en conditions réelles (films, série, saison, épisodes, casting, images, recherche manuelle)
+- [ ] T-04C Recherche manuelle sans année : le titre exact plus ancien peut être classé sous un homonyme récent (préremplir l'année dans l'UI)
 - [ ] T-047 Images des personnes (photos acteurs) servies via le cache, pas en URL distante
 - [ ] T-048 Rafraîchissement périodique des séries en cours (nouveaux épisodes)
 - [ ] T-049 Garde SSRF du téléchargeur d'images (bloquer IP privées/loopback pour les URL issues des NFO)
