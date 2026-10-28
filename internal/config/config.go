@@ -12,14 +12,34 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	Server ServerConfig `toml:"server"`
-	Paths  PathsConfig  `toml:"paths"`
-	Log    LogConfig    `toml:"log"`
+	Server  ServerConfig  `toml:"server"`
+	Paths   PathsConfig   `toml:"paths"`
+	Log     LogConfig     `toml:"log"`
+	Library LibraryConfig `toml:"library"`
+}
+
+type LibraryConfig struct {
+	// Periodic safety-net rescan of every library (default 6h).
+	ScanInterval Duration `toml:"scan_interval"`
+	// Quiet period after file-system events before rescanning (default 30s).
+	WatchDebounce Duration `toml:"watch_debounce"`
+	// Concurrent ffprobe processes (default 2).
+	ProbeWorkers int `toml:"probe_workers"`
+}
+
+// Duration decodes TOML strings such as "6h" or "30s".
+type Duration struct{ time.Duration }
+
+func (d *Duration) UnmarshalText(b []byte) error {
+	v, err := time.ParseDuration(string(b))
+	d.Duration = v
+	return err
 }
 
 type ServerConfig struct {
@@ -52,6 +72,11 @@ func Default() Config {
 		Server: ServerConfig{Host: "0.0.0.0", Port: 8096},
 		Paths:  PathsConfig{Data: defaultDataDir(), FFmpeg: "ffmpeg", FFprobe: "ffprobe"},
 		Log:    LogConfig{Level: "info", Format: "text"},
+		Library: LibraryConfig{
+			ScanInterval:  Duration{6 * time.Hour},
+			WatchDebounce: Duration{30 * time.Second},
+			ProbeWorkers:  2,
+		},
 	}
 }
 
@@ -121,6 +146,12 @@ func (c *Config) validate() error {
 	}
 	if _, err := c.LogLevel(); err != nil {
 		return err
+	}
+	if c.Library.ScanInterval.Duration < time.Minute {
+		return fmt.Errorf("library.scan_interval: %s (minimum 1m)", c.Library.ScanInterval)
+	}
+	if c.Library.ProbeWorkers < 1 || c.Library.ProbeWorkers > 32 {
+		return fmt.Errorf("library.probe_workers: %d (1 à 32)", c.Library.ProbeWorkers)
 	}
 	if f := c.Log.Format; f != "text" && f != "json" {
 		return fmt.Errorf("log.format: %q (expected text or json)", f)

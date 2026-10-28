@@ -1,0 +1,51 @@
+{
+    "streams": [
+        {
+            "index": 0, "codec_name": "h264", "profile": "High", "codec_type": "video", "codec_tag_string": "[27][0][0][0]",
+            "width": 1920, "height": 1080, "pix_fmt": "yuv420p", "level": 41, "field_order": "tt",
+            "color_range": "tv", "color_space": "bt709", "color_transfer": "bt709", "color_primaries": "bt709",
+            "r_frame_rate": "50/1", "avg_frame_rate": "25/1", "bits_per_raw_sample": "8", "is_avc": "false",
+            "disposition": {"default": 0, "forced": 0, "attached_pic": 0}
+        },
+        {
+            "index": 1, "codec_name": "dts", "codec_long_name": "DCA (DTS Coherent Acoustics)", "profile": "DTS-HD MA",
+            "codec_type": "audio", "codec_tag_string": "[130][0][0][0]", "sample_fmt": "s32p", "sample_rate": "48000",
+            "channels": 6, "channel_layout": "5.1(side)", "bits_per_sample": 0, "bits_per_raw_sample": "24",
+            "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 0, "forced": 0, "hearing_impaired": 0},
+            "tags": {"language": "deu"}
+        },
+        {
+            "index": 2, "codec_name": "dts", "profile": "DTS", "codec_type": "audio", "sample_rate": "48000",
+            "channels": 6, "bit_rate": "1509000", "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 0},
+            "tags": {"language": "und"}
+        },
+        {
+            "index": 3, "codec_name": "dvd_subtitle", "codec_type": "subtitle", "width": 720, "height": 576,
+            "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 0, "forced": 0, "hearing_impaired": 1},
+            "tags": {"language": "es"}
+        },
+        {
+            "index": 4, "codec_name": "dvb_subtitle", "codec_type": "subtitle",
+            "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 0},
+            "tags": {"language": "nld"}
+        },
+        {
+            "index": 5, "codec_name": "ass", "codec_type": "subtitle",
+            "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 1},
+            "tags": {"language": "pt-BR", "title": "Forced (signs)"}
+        },
+        {
+            "index": 6, "codec_type": "data", "codec_tag_string": "[6][0][0][0]",
+            "r_frame_rate": "0/0", "avg_frame_rate": "0/0"
+        }
+    ],
+    "format": {
+        "filename": "/media/shows/Show/Season 01/S01E01.m2ts", "nb_streams": 7, "format_name": "mpegts",
+        "duration": "2650.5", "size": "9000000000"
+    }
+}

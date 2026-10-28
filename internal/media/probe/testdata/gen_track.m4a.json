@@ -1,0 +1,77 @@
+{
+    "chapters": [],
+    "format": {
+        "bit_rate": "50288",
+        "duration": "0.500000",
+        "filename": "track.m4a",
+        "format_long_name": "QuickTime / MOV",
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "nb_programs": 0,
+        "nb_streams": 1,
+        "probe_score": 100,
+        "size": "3143",
+        "start_time": "0.000000",
+        "tags": {
+            "artist": "Artist",
+            "compatible_brands": "M4A isomiso2",
+            "encoder": "Lavf60.16.100",
+            "major_brand": "M4A ",
+            "minor_version": "512",
+            "title": "M4A Song",
+            "track": "2/9"
+        }
+    },
+    "streams": [
+        {
+            "avg_frame_rate": "0/0",
+            "bit_rate": "32873",
+            "bits_per_sample": 0,
+            "channel_layout": "mono",
+            "channels": 1,
+            "codec_long_name": "AAC (Advanced Audio Coding)",
+            "codec_name": "aac",
+            "codec_tag": "0x6134706d",
+            "codec_tag_string": "mp4a",
+            "codec_type": "audio",
+            "disposition": {
+                "attached_pic": 0,
+                "captions": 0,
+                "clean_effects": 0,
+                "comment": 0,
+                "default": 1,
+                "dependent": 0,
+                "descriptions": 0,
+                "dub": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "karaoke": 0,
+                "lyrics": 0,
+                "metadata": 0,
+                "non_diegetic": 0,
+                "original": 0,
+                "still_image": 0,
+                "timed_thumbnails": 0,
+                "visual_impaired": 0
+            },
+            "duration": "0.500000",
+            "duration_ts": 22050,
+            "extradata_size": 5,
+            "id": "0x1",
+            "index": 0,
+            "initial_padding": 0,
+            "nb_frames": "23",
+            "profile": "LC",
+            "r_frame_rate": "0/0",
+            "sample_fmt": "fltp",
+            "sample_rate": "44100",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "tags": {
+                "handler_name": "SoundHandler",
+                "language": "und",
+                "vendor_id": "[0][0][0][0]"
+            },
+            "time_base": "1/44100"
+        }
+    ]
+}

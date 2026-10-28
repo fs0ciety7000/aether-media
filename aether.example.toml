@@ -16,3 +16,8 @@ ffprobe = "ffprobe"
 [log]
 level  = "info"   # debug | info | warn | error
 format = "text"   # text | json
+
+[library]
+scan_interval  = "6h"    # rescan périodique de sécurité
+watch_debounce = "30s"   # délai de calme après une modification de fichiers
+probe_workers  = 2       # analyses ffprobe simultanées

@@ -1,0 +1,38 @@
+{
+    "streams": [
+        {
+            "index": 0, "codec_name": "hevc", "profile": "Main 10", "codec_type": "video", "codec_tag_string": "hvc1",
+            "width": 3840, "height": 1608, "pix_fmt": "yuv420p10le", "level": 150,
+            "color_space": "bt2020nc", "color_transfer": "smpte2084", "color_primaries": "bt2020",
+            "r_frame_rate": "24/1", "avg_frame_rate": "0/0",
+            "disposition": {"default": 1},
+            "side_data_list": [
+                {"side_data_type": "Mastering display metadata"},
+                {"side_data_type": "Content light level metadata", "max_content": 1000, "max_average": 400},
+                {"side_data_type": "HDR Dynamic Metadata SMPTE2094-40 (HDR10+)"}
+            ]
+        },
+        {
+            "index": 1, "codec_name": "hevc", "profile": "Main 10", "codec_type": "video", "codec_tag_string": "dvh1",
+            "width": 1920, "height": 1080, "pix_fmt": "yuv420p10le", "level": 120,
+            "r_frame_rate": "25/1", "avg_frame_rate": "25/1",
+            "disposition": {"default": 0}
+        },
+        {
+            "index": 2, "codec_name": "aac", "profile": "HE-AACv2", "codec_type": "audio", "sample_rate": "44100",
+            "channels": 2, "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 1},
+            "tags": {"language": "Japanese"}
+        },
+        {
+            "index": 3, "codec_name": "mov_text", "codec_type": "subtitle", "r_frame_rate": "0/0", "avg_frame_rate": "0/0",
+            "disposition": {"default": 0},
+            "tags": {"language": "zho"}
+        }
+    ],
+    "format": {
+        "filename": "/media/movies/x/Movie.m4v", "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration": "10.000000", "size": "1250000",
+        "tags": {"major_brand": "mp42", "title": "HDR10+ Demo"}
+    }
+}

@@ -10,6 +10,7 @@ require (
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect

@@ -45,6 +45,62 @@ func (q *Queries) CreateLibrary(ctx context.Context, arg CreateLibraryParams) (L
 	return i, err
 }
 
+const deleteLibrary = `-- name: DeleteLibrary :execrows
+DELETE FROM libraries WHERE id = ?
+`
+
+func (q *Queries) DeleteLibrary(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteLibrary, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const getLibrary = `-- name: GetLibrary :one
+SELECT id, name, kind, settings, created_at FROM libraries WHERE id = ?
+`
+
+func (q *Queries) GetLibrary(ctx context.Context, id int64) (Library, error) {
+	row := q.db.QueryRowContext(ctx, getLibrary, id)
+	var i Library
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Kind,
+		&i.Settings,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAllLibraryPaths = `-- name: ListAllLibraryPaths :many
+SELECT id, library_id, path FROM library_paths ORDER BY library_id, path
+`
+
+func (q *Queries) ListAllLibraryPaths(ctx context.Context) ([]LibraryPath, error) {
+	rows, err := q.db.QueryContext(ctx, listAllLibraryPaths)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LibraryPath
+	for rows.Next() {
+		var i LibraryPath
+		if err := rows.Scan(&i.ID, &i.LibraryID, &i.Path); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLibraries = `-- name: ListLibraries :many
 SELECT id, name, kind, settings, created_at FROM libraries ORDER BY name
 `

@@ -8,6 +8,14 @@ import (
 	"database/sql"
 )
 
+type Chapter struct {
+	MediaFileID int64  `json:"mediaFileId"`
+	Idx         int64  `json:"idx"`
+	StartMs     int64  `json:"startMs"`
+	EndMs       int64  `json:"endMs"`
+	Title       string `json:"title"`
+}
+
 type Item struct {
 	ID                int64          `json:"id"`
 	LibraryID         int64          `json:"libraryId"`
@@ -29,6 +37,24 @@ type Item struct {
 	Missing           int64          `json:"missing"`
 	DateAdded         int64          `json:"dateAdded"`
 	DateUpdated       int64          `json:"dateUpdated"`
+	Key               sql.NullString `json:"key"`
+	Edition           sql.NullString `json:"edition"`
+	AirDate           sql.NullString `json:"airDate"`
+	IndexNumberEnd    sql.NullInt64  `json:"indexNumberEnd"`
+}
+
+type Job struct {
+	ID        int64  `json:"id"`
+	Kind      string `json:"kind"`
+	Key       string `json:"key"`
+	Payload   string `json:"payload"`
+	Status    string `json:"status"`
+	Priority  int64  `json:"priority"`
+	Attempts  int64  `json:"attempts"`
+	Error     string `json:"error"`
+	RunAfter  int64  `json:"runAfter"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 type Library struct {
@@ -43,6 +69,48 @@ type LibraryPath struct {
 	ID        int64  `json:"id"`
 	LibraryID int64  `json:"libraryId"`
 	Path      string `json:"path"`
+}
+
+type MediaFile struct {
+	ID         int64          `json:"id"`
+	ItemID     int64          `json:"itemId"`
+	LibraryID  int64          `json:"libraryId"`
+	Path       string         `json:"path"`
+	Size       int64          `json:"size"`
+	Mtime      int64          `json:"mtime"`
+	Part       int64          `json:"part"`
+	Container  sql.NullString `json:"container"`
+	DurationMs sql.NullInt64  `json:"durationMs"`
+	Bitrate    sql.NullInt64  `json:"bitrate"`
+	ProbedAt   sql.NullInt64  `json:"probedAt"`
+	ProbeError sql.NullString `json:"probeError"`
+}
+
+type MediaStream struct {
+	ID                int64   `json:"id"`
+	MediaFileID       int64   `json:"mediaFileId"`
+	Idx               int64   `json:"idx"`
+	Type              string  `json:"type"`
+	Codec             string  `json:"codec"`
+	Profile           string  `json:"profile"`
+	Level             int64   `json:"level"`
+	Width             int64   `json:"width"`
+	Height            int64   `json:"height"`
+	FrameRate         float64 `json:"frameRate"`
+	BitDepth          int64   `json:"bitDepth"`
+	Hdr               string  `json:"hdr"`
+	Channels          int64   `json:"channels"`
+	ChannelLayout     string  `json:"channelLayout"`
+	SampleRate        int64   `json:"sampleRate"`
+	Language          string  `json:"language"`
+	Title             string  `json:"title"`
+	IsDefault         int64   `json:"isDefault"`
+	IsForced          int64   `json:"isForced"`
+	IsHearingImpaired int64   `json:"isHearingImpaired"`
+	IsImageSub        int64   `json:"isImageSub"`
+	IsExternal        int64   `json:"isExternal"`
+	ExternalPath      string  `json:"externalPath"`
+	Bitrate           int64   `json:"bitrate"`
 }
 
 type Session struct {

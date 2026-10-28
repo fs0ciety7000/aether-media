@@ -73,3 +73,16 @@ func migrate(ctx context.Context, conn *sql.DB) error {
 
 // Close closes the underlying connection.
 func (s *Store) Close() error { return s.DB.Close() }
+
+// Tx runs fn inside a transaction, committing on success.
+func (s *Store) Tx(ctx context.Context, fn func(q *db.Queries) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(s.WithTx(tx)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
