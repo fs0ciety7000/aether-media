@@ -92,6 +92,9 @@ func (p *Provider) mapMovie(q metadata.Query, m *movieDetails) *metadata.Result 
 		r.ProviderIDs[metadata.IDTmdbCollection] = itoa(c.ID)
 	}
 	r.OfficialRating = p.movieCertification(q, m)
+	if d := p.localReleaseDate(q, m); d != "" {
+		r.PremiereDate = d
+	}
 	r.People = append(p.cast(m.Credits.Cast, metadata.Person{Kind: "actor"}), p.crew(m.Credits.Crew)...)
 	r.Images = p.images(q, m.Images, m.PosterPath, m.BackdropPath)
 	return r
@@ -125,8 +128,36 @@ func (p *Provider) movieCertification(q metadata.Query, m *movieDetails) string 
 	return ""
 }
 
+// localReleaseDate is the theatrical (else first) release date in the
+// preferred country, "" when TMDB has none.
+func (p *Provider) localReleaseDate(q metadata.Query, m *movieDetails) string {
+	country := countries(q, p)[0]
+	for _, res := range m.ReleaseDates.Results {
+		if res.Country != country {
+			continue
+		}
+		first := ""
+		for _, rd := range res.ReleaseDates {
+			if len(rd.ReleaseDate) < 10 {
+				continue
+			}
+			if rd.Type == 3 {
+				return rd.ReleaseDate[:10]
+			}
+			if first == "" || rd.ReleaseDate[:10] < first {
+				first = rd.ReleaseDate[:10]
+			}
+		}
+		return first
+	}
+	return ""
+}
+
 func countries(q metadata.Query, p *Provider) []string {
-	r := region(p.lang(q))
+	r := p.cur().country
+	if r == "" {
+		r = region(p.lang(q))
+	}
 	if r == "US" || r == "" {
 		return []string{"US"}
 	}

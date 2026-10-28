@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Settings are for administrators: sub-navigation (Bibliothèques · Utilisateurs · Synchronisation) above each page.
+	// Settings are for administrators: sub-navigation (Bibliothèques · Utilisateurs · Synchronisation · Serveur · Tâches · Journaux · Lectures) above each page.
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import SubNav from '$lib/components/shell/SubNav.svelte';

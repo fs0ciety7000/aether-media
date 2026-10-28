@@ -64,10 +64,110 @@ type Runner struct {
 	log    *slog.Logger
 	queues map[string]*queue
 	wg     sync.WaitGroup
+
+	mu      sync.Mutex
+	running map[int64]*runningJob
+	notify  func()
+}
+
+type runningJob struct {
+	cancel    context.CancelFunc
+	cancelled bool
 }
 
 func NewRunner(s *store.Store, log *slog.Logger) *Runner {
-	return &Runner{store: s, log: log, queues: make(map[string]*queue)}
+	return &Runner{store: s, log: log, queues: make(map[string]*queue), running: map[int64]*runningJob{}}
+}
+
+// SetNotify registers a function called (from any goroutine, possibly in
+// bursts: debounce it) whenever the queue changes.
+func (r *Runner) SetNotify(f func()) {
+	r.mu.Lock()
+	r.notify = f
+	r.mu.Unlock()
+}
+
+func (r *Runner) changed() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	f := r.notify
+	r.mu.Unlock()
+	if f != nil {
+		f()
+	}
+}
+
+// Errors of Cancel and Retry.
+var (
+	ErrNotFound      = errors.New("jobs: job not found")
+	ErrNotCancelable = errors.New("jobs: job cannot be cancelled")
+	ErrNotRetryable  = errors.New("jobs: only failed jobs can be retried (or the same work is already pending)")
+)
+
+// Cancel stops a running job (its context is cancelled and the job is
+// dropped once the handler returns), removes a queued one, or dismisses a
+// failed one.
+func (r *Runner) Cancel(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	if rj, ok := r.running[id]; ok {
+		rj.cancelled = true
+		rj.cancel()
+		r.mu.Unlock()
+		return nil
+	}
+	r.mu.Unlock()
+	job, err := r.store.GetJob(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if job.Status == "running" { // claimed by another process (aether scan)
+		return ErrNotCancelable
+	}
+	n, err := r.store.DeleteJobWithStatus(ctx, db.DeleteJobWithStatusParams{ID: id, Status: job.Status})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotCancelable // started meanwhile
+	}
+	r.log.Info("tâche annulée", "kind", job.Kind, "key", job.Key, "status", job.Status)
+	r.changed()
+	return nil
+}
+
+// Retry puts a failed job back in the queue with a fresh attempt budget.
+func (r *Runner) Retry(ctx context.Context, id int64) error {
+	job, err := r.store.GetJob(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	n, err := r.store.RetryFailedJob(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotRetryable
+	}
+	r.log.Info("tâche relancée", "kind", job.Kind, "key", job.Key)
+	r.Wake(job.Kind)
+	r.changed()
+	return nil
+}
+
+// IsRunning reports whether this process is executing the job.
+func (r *Runner) IsRunning(id int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.running[id]
+	return ok
 }
 
 // Register sets the handler for a job kind with the given concurrency. It
@@ -111,6 +211,7 @@ func enqueue(ctx context.Context, q *db.Queries, kind, key string, payload any, 
 	}
 	if n > 0 && r != nil {
 		r.Wake(kind)
+		r.changed()
 	}
 	return n > 0, nil
 }
@@ -177,10 +278,25 @@ func (r *Runner) work(ctx context.Context, kind string, q *queue) {
 
 func (r *Runner) run(ctx context.Context, h Handler, row db.Job) {
 	j := Job{ID: row.ID, Kind: row.Kind, Key: row.Key, Payload: json.RawMessage(row.Payload), Attempts: int(row.Attempts)}
-	err := safeCall(ctx, h, j)
+	jctx, cancel := context.WithCancel(ctx)
+	rj := &runningJob{cancel: cancel}
+	r.mu.Lock()
+	r.running[j.ID] = rj
+	r.mu.Unlock()
+	r.changed()
+	err := safeCall(jctx, h, j)
+	r.mu.Lock()
+	delete(r.running, j.ID)
+	cancelled := rj.cancelled
+	r.mu.Unlock()
+	cancel()
+	defer r.changed()
 	// Bookkeeping must survive shutdown so the job is not lost mid-update.
 	bg := context.WithoutCancel(ctx)
 	switch {
+	case cancelled && ctx.Err() == nil:
+		r.log.Info("tâche annulée", "kind", j.Kind, "key", j.Key)
+		err = r.store.DeleteJob(bg, j.ID)
 	case err == nil:
 		err = r.store.DeleteJob(bg, j.ID)
 	case ctx.Err() != nil:

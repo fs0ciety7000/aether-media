@@ -336,3 +336,93 @@ Liste « à voir » par utilisateur (films et séries), synchronisée avec la wa
 - Progression : pourcentage côté Trakt ↔ `positionMs` (durée de l'élément) ; écart < 2 % ignoré.
 - Limites de débit : requêtes espacées (Trakt : 1 écriture/s), 429 → nouvelle tentative après `Retry-After`, jamais de boucle (3 essais par tâche).
 - SSE : `sync.status` `{ userId, service, status, syncing, lastError? }` après chaque synchronisation ou changement d'état ; `userdata.changed` `{ userId, itemId }` pour chaque élément modifié par un import.
+
+## Administration, assistant et PWA (M7)
+
+Tous les endpoints de cette section sont **réservés aux administrateurs** (403 `forbidden` sinon).
+
+### Réglages du serveur
+Priorité : **configuration** (fichier TOML ou variable `AETHER_*`) > **base** (cette API) > **défaut**. Une valeur venue de la configuration est en lecture seule.
+
+```ts
+type SettingSource = "file" | "env" | "database" | "default"
+type SettingField<T> = {
+  value: T; source: SettingSource
+  readOnly: boolean                 // défini par la configuration
+  applies: "live" | "restart"       // appliqué tout de suite, ou au prochain démarrage
+  restartRequired?: boolean         // enregistré, mais le serveur tourne encore avec l'ancienne valeur
+}
+type ServerSettings = {
+  serverName: SettingField<string>                       // AETHER_SERVER_NAME · server.name
+  metadataLanguage: SettingField<string>                 // BCP-47 "fr-FR" · AETHER_LANGUAGE · metadata.language
+  metadataCountry: SettingField<string>                  // ISO 3166-1 "FR", "" = région de la langue · AETHER_METADATA_COUNTRY
+  tmdbApiKey: { set: boolean; masked?: string /* "…ab12" */; source; readOnly; applies }  // jamais renvoyée en clair
+  hwAccel: SettingField<{ mode: "none" | "auto" | "vaapi" | "qsv" | "nvenc" | "videotoolbox"; device?: string }>  // applies: "restart"
+  maxTranscodes: SettingField<number>                    // 1–64 · AETHER_MAX_TRANSCODES · transcode.max_sessions
+  scanIntervalMinutes: SettingField<number>              // 0 = désactivé, sinon 5 min à 7 j · AETHER_SCAN_INTERVAL · library.scan_interval
+  wizard: { step: "account" | "metadata" | "tmdb" | "library" | "summary" | "done"; completed: boolean; skipped?: string[] }
+}
+```
+
+- `GET /settings` → `ServerSettings`
+- `PATCH /settings` `{ serverName?, metadataLanguage?, metadataCountry?, tmdbApiKey? /* "" = retirer */, hwAccel?, maxTranscodes?, scanIntervalMinutes?, wizard?: { step?, completed?, skipped? } }` → `ServerSettings`
+  - 409 `managed_by_config` `{ error: { code, message, field } }` si le champ vient de la configuration · 400 `invalid_setting` (avec `field`) · 400 `invalid_json` (champ inconnu compris).
+  - Appliqués **à chaud** : nom, langue et pays (fournisseur TMDB et rafraîchissements suivants), clé TMDB, limite de transcodages (nouvelles sessions), intervalle de rescan. **Au redémarrage** : accélération matérielle (`restartRequired: true` en attendant).
+  - La clé TMDB est chiffrée en base (`internal/secret`, `<data>/secret.key`).
+- `POST /settings/tmdb/check` `{ apiKey? }` → `{ valid: boolean, error?: "invalid_key" | "unreachable" | "missing", message? }` : vérifie une clé auprès de TMDB (`GET /3/authentication`, sans cache) ; sans `apiKey`, vérifie la clé en vigueur. Rien n'est enregistré.
+- `GET /system/info` gagne `serverName` et, pour un administrateur, `setupWizardPending: true` quand l'assistant a été quitté avant la fin (l'interface le reprend à `wizard.step`). Les serveurs configurés avant M7 sont marqués « terminé » par la migration. `metadata.tmdb` suit la clé en vigueur (à chaud).
+- `POST /setup` démarre l'assistant (`wizard.step = "metadata"`).
+
+### État du serveur
+- `GET /system/status[?detect=true]` →
+```ts
+{ name, version, commit, goVersion, os, arch, startedAt
+  paths: { data, cache, transcode, database, databaseSize }
+  ffmpeg: { path, ok, version?, error? }; ffprobe: { … }
+  hwAccel: { configured, device?, active /* mode des nouveaux transcodages */, detected: string[] /* encodeurs matériels qui fonctionnent, ex. "h264_vaapi" */, checkedAt }
+  transcodes: { max, active }; logs: { capacity, held } }
+```
+  La détection matérielle (encodage d'une image de test par encodeur) est faite une fois, puis à la demande avec `detect=true`.
+
+### Tâches
+```ts
+type Job = { id: number; kind: string /* library.scan | media.probe | metadata.refresh | image.fetch | sync.run | sync.scrobble */
+             key: string; label?: string /* bibliothèque, titre, fichier, « Trakt · Léa » */
+             status: "running" | "queued" | "failed"; priority: number; attempts: number
+             error?: string /* secrets masqués */; runAfter: string; createdAt: string; updatedAt: string }
+```
+- `GET /jobs/queue[?kind=&limit=100]` → `{ running: Job[], queued: Job[] /* tête de file */, failed: Job[] /* ≤ 50 récents */, counts: { running, queued, failed }, byKind: { [kind]: { [status]: n } } }`
+- `POST /jobs/{id}/retry` → 204 (tâche en échec remise en file, essais remis à zéro) · 409 `not_retryable` · 404
+- `DELETE /jobs/{id}` → 204 : annule une tâche **en cours** (son contexte est annulé, la tâche est retirée quand le traitement s'arrête), retire une tâche **en attente**, ou efface un **échec** · 409 `not_cancellable` · 404
+- `POST /jobs/run` `{ task: "scan" | "metadata" | "sync" }` → `202 { queued: number }` : analyse complète de toutes les bibliothèques, rafraîchissement des métadonnées de tous les titres, synchronisation de tous les comptes Trakt / Simkl reliés · 400 `invalid_task`
+- SSE `jobs.changed` `{ running, queued, failed }` (**administrateurs seulement**, au plus toutes les 700 ms).
+
+### Journaux
+Tampon circulaire en mémoire (2 000 entrées) branché comme handler `slog` supplémentaire. Les secrets sont masqués **avant** stockage : attributs nommés `token`, `secret`, `password`, `api_key`, `authorization`, `cookie`… ; paramètres `api_key=`, `token=`, `code=`… ; en-têtes `Bearer` ; champs JSON `access_token`… ; JWT ; signature des URL du proxy interne `/internal/vfs/…` ; `user:motdepasse@` dans les URL.
+
+```ts
+type LogEntry = { seq: number; time: string; level: "DEBUG" | "INFO" | "WARN" | "ERROR"; msg: string; attrs?: { k: string; v: string }[] }
+```
+- `GET /logs?level=debug|info|warn|error&q=&after=<seq>&limit=500` → `{ entries: LogEntry[] /* du plus ancien au plus récent */, held, capacity }` (`level` = niveau minimal, `q` = texte dans le message ou un attribut).
+- `GET /logs/stream?level=&q=` : SSE dédié (événements `log`, `id` = `seq`), séparé de `/events` pour qu'une rafale de journaux ne prive pas les autres événements.
+- `GET /logs/download?level=&q=` : texte brut (`Content-Disposition: attachment`), une ligne par entrée.
+
+### Lectures en cours
+```ts
+type ActiveSession = {
+  id: string; user?: { id; name }
+  item?: { id; kind; title; seriesTitle?; season?; episode?; year? }
+  method: "direct" | "remux" | "transcode"; reasons: string[]   // mêmes codes que PlaybackInfo.reasons
+  positionMs: number; durationMs: number; paused: boolean
+  bitrate: number                                              // bits/s, estimation (source, ou cible de l'encodeur)
+  video?: { codec; copied: boolean; width?; height? }; audio?: { codec; copied: boolean }
+  hwAccel?: string                                             // encodeur vidéo d'un transcodage : none | vaapi | …
+  startedAt: string; lastActive: string }
+```
+- `GET /playback/sessions` → `ActiveSession[]` (plus anciennes d'abord)
+- `POST /playback/sessions/{sid}/stop` → 204 : arrête la lecture (position conservée) · 404. L'utilisateur reçoit `playback.stopped` `{ sessionId, reason: "admin" }` (SSE, à lui seul) : le lecteur affiche un message et ne relance pas la session.
+- SSE `playback.sessions` (administrateurs) à chaque début ou fin de lecture.
+
+### PWA
+- `/manifest.webmanifest` (`application/manifest+json`), icônes `/icons/icon-192.png`, `icon-512.png`, `maskable-192.png`, `maskable-512.png`, `apple-touch-icon.png` (180 px), `/offline.html`.
+- `/service-worker.js` (`Cache-Control: no-cache`) : met en cache l'app shell (`/`) et les fichiers versionnés du build ; navigation réseau d'abord, app shell (qui affiche « Vous êtes hors ligne ») puis `/offline.html` sans réseau. Il ne répond **jamais** pour `/api/…` (données, images, flux, HLS, sous-titres), `/internal/…`, `/healthz`, ni pour une requête `Range`.

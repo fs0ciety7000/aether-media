@@ -38,7 +38,15 @@ import type {
 	SyncFeature,
 	SyncPollResult,
 	SyncService,
-	DeviceCode
+	DeviceCode,
+	ActiveSession,
+	AdminTask,
+	JobQueue,
+	LogPage,
+	ServerSettings,
+	SettingsPatch,
+	SystemStatus,
+	TmdbCheck
 } from './types';
 
 export const API_BASE = '/api/v1';
@@ -82,7 +90,11 @@ const CODE_MESSAGES: Record<string, string> = {
 	not_connected: 'Aucun compte n’est relié à ce service.',
 	not_pending: 'Aucun appairage en cours : demandez un nouveau code.',
 	reauth_required: 'Le service a refusé l’accès : reconnectez votre compte.',
-	managed_by_config: 'Ces identifiants sont définis par la configuration du serveur.',
+	managed_by_config: 'Ce réglage est défini par la configuration du serveur.',
+	// M7 — administration
+	not_retryable: 'Seule une tâche en échec peut être relancée (ou la même tâche est déjà en file).',
+	not_cancellable: 'Cette tâche ne peut plus être annulée.',
+	invalid_task: 'Tâche inconnue.',
 	invalid_kind: 'Seuls les films et les séries peuvent aller dans « Ma liste ».'
 };
 
@@ -397,8 +409,44 @@ export const api = {
 	syncApps: async (signal?: AbortSignal) => (await request<SyncApps>('/sync/apps', s(signal))) ?? {},
 	setSyncApp: (service: SyncService, body: { clientId: string; clientSecret?: string }) =>
 		request<SyncApp>(`/sync/apps/${service}`, { method: 'PUT', body }),
-	deleteSyncApp: (service: SyncService) => request<void>(`/sync/apps/${service}`, { method: 'DELETE' })
+	deleteSyncApp: (service: SyncService) => request<void>(`/sync/apps/${service}`, { method: 'DELETE' }),
+
+	// ——— Administration (M7) ———
+	settings: (signal?: AbortSignal) => request<ServerSettings>('/settings', s(signal)),
+	patchSettings: (body: SettingsPatch) => request<ServerSettings>('/settings', { method: 'PATCH', body }),
+	/** Without apiKey: checks the key in effect. */
+	checkTmdb: (apiKey?: string, signal?: AbortSignal) =>
+		request<TmdbCheck>('/settings/tmdb/check', { method: 'POST', body: apiKey ? { apiKey } : {}, signal }),
+	systemStatus: (detect = false, signal?: AbortSignal) => request<SystemStatus>('/system/status', { params: { detect }, signal }),
+	jobQueue: async (signal?: AbortSignal) => {
+		const q = await request<JobQueue>('/jobs/queue', s(signal));
+		q.running ??= [];
+		q.queued ??= [];
+		q.failed ??= [];
+		q.counts ??= { running: 0, queued: 0, failed: 0 };
+		q.byKind ??= {};
+		return q;
+	},
+	runTask: (task: AdminTask) => request<{ queued: number }>('/jobs/run', { method: 'POST', body: { task } }),
+	retryJob: (id: number) => request<void>(`/jobs/${id}/retry`, { method: 'POST' }),
+	cancelJob: (id: number) => request<void>(`/jobs/${id}`, { method: 'DELETE' }),
+	logs: async (params: { level?: string; q?: string; after?: number; limit?: number }, signal?: AbortSignal) => {
+		const p = await request<LogPage>('/logs', { params, signal });
+		p.entries ??= [];
+		return p;
+	},
+	playbackSessions: async (signal?: AbortSignal) => (await request<ActiveSession[]>('/playback/sessions', s(signal))) ?? [],
+	stopPlaybackSession: (sid: string) => request<void>(`/playback/sessions/${encodeURIComponent(sid)}/stop`, { method: 'POST' })
 };
+
+/** URL of the live log stream (SSE) or of the download, with the current filters. */
+export function logsUrl(kind: 'stream' | 'download', level: string, q: string): string {
+	const sp = new URLSearchParams();
+	if (level) sp.set('level', level);
+	if (q.trim()) sp.set('q', q.trim());
+	const qs = sp.toString();
+	return `${API_BASE}/logs/${kind}${qs ? `?${qs}` : ''}`;
+}
 
 export function normalizeSync(c: SyncConnection): SyncConnection {
 	c.supported ??= [];

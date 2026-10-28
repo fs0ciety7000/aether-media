@@ -15,6 +15,9 @@
 	import Sidebar from '$lib/components/shell/Sidebar.svelte';
 	import TabBar from '$lib/components/shell/TabBar.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
+	import InstallPrompt from '$lib/components/pwa/InstallPrompt.svelte';
+	import Icon from '$lib/components/Icon.svelte';
+	import { pwa } from '$lib/pwa.svelte';
 	import { libraries, scans, system, unmatched } from '$lib/api/stores.svelte';
 
 	let { children } = $props();
@@ -68,7 +71,7 @@
 	$effect(() => {
 		const status = session.status;
 		if (publicRoute) return;
-		if (status === 'setup') goto('/bienvenue', { replaceState: true });
+		if (status === 'setup' || (status === 'authenticated' && session.wizardPending)) goto('/bienvenue', { replaceState: true });
 		else if (status === 'anonymous') goto(loginHref(here()), { replaceState: true });
 	});
 
@@ -93,7 +96,14 @@
 {#if !ready}
 	<div class="splash" aria-busy={session.status === 'unknown'}>
 		<Logo size={44} wordmark={false} />
-		{#if session.status === 'unreachable'}
+		{#if session.status === 'unreachable' && !pwa.online}
+			<div class="splash-text offline" role="alert">
+				<span class="offline-ic" aria-hidden="true"><Icon name="wifi-off" size={22} /></span>
+				<p class="splash-title">Vous êtes hors ligne</p>
+				<p>Aether a besoin d’une connexion à votre serveur pour afficher la médiathèque. Vérifiez le réseau, puis réessayez.</p>
+				<Button icon="refresh" onclick={() => session.reload()}>Réessayer</Button>
+			</div>
+		{:else if session.status === 'unreachable'}
 			<div class="splash-text" role="alert">
 				<p class="splash-title">Le serveur est injoignable</p>
 				<p>Vérifiez qu’Aether est démarré, puis réessayez.</p>
@@ -124,6 +134,8 @@
 	<div class="tabs">
 		<TabBar />
 	</div>
+
+	<InstallPrompt />
 {/if}
 
 <Toaster />
@@ -136,7 +148,7 @@
 		gap: var(--sp-5);
 		min-height: 100vh;
 		min-height: 100dvh;
-		padding: var(--sp-5);
+		padding: calc(var(--sp-5) + env(safe-area-inset-top, 0px)) var(--sp-5) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
 		background: var(--bg);
 		text-align: center;
 	}
@@ -150,6 +162,20 @@
 		justify-items: center;
 		gap: var(--sp-3);
 		color: var(--text-muted);
+	}
+
+	.offline-ic {
+		display: grid;
+		place-items: center;
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+	}
+
+	.offline p:not(.splash-title) {
+		max-width: 40ch;
 	}
 
 	.splash-title {

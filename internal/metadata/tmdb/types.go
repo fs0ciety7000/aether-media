@@ -109,6 +109,7 @@ type movieDetails struct {
 			ReleaseDates []struct {
 				Certification string `json:"certification"`
 				Type          int    `json:"type"`
+				ReleaseDate   string `json:"release_date"`
 			} `json:"release_dates"`
 		} `json:"results"`
 	} `json:"release_dates"`

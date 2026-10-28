@@ -26,6 +26,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/images"
 	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/logbuf"
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 	"github.com/fs0ciety7000/aether-media/internal/metadata"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/httpx"
@@ -34,6 +35,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/tmdb"
 	"github.com/fs0ciety7000/aether-media/internal/secret"
+	"github.com/fs0ciety7000/aether-media/internal/settings"
 	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
@@ -118,7 +120,8 @@ func setup(name string, args []string, extra ...func(*flag.FlagSet)) (config.Con
 	if cfg.Log.Format == "json" {
 		h = slog.NewJSONHandler(os.Stderr, opts)
 	}
-	log := slog.New(h)
+	// Recent records also go to the admin UI (Réglages › Journaux), secrets masked.
+	log := slog.New(slog.NewMultiHandler(h, logbuf.Default.Handler(level)))
 	slog.SetDefault(log)
 	return cfg, log, cfg.EnsureDirs()
 }
@@ -146,6 +149,9 @@ type services struct {
 	features  api.Features
 	sources   *sources.Manager
 	box       *secret.Box
+	settings  *settings.Service
+	tmdb      *tmdb.Provider
+	cfg       config.Config // effective configuration (admin settings applied)
 }
 
 func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*services, error) {
@@ -156,6 +162,10 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	hub := events.NewHub()
 	runner := jobs.NewRunner(st, log)
 	box, err := secret.Open(cfg.Paths.Data)
+	if err != nil {
+		return nil, err
+	}
+	set, cfg, err := loadSettings(ctx, st, box, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +186,7 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 	if err != nil {
 		return nil, err
 	}
-	refresher, features := newRefresher(cfg, st, runner, hub, log, imgs, srcs)
+	refresher, features, tm := newRefresher(cfg, st, runner, hub, log, imgs, srcs)
 	runner.Register(refresh.JobRefresh, 2, refresher.HandleRefresh)
 	runner.Register(refresh.JobImage, 4, refresher.HandleImage)
 	scanner.AfterScan = func(ctx context.Context, libID int64) {
@@ -184,7 +194,8 @@ func newServices(ctx context.Context, cfg config.Config, log *slog.Logger) (*ser
 			log.Error("planification des métadonnées", "library", libID, "err", err)
 		}
 	}
-	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features, sources: srcs, box: box}, nil
+	return &services{store: st, hub: hub, runner: runner, scanner: scanner, refresher: refresher, images: imgs, features: features, sources: srcs, box: box,
+		settings: set, tmdb: tm, cfg: cfg}, nil
 }
 
 func userAgent() string {
@@ -193,10 +204,10 @@ func userAgent() string {
 
 // newRefresher assembles metadata providers: local NFO/artwork first, then
 // TMDB (films, séries; needs an API key) and MusicBrainz (musique).
-func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache, srcs *sources.Manager) (*refresh.Refresher, api.Features) {
+func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *events.Hub, log *slog.Logger, imgs *images.Cache, srcs *sources.Manager) (*refresh.Refresher, api.Features, *tmdb.Provider) {
 	httpCache := filepath.Join(cfg.Paths.Cache, "http")
 	var remote []metadata.RemoteProvider
-	tm := tmdb.New(tmdb.Config{APIKey: cfg.Metadata.TMDBAPIKey, Language: cfg.Metadata.Language},
+	tm := tmdb.New(tmdb.Config{APIKey: cfg.Metadata.TMDBAPIKey, Language: cfg.Metadata.Language, Country: cfg.Metadata.Country},
 		httpx.New(httpx.Options{UserAgent: userAgent(), RatePerSec: 20, CacheDir: filepath.Join(httpCache, "tmdb")}))
 	if tm.Enabled() {
 		log.Info("TMDB activé", "language", cfg.Metadata.Language)
@@ -228,7 +239,7 @@ func newRefresher(cfg config.Config, st *store.Store, runner *jobs.Runner, hub *
 	}
 	features := api.Features{TMDB: tm.Enabled(), MusicBrainz: !cfg.Metadata.DisableMusicBrainz}
 	return refresh.New(st, runner, hub, log, refresh.Config{Language: cfg.Metadata.Language},
-		[]metadata.LocalProvider{nfo.New()}, remote, ingest), features
+		[]metadata.LocalProvider{nfo.New()}, remote, ingest), features, tm
 }
 
 // newSync assembles Trakt / Simkl synchronisation. Credentials from the
@@ -268,6 +279,7 @@ func runServe(args []string) error {
 	}
 	defer func() { _ = svc.store.Close() }()
 	defer svc.sources.Close()
+	cfg = svc.cfg
 	svc.sources.ProxyBase = loopbackBase(cfg)
 	if err := svc.store.BackfillRatingAges(ctx); err != nil {
 		log.Warn("classification par âge", "err", err)
@@ -299,6 +311,7 @@ func runServe(args []string) error {
 		VAAPIDevice:   cfg.Transcode.VAAPIDevice,
 		Logger:        log,
 	})
+	bindSettings(svc.settings, svc.tmdb, svc.refresher, streams, watcher)
 	playback := &api.Playback{
 		Streams: streams, Prober: probe.New(cfg.Paths.FFprobe), FFmpeg: cfg.Paths.FFmpeg,
 		SubtitleDir: filepath.Join(cfg.Paths.Cache, "subtitles"),
@@ -310,6 +323,7 @@ func runServe(args []string) error {
 			Store: svc.store, Log: log, Scanner: svc.scanner, Watcher: watcher, Hub: svc.hub,
 			Refresher: svc.refresher, Images: svc.images, Features: svc.features, Playback: playback,
 			Sources: svc.sources, Sync: syncSvc,
+			Settings: svc.settings, Runner: svc.runner, Logs: logbuf.Default,
 		}).Handler(webui.Handler()),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,

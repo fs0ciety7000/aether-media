@@ -171,6 +171,7 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		s.plays.start(sess.ID, pl)
 		s.scrobble(r, pl, syncsvc.ActStart, percent(sess.StartMs, sess.DurationMs))
 	}
+	s.playbackChanged()
 	d := sess.Decision
 	out := playbackInfo{
 		SessionID: sess.ID, Method: string(d.Method), Reasons: d.Reasons, MediaFileID: mf.ID,
@@ -263,6 +264,7 @@ func (s *Server) stopPlayback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.plays.end(sid)
 	s.Playback.Streams.Stop(sid)
+	s.playbackChanged()
 	w.WriteHeader(http.StatusNoContent)
 }
 

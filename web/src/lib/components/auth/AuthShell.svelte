@@ -37,7 +37,7 @@
 		grid-template-rows: auto 1fr auto;
 		min-height: 100vh;
 		min-height: 100dvh;
-		padding: var(--sp-5) var(--gutter);
+		padding: calc(var(--sp-5) + env(safe-area-inset-top, 0px)) var(--gutter) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
 		background: var(--bg);
 		overflow: hidden;
 	}

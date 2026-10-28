@@ -124,3 +124,10 @@ UPDATE images SET hash = ?, width = ?, height = ?, blurhash = ?, dominant = ?, f
 
 -- name: SetImageError :exec
 UPDATE images SET fetch_error = ? WHERE id = ?;
+
+-- name: ListRefreshRoots :many
+-- Every top-level item of a library (a refresh cascades to its children).
+SELECT i.id FROM items i
+WHERE i.library_id = ? AND i.missing = 0 AND i.parent_id IS NULL
+  AND i.kind IN ('movie', 'series', 'artist', 'album')
+ORDER BY i.id;

@@ -1,8 +1,14 @@
 # Configuration Aether — copiez ce fichier dans <data>/aether.toml.
 # Chaque valeur peut aussi être fournie par variable d'environnement
 # (AETHER_HOST, AETHER_PORT, AETHER_DATA_DIR, AETHER_LOG_LEVEL…), qui a priorité.
+#
+# Les réglages marqués « (interface) » se règlent aussi dans Réglages › Serveur et
+# dans l'assistant de premier lancement. Définis ici (ou par variable), ils sont
+# prioritaires et affichés en lecture seule : laissez-les commentés pour les gérer
+# depuis l'interface.
 
 [server]
+# name = "Aether"         # (interface) AETHER_SERVER_NAME
 host = "0.0.0.0"
 port = 8096
 
@@ -18,21 +24,22 @@ level  = "info"   # debug | info | warn | error
 format = "text"   # text | json
 
 [library]
-scan_interval  = "6h"    # rescan périodique de sécurité
+# scan_interval = "6h"   # (interface) rescan périodique de sécurité — AETHER_SCAN_INTERVAL
 watch_debounce = "30s"   # délai de calme après une modification de fichiers
 probe_workers  = 2       # analyses ffprobe simultanées
 
 [metadata]
 # Clé API TMDB (v3) ou jeton de lecture (v4) : https://www.themoviedb.org/settings/api
 # Sans clé, seuls les NFO et images locales sont utilisés pour films et séries.
-# tmdb_api_key = ""
-language = "fr-FR"
+# tmdb_api_key = ""      # (interface, stockée chiffrée) AETHER_TMDB_API_KEY
+# language = "fr-FR"     # (interface) AETHER_LANGUAGE
+# country  = "FR"        # (interface) classifications d'âge et dates de sortie ; défaut : région de la langue — AETHER_METADATA_COUNTRY
 # disable_musicbrainz = false
 
 [transcode]
-max_sessions = 2          # remux/transcodages FFmpeg simultanés
-hwaccel      = "none"     # none | auto | vaapi | qsv | nvenc | videotoolbox
-# vaapi_device = "/dev/dri/renderD128"
+# max_sessions = 2        # (interface) remux/transcodages FFmpeg simultanés — AETHER_MAX_TRANSCODES
+# hwaccel      = "none"   # (interface, effectif au redémarrage) none | auto | vaapi | qsv | nvenc | videotoolbox — AETHER_HWACCEL
+# vaapi_device = "/dev/dri/renderD128"   # AETHER_VAAPI_DEVICE
 
 [sync]
 # Identifiants d'application Trakt (https://trakt.tv/oauth/applications, redirect URI

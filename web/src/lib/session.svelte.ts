@@ -55,6 +55,8 @@ class SessionStore {
 	user = $state<User | null>(null);
 	status = $state<SessionStatus>('unknown');
 	isAdmin = $derived(!!this.user?.isAdmin);
+	/** M7: an administrator left the first-run assistant before its end (it resumes). */
+	wizardPending = $state(false);
 	#pending: Promise<void> | null = null;
 
 	/** Loads once; later calls return the same promise. */
@@ -69,8 +71,10 @@ class SessionStore {
 	}
 
 	async #load() {
+		let wizard = false;
 		try {
 			const info = await api.systemInfo();
+			wizard = !!info?.setupWizardPending;
 			if (info?.setupRequired) {
 				this.user = null;
 				this.status = 'setup';
@@ -81,6 +85,7 @@ class SessionStore {
 		}
 		try {
 			this.user = await api.me();
+			this.wizardPending = wizard && this.user.isAdmin;
 			this.status = 'authenticated';
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 401) {
@@ -112,11 +117,20 @@ class SessionStore {
 
 	async login(name: string, password: string) {
 		const r = await api.login({ name, password, device: deviceLabel() });
+		if (r.user.isAdmin) {
+			// The assistant resumes for an administrator who left it before its end.
+			try {
+				this.wizardPending = !!(await api.systemInfo())?.setupWizardPending;
+			} catch {
+				this.wizardPending = false;
+			}
+		}
 		this.signedIn(r.user);
 	}
 
 	async setup(name: string, password: string) {
 		const r = await api.setup({ name, password, device: deviceLabel() });
+		this.wizardPending = true;
 		this.signedIn(r.user);
 	}
 
@@ -128,6 +142,7 @@ class SessionStore {
 		}
 		this.user = null;
 		this.status = 'anonymous';
+		this.wizardPending = false;
 		this.#pending = Promise.resolve();
 	}
 

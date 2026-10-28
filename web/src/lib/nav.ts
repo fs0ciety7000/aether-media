@@ -29,7 +29,11 @@ export function tabsFor(isAdmin: boolean): NavItem[] {
 export const settingsNav: NavItem[] = [
 	{ href: '/reglages/bibliotheques', label: 'Bibliothèques', icon: 'layers' },
 	{ href: '/reglages/utilisateurs', label: 'Utilisateurs', icon: 'users' },
-	{ href: '/reglages/synchronisation', label: 'Synchronisation', icon: 'refresh' }
+	{ href: '/reglages/synchronisation', label: 'Synchronisation', icon: 'refresh' },
+	{ href: '/reglages/serveur', label: 'Serveur', icon: 'server' },
+	{ href: '/reglages/taches', label: 'Tâches', icon: 'tasks' },
+	{ href: '/reglages/journaux', label: 'Journaux', icon: 'terminal' },
+	{ href: '/reglages/lectures', label: 'Lectures', icon: 'activity' }
 ];
 
 /** Profile sub-navigation (everyone). */

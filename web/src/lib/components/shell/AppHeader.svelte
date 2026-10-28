@@ -91,8 +91,9 @@
 		display: flex;
 		align-items: center;
 		gap: var(--sp-4);
-		height: var(--header-h);
-		padding: 0 var(--gutter);
+		/* Installed on iOS, the translucent status bar sits over the page: keep clear of it. */
+		height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+		padding: env(safe-area-inset-top, 0px) var(--gutter) 0;
 		background: var(--bg);
 		transition: box-shadow var(--dur-base) var(--ease);
 	}

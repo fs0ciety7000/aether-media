@@ -6,6 +6,7 @@
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
+	import { events } from '$lib/api/events.svelte';
 	import { firstImage, imageUrl } from '$lib/api/images';
 	import type { Item, ItemDetail, PlaybackInfo } from '$lib/api/types';
 	import { formatClock } from '$lib/format';
@@ -197,6 +198,7 @@
 
 	async function startSession(startMs: number, opts: StartOptions = {}) {
 		const my = ++token;
+		stoppedByAdmin = false;
 		const restart = !!info && phase === 'playing';
 		if (restart) takeSnapshot();
 		restarting = restart;
@@ -332,6 +334,8 @@
 
 	// ——— Ping & resume ———
 	let pingTimer: ReturnType<typeof setInterval> | undefined;
+	/** An administrator ended this session (Réglages › Lectures): never restart it by ourselves. */
+	let stoppedByAdmin = false;
 
 	function startPing() {
 		stopPing();
@@ -340,7 +344,7 @@
 			if (!sid) return;
 			api.pingPlayback(sid, { positionMs: Math.round(position() * 1000), paused }).catch((err) => {
 				// Session reaped server-side: start a fresh one where we are (HLS needs it).
-				if (err instanceof ApiError && err.status === 404 && sid === sessionId && info?.method !== 'direct') {
+				if (err instanceof ApiError && err.status === 404 && sid === sessionId && info?.method !== 'direct' && !stoppedByAdmin) {
 					startSession(position() * 1000, { audioIndex: selectedAudio, burnIndex: burnedSub, autoplay: !paused });
 				}
 			});
@@ -799,8 +803,16 @@
 		document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 		document.addEventListener('visibilitychange', onVisibility);
 		window.addEventListener('pagehide', onPageHide);
+		const offStopped = events.on('playback.stopped', (ev) => {
+			const d = ev.data as { sessionId?: string } | undefined;
+			if (!d?.sessionId || d.sessionId !== sessionId) return;
+			stoppedByAdmin = true;
+			stopPing();
+			fail('La lecture a été arrêtée par un administrateur du serveur. Votre position est conservée.');
+		});
 		loadItem();
 		poke();
+		return offStopped;
 	});
 
 	onDestroy(() => {

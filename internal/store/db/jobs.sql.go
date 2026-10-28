@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const claimJob = `-- name: ClaimJob :one
@@ -46,6 +47,23 @@ DELETE FROM jobs WHERE id = ?
 func (q *Queries) DeleteJob(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteJob, id)
 	return err
+}
+
+const deleteJobWithStatus = `-- name: DeleteJobWithStatus :execrows
+DELETE FROM jobs WHERE id = ?1 AND status = ?2
+`
+
+type DeleteJobWithStatusParams struct {
+	ID     int64  `json:"id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) DeleteJobWithStatus(ctx context.Context, arg DeleteJobWithStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteJobWithStatus, arg.ID, arg.Status)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const enqueueJob = `-- name: EnqueueJob :execrows
@@ -90,6 +108,29 @@ func (q *Queries) FailJob(ctx context.Context, arg FailJobParams) error {
 	return err
 }
 
+const getJob = `-- name: GetJob :one
+SELECT id, kind, "key", payload, status, priority, attempts, error, run_after, created_at, updated_at FROM jobs WHERE id = ?
+`
+
+func (q *Queries) GetJob(ctx context.Context, id int64) (Job, error) {
+	row := q.db.QueryRowContext(ctx, getJob, id)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Key,
+		&i.Payload,
+		&i.Status,
+		&i.Priority,
+		&i.Attempts,
+		&i.Error,
+		&i.RunAfter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const jobStats = `-- name: JobStats :many
 SELECT kind, status, count(*) AS n FROM jobs GROUP BY kind, status ORDER BY kind, status
 `
@@ -123,6 +164,82 @@ func (q *Queries) JobStats(ctx context.Context) ([]JobStatsRow, error) {
 	return items, nil
 }
 
+const listJobsByStatus = `-- name: ListJobsByStatus :many
+SELECT j.id, j.kind, j.key, j.status, j.priority, j.attempts, j.error, j.run_after, j.created_at, j.updated_at,
+    CAST(COALESCE(CASE j.kind
+        WHEN 'library.scan' THEN (SELECT l.name FROM libraries l WHERE l.id = CAST(j.key AS INTEGER))
+        WHEN 'metadata.refresh' THEN (SELECT i.title FROM items i WHERE i.id = CAST(j.key AS INTEGER))
+        WHEN 'media.probe' THEN (SELECT mf.path FROM media_files mf WHERE mf.id = CAST(j.key AS INTEGER))
+        WHEN 'image.fetch' THEN (SELECT it.title FROM images im JOIN items it ON it.id = im.item_id WHERE im.id = CAST(j.key AS INTEGER))
+        WHEN 'sync.run' THEN (SELECT c.service || ':' || u.name FROM sync_connections c JOIN users u ON u.id = c.user_id
+                              WHERE c.id = CAST(substr(j.key, 6) AS INTEGER))
+    END, '') AS TEXT) AS label
+FROM jobs j
+WHERE j.status = ?1
+  AND (CAST(?2 AS TEXT) IS NULL OR j.kind = CAST(?2 AS TEXT))
+ORDER BY CASE WHEN j.status = 'queued' THEN 0 ELSE 1 END,
+         CASE WHEN j.status = 'queued' THEN -j.priority ELSE 0 END,
+         CASE WHEN j.status = 'queued' THEN j.run_after ELSE -j.updated_at END,
+         j.id
+LIMIT CAST(?3 AS INTEGER)
+`
+
+type ListJobsByStatusParams struct {
+	Status string         `json:"status"`
+	Kind   sql.NullString `json:"kind"`
+	Lim    int64          `json:"lim"`
+}
+
+type ListJobsByStatusRow struct {
+	ID        int64  `json:"id"`
+	Kind      string `json:"kind"`
+	Key       string `json:"key"`
+	Status    string `json:"status"`
+	Priority  int64  `json:"priority"`
+	Attempts  int64  `json:"attempts"`
+	Error     string `json:"error"`
+	RunAfter  int64  `json:"runAfter"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
+	Label     string `json:"label"`
+}
+
+// Admin view of the queue, with a human label resolved from the job key.
+func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusParams) ([]ListJobsByStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, listJobsByStatus, arg.Status, arg.Kind, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListJobsByStatusRow
+	for rows.Next() {
+		var i ListJobsByStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Key,
+			&i.Status,
+			&i.Priority,
+			&i.Attempts,
+			&i.Error,
+			&i.RunAfter,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Label,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const purgeFailedJobs = `-- name: PurgeFailedJobs :execrows
 DELETE FROM jobs WHERE status = 'failed' AND updated_at < ?
 `
@@ -141,6 +258,21 @@ UPDATE jobs SET status = 'queued', updated_at = unixepoch() WHERE status = 'runn
 
 func (q *Queries) RequeueRunningJobs(ctx context.Context) (int64, error) {
 	result, err := q.db.ExecContext(ctx, requeueRunningJobs)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const retryFailedJob = `-- name: RetryFailedJob :execrows
+UPDATE jobs SET status = 'queued', attempts = 0, error = '', run_after = unixepoch(), updated_at = unixepoch()
+WHERE jobs.id = ?1 AND jobs.status = 'failed'
+  AND NOT EXISTS (SELECT 1 FROM jobs p WHERE p.kind = jobs.kind AND p.key = jobs.key AND p.status IN ('queued', 'running'))
+`
+
+// Requeues a failed job from scratch, unless the same work is already pending.
+func (q *Queries) RetryFailedJob(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, retryFailedJob, id)
 	if err != nil {
 		return 0, err
 	}

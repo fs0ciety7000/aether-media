@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/events"
+	"github.com/fs0ciety7000/aether-media/internal/jobs"
 	"github.com/fs0ciety7000/aether-media/internal/library"
+	"github.com/fs0ciety7000/aether-media/internal/logbuf"
 	"github.com/fs0ciety7000/aether-media/internal/metadata/refresh"
+	"github.com/fs0ciety7000/aether-media/internal/settings"
 	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store"
 	"github.com/fs0ciety7000/aether-media/internal/syncsvc"
@@ -34,6 +37,13 @@ type Deps struct {
 	Sync *syncsvc.Service
 	// BrowseRoots limits the server-side folder picker (nil = OS defaults).
 	BrowseRoots []string
+	// Settings are the editable server settings (nil disables the admin
+	// settings, the assistant state and the system status).
+	Settings *settings.Service
+	// Runner is the job queue (admin "Tâches": cancel, retry).
+	Runner *jobs.Runner
+	// Logs is the in-memory log buffer (admin "Journaux").
+	Logs *logbuf.Buffer
 }
 
 // Features reports optional capabilities to clients.
@@ -54,10 +64,16 @@ type Server struct {
 	startedAt time.Time
 	authState *authState
 	plays     *playTracker
+	probes    probeCache
+	jobsNote  jobsNotifier
 }
 
 func New(d Deps) *Server {
-	return &Server{Deps: d, store: d.Store, log: d.Log, startedAt: time.Now().UTC(), authState: newAuthState(), plays: newPlayTracker()}
+	s := &Server{Deps: d, store: d.Store, log: d.Log, startedAt: time.Now().UTC(), authState: newAuthState(), plays: newPlayTracker()}
+	if d.Runner != nil && d.Hub != nil {
+		d.Runner.SetNotify(s.jobsChanged)
+	}
+	return s
 }
 
 // Handler returns the root handler: API routes, health check and the SPA.
@@ -141,6 +157,7 @@ func (s *Server) Handler(web http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/watchlist/{id}", s.watchlistRemove)
 	mux.HandleFunc("GET /api/v1/jobs", s.admin(s.jobStats))
 	mux.HandleFunc("GET /api/v1/events", s.events)
+	s.adminRoutes(mux)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "route inconnue")
 	})
@@ -164,6 +181,11 @@ type systemInfo struct {
 	SetupRequired bool      `json:"setupRequired"`
 	Metadata      Features  `json:"metadata"`
 	Sync          syncInfo  `json:"sync"`
+	// ServerName is the name chosen by the administrator.
+	ServerName string `json:"serverName"`
+	// SetupWizardPending (administrators only): the first-run assistant was
+	// left before its end and should resume.
+	SetupWizardPending bool `json:"setupWizardPending,omitempty"`
 }
 
 type syncInfo struct {
@@ -178,7 +200,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", "erreur interne")
 		return
 	}
-	writeJSON(w, http.StatusOK, systemInfo{
+	info := systemInfo{
 		Name:          "Aether",
 		Version:       version.Version,
 		Commit:        version.Commit,
@@ -186,7 +208,16 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		SetupRequired: users == 0,
 		Metadata:      s.Features,
 		Sync:          syncInfo{Trakt: s.Sync != nil && s.Sync.Available(r.Context(), "trakt"), Simkl: s.Sync != nil && s.Sync.Available(r.Context(), "simkl")},
-	})
+		ServerName:    "Aether",
+	}
+	if s.Settings != nil {
+		info.Metadata.TMDB = s.Settings.TMDBEnabled()
+		info.ServerName = s.Settings.Current().ServerName
+		if users > 0 && isAdmin(r) {
+			info.SetupWizardPending = s.Settings.WizardPending(r.Context())
+		}
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

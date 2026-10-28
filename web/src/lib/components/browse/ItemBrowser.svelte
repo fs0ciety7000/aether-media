@@ -440,7 +440,7 @@
 	/* Sticky under the top bar; opaque so posters slide beneath it cleanly. */
 	.toolbar {
 		position: sticky;
-		top: var(--header-h);
+		top: calc(var(--header-h) + env(safe-area-inset-top, 0px));
 		z-index: 10;
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);

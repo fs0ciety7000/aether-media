@@ -79,7 +79,14 @@
 		'forward-10': '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 3.5v3.7h-3.7"/><path d="M8.6 10v5.5"/><rect x="11" y="10" width="3.4" height="5.5" rx="1.7"/>',
 		'arrow-left': '<path d="M19 12H5M10.5 6.5 5 12l5.5 5.5"/>',
 		audio: '<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/>',
-		gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/>'
+		gauge: '<path d="M4.5 17a8 8 0 1 1 15 0"/><path d="m12 13 3.5-4"/>',
+		tasks: '<path d="m4 6.5 1.5 1.5L8.5 5M4 12.5 5.5 14l3-3M4 18.5 5.5 20l3-3"/><path d="M11.5 6.5H20M11.5 12.5H20M11.5 18.5H20"/>',
+		cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3"/>',
+		activity: '<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>',
+		stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+		'wifi-off': '<path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.7M14.6 10.3A10 10 0 0 1 19 12.9M2 9.4a14.9 14.9 0 0 1 4.3-2.7M10.4 5.6A15 15 0 0 1 22 9.4"/><circle cx="12" cy="19.5" r=".7" fill="currentColor"/>',
+		globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5Z"/>',
+		'install': '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M12 7v7M9 11.5l3 3 3-3M10.5 18.5h3"/>'
 	} as const;
 
 	export type IconName = keyof typeof ICONS;

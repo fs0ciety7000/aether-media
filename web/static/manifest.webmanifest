@@ -1,0 +1,26 @@
+{
+	"name": "Aether",
+	"short_name": "Aether",
+	"description": "Votre médiathèque, chez vous : films, séries et musique.",
+	"lang": "fr",
+	"dir": "ltr",
+	"id": "/",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#04121D",
+	"theme_color": "#04121D",
+	"categories": ["entertainment"],
+	"icons": [
+		{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+		{ "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+		{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+	],
+	"shortcuts": [
+		{ "name": "Rechercher", "url": "/recherche", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+		{ "name": "Ma liste", "url": "/ma-liste", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+	]
+}
