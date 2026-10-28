@@ -86,6 +86,17 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-066 Accélération matérielle (détection + options)
 - [ ] T-067 Matrice de tests de lecture (Playwright)
 
+## M5b — Sources distantes
+- [ ] T-0B0 Migration `library_paths` → `library_sources` (type local | agent | sftp, config, état)
+- [ ] T-0B1 Abstraction VFS (Walk/Stat/Open avec Range, URL d'entrée FFmpeg) ; scanner, probe, lecture directe branchés dessus
+- [ ] T-0B2 Proxy HTTP interne (Range) pour exposer les sources non locales à FFmpeg/ffprobe
+- [ ] T-0B3 Agent Aether : `aether agent`, appairage par jeton, API fichiers, probe sur place
+- [ ] T-0B4 Agent : transcodage/remux près des fichiers, relayé par le serveur principal
+- [ ] T-0B5 Agent : notification des changements (watcher local → serveur)
+- [ ] T-0B6 Source SFTP (clé / mot de passe, reconnexion, lecture par plages)
+- [ ] T-0B7 UI : ajout de sources par type, test de connexion, état en ligne/hors ligne
+- [ ] T-0B8 Tests de bout en bout : bibliothèque mixant local + agent + SFTP
+
 ## M6 — Utilisateurs & progression
 - [ ] T-070 Comptes, argon2id, sessions, rôles
 - [ ] T-071 Accès par bibliothèque + contrôle parental
@@ -93,9 +104,21 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-073 Reprendre / À suivre
 - [ ] T-074 Collections (manuelles + TMDB)
 
+## M6b — Synchronisation Trakt / Simkl
+- [ ] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement
+- [ ] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur)
+- [ ] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle
+- [ ] T-0C3 Progression de reprise (Trakt playback) bidirectionnelle
+- [ ] T-0C4 Watchlist et notes
+- [ ] T-0C5 UI : réglages par utilisateur, état de synchronisation, journal des conflits
+
 ## M7 — Finition & distribution
 - [ ] T-080 Assistant de premier lancement
 - [ ] T-081 Admin : bibliothèques, utilisateurs, tâches, journaux
 - [ ] T-082 PWA (manifest, service worker)
 - [ ] T-083 Paquets : Docker multi-arch, .deb/.rpm, Homebrew, Windows
 - [ ] T-084 Docs utilisateur + audit a11y / perfs → release v0.1.0
+
+## M8 — Fédération (v1.1)
+- [ ] T-0D0 Appairage serveur ↔ serveur, bibliothèques partagées, droits par utilisateur
+- [ ] T-0D1 Lecture relayée ou directe vers le serveur propriétaire

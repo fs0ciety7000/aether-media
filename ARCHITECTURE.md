@@ -179,6 +179,28 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 
 ---
 
+### 5.4 Sources distantes (M5b — conception)
+```
+                 ┌────────────── serveur Aether principal ──────────────┐
+ navigateur ───► │ API · UI · base · métadonnées · décision de lecture  │
+                 │        VFS : local │ agent │ sftp                    │
+                 └───────────┬──────────────┬───────────────┬──────────┘
+                     dossier local     HTTPS + jeton      SFTP (clé)
+                                    ┌──────────────┐   ┌──────────┐
+                                    │ Agent Aether │   │ seedbox  │
+                                    │ fichiers,    │   └──────────┘
+                                    │ ffprobe,     │
+                                    │ FFmpeg (HLS) │
+                                    └──────────────┘
+```
+- Une bibliothèque = plusieurs **sources** ; l'identité des fichiers devient `source_id + chemin relatif`.
+- **VFS** : `Walk`, `Stat`, `Open` (lecture par plages), `InputURL` pour FFmpeg. Les sources non locales sont servies à FFmpeg par un proxy HTTP interne (Range) ; l'agent peut aussi analyser et transcoder lui-même pour éviter de faire transiter le fichier complet.
+- **Agent** : même binaire en mode `aether agent`, sans base de données ni UI ; expose listing récursif (taille, mtime), lecture par plages, probe, sessions HLS ; pousse les changements de fichiers au serveur.
+- Source hors ligne : rien n'est supprimé (même règle que les racines indisponibles), les éléments sont marqués indisponibles.
+
+### 5.5 Synchronisation externe (M6b — conception)
+Module `internal/sync` par fournisseur (Trakt, Simkl) : jetons OAuth par utilisateur, scrobbling depuis les événements de lecture, jobs de synchronisation incrémentale (historique, progression, watchlist, notes), correspondance par `providerIds`.
+
 ## 6. API (aperçu)
 ```
 POST /api/v1/auth/login | /logout          GET /api/v1/me
