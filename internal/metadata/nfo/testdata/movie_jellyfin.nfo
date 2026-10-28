@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<MOVIE>
+  <PLOT><![CDATA[A thief who steals corporate secrets through the use of dream-sharing technology.]]></PLOT>
+  <LOCKDATA>false</LOCKDATA>
+  <DATEADDED>2023-01-01 10:00:00</DATEADDED>
+  <TITLE>Inception</TITLE>
+  <ORIGINALTITLE>Inception</ORIGINALTITLE>
+  <ACTOR>
+    <NAME>Leonardo DiCaprio</NAME>
+    <ROLE>Cobb</ROLE>
+    <TYPE>Actor</TYPE>
+    <SORTORDER>0</SORTORDER>
+  </ACTOR>
+  <DIRECTOR>Christopher Nolan</DIRECTOR>
+  <WRITER>Christopher Nolan</WRITER>
+  <CREDITS>Christopher Nolan</CREDITS>
+  <RATING>8.4</RATING>
+  <YEAR>2010</YEAR>
+  <MPAA>Rated PG-13</MPAA>
+  <IMDBID>1375666</IMDBID>
+  <TMDBID>27205</TMDBID>
+  <PREMIERED>2010-07-15</PREMIERED>
+  <RELEASEDATE>2010-07-15</RELEASEDATE>
+  <RUNTIME>148</RUNTIME>
+  <GENRE>Action|Science Fiction</GENRE>
+  <STUDIO>Legendary Pictures</STUDIO>
+  <SET tmdbcolid="0">Inception Collection</SET>
+</MOVIE>

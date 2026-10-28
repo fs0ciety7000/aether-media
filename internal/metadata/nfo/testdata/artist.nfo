@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<artist>
+    <name>Daft Punk</name>
+    <musicBrainzArtistID>056E4F3E-D505-4DAD-8EC1-D04F521CBB56</musicBrainzArtistID>
+    <sortname>Daft Punk</sortname>
+    <genre>Electronic</genre>
+    <genre>House</genre>
+    <style>French House</style>
+    <biography>Daft Punk were a French electronic music duo formed in 1993 in Paris.</biography>
+    <formed>1993</formed>
+    <disbanded>2021-02-22</disbanded>
+    <thumb aspect="thumb">https://assets.fanart.tv/fanart/music/daftpunk.jpg</thumb>
+</artist>

@@ -46,14 +46,15 @@ type ProviderIDs map[string]string
 type Person struct {
 	Name        string      `json:"name"`
 	Role        string      `json:"role,omitempty"` // character for actors, job otherwise
-	Kind        string      `json:"kind"`           // actor | director | writer | producer | composer | guest
+	Kind        string      `json:"kind"`           // actor | director | writer | producer | composer | guest | artist (album artist)
 	Order       int         `json:"order"`
 	ImageURL    string      `json:"imageUrl,omitempty"`
 	ProviderIDs ProviderIDs `json:"providerIds,omitempty"`
 }
 
-// RemoteImage is an image offered by a provider. URL is http(s) for remote
-// providers or an absolute local path for local ones (Local = true).
+// RemoteImage is an image offered by a provider. URL is either http(s) or an
+// absolute local path (Local = true). Local providers may also return remote
+// URLs found in NFO files.
 type RemoteImage struct {
 	Type     string  `json:"type"`
 	URL      string  `json:"url"`

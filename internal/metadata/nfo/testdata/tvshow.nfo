@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<tvshow>
+    <title>Breaking Bad</title>
+    <originaltitle>Breaking Bad</originaltitle>
+    <showtitle>Breaking Bad</showtitle>
+    <ratings>
+        <rating name="tmdb" max="10" default="true">
+            <value>8.9</value>
+            <votes>12000</votes>
+        </rating>
+    </ratings>
+    <plot>Walter White, a chemistry teacher, discovers he has cancer.</plot>
+    <mpaa>TV-MA</mpaa>
+    <premiered>2008-01-20</premiered>
+    <enddate>2013-09-29</enddate>
+    <status>Ended</status>
+    <studio>AMC</studio>
+    <genre>Drama</genre>
+    <genre>Crime</genre>
+    <uniqueid type="tvdb" default="true">81189</uniqueid>
+    <uniqueid type="imdb">tt0903747</uniqueid>
+    <episodeguide>{"tvdb":"81189","tmdb":"1396","imdb":"tt0903747"}</episodeguide>
+    <namedseason number="1">Season One</namedseason>
+    <namedseason number="0">Specials</namedseason>
+    <thumb aspect="poster">https://artworks.thetvdb.com/banners/posters/81189-1.jpg</thumb>
+    <thumb aspect="poster" type="season" season="1">https://artworks.thetvdb.com/banners/seasons/81189-1.jpg</thumb>
+    <thumb aspect="banner">https://artworks.thetvdb.com/banners/graphical/81189-g.jpg</thumb>
+    <actor>
+        <name>Bryan Cranston</name>
+        <role>Walter White</role>
+        <order>0</order>
+    </actor>
+</tvshow>

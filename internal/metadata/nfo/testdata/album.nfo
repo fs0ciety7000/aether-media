@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<album>
+    <title>OK Computer</title>
+    <musicbrainzalbumid>0B6B4BA0-D36F-47BD-B4EA-6A5B91842D29</musicbrainzalbumid>
+    <musicbrainzreleasegroupid>b1392450-e666-3926-a536-22c65f834433</musicbrainzreleasegroupid>
+    <artistdesc>Radiohead</artistdesc>
+    <genre>Alternative Rock / Art Rock</genre>
+    <style>Experimental</style>
+    <review>Radiohead's third album.</review>
+    <label>Parlophone</label>
+    <releasedate>1997-05-21</releasedate>
+    <year>1997</year>
+    <rating max="10">8.7</rating>
+    <albumArtistCredits>
+        <artist>Radiohead</artist>
+        <musicBrainzArtistID>a74b1b7f-71a5-4011-9441-d0b5e4122711</musicBrainzArtistID>
+    </albumArtistCredits>
+    <track>
+        <position>1</position>
+        <title>Airbag</title>
+        <duration>4:44</duration>
+    </track>
+    <track>
+        <position>2</position>
+        <title>Paranoid Android</title>
+        <duration>6:23</duration>
+        <musicbrainztrackid>e5d4a9c2-0a2f-4b7c-8e0d-6b3f1a2c4d5e</musicbrainztrackid>
+    </track>
+</album>
