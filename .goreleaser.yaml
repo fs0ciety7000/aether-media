@@ -55,7 +55,9 @@ nfpms:
   - id: aether
     ids: [aether]
     package_name: aether
-    file_name_template: "{{ .ConventionalFileName }}"
+    # GitHub remplace « ~ » (préversions deb/rpm) par « . » au téléversement :
+    # le faire nous-mêmes garde checksums.txt cohérent avec les noms publiés.
+    file_name_template: '{{ replace .ConventionalFileName "~" "." }}'
     vendor: Aether
     homepage: https://github.com/fs0ciety7000/aether-media
     maintainer: fs0ciety7000 <https://github.com/fs0ciety7000>

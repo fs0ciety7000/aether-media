@@ -170,8 +170,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 
 ## Release v0.1.0 — reste à faire avant le tag
 `goreleaser check` passe ; un binaire construit comme pour le tag `v0.1.0` affiche `aether 0.1.0 (<commit>)` ; licence cohérente partout (`LICENSE` AGPL-3.0, `license: AGPL-3.0-only` des paquets, label OCI de l’image, fichier `copyright` des paquets).
-- [ ] T-090 Faire tourner `ci.yml` sur GitHub pour la première fois (T-015) : lint, tests, build multi-OS, image Docker, `goreleaser check` ; corriger ce qui casse
-- [ ] T-091 Répétition de la release sur un tag de test (`v0.1.0-rc.1`, release en brouillon) : archives et `checksums.txt`, `.deb` / `.rpm` installés sur un Debian et un Fedora (service, compte `aether`, `aether version`), image `ghcr.io` amd64 + arm64 (`docker run`, healthcheck), SBOM ; puis supprimer le brouillon et le tag de test
+- [x] T-090 CI exécutée sur GitHub pour la première fois (run n° 1 vert : lint, tests -race, build 6 cibles, image Docker, `goreleaser check`). Elle ne tournait que sur `main`, absente du dépôt : déclenchée aussi sur `ccr-*` et à la main
+- [~] T-091 Répétition `v0.1.0-rc.1` : workflow Release vert, 25 fichiers publiés (archives 6 cibles, .deb/.rpm, SBOM, checksums), archive Linux vérifiée (somme, `aether version`, `serve` + `/healthz`). Corrigé : noms deb/rpm avec « ~ » renommés par GitHub, donc absents de `checksums.txt` (rc.2 pour confirmer). Reste : installer .deb/.rpm sur Debian/Fedora, `docker run` de l'image ghcr.io amd64 + arm64, puis retirer la pré-release de test
 - [ ] T-092 Critère de sortie M7 : installation en moins de 5 minutes sur Linux, macOS et Windows en suivant `docs/INSTALL.md` (inclut T-0EA : service Windows et LaunchAgent macOS sur de vraies machines)
 - [ ] T-093 Décisions du PO pour la v0.1.0 : publication Homebrew (`homebrew-tap` + `skip_upload: false` + secret, ou report en v0.1.x comme l’annonce INSTALL.md), binaires macOS / Windows non signés (documenté : `xattr`, SmartScreen), validation visuelle T-02B
 - [ ] T-094 Dater l’entrée `[0.1.0]` de `CHANGELOG.md`, coller la section dans les notes de la release en brouillon, puis tagger `v0.1.0`
