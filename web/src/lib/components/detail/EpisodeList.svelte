@@ -1,22 +1,25 @@
 <script lang="ts">
 	import { firstImage } from '$lib/api/images';
 	import type { Item } from '$lib/api/types';
-	import { formatDate, formatRuntime, metaLine } from '$lib/format';
+	import { formatClock, formatDate, formatRuntime, metaLine } from '$lib/format';
 	import { episodeCode, isOffline, OFFLINE_HINT } from '$lib/media';
-	import { resumeFor } from '$lib/player/resume';
+	import { progressOf, resumeMs } from '$lib/player/resume';
 	import { playerHref } from '$lib/player/target';
 	import Artwork from '../Artwork.svelte';
 	import Icon from '../Icon.svelte';
 	import OfflineBadge from '../OfflineBadge.svelte';
 	import Skeleton from '../Skeleton.svelte';
+	import WatchBadge from '../WatchBadge.svelte';
 
 	interface Props {
 		episodes: Item[];
 		loading?: boolean;
 		label: string;
+		/** Watched toggle per episode (omit to hide the buttons). */
+		ontoggleplayed?: (ep: Item) => void;
 	}
 
-	let { episodes, loading = false, label }: Props = $props();
+	let { episodes, loading = false, label, ontoggleplayed }: Props = $props();
 </script>
 
 <ol class="episodes" role="list" aria-label={label} aria-busy={loading}>
@@ -29,21 +32,28 @@
 		{/each}
 	{:else}
 		{#each episodes as ep (ep.id)}
-			{@const resume = resumeFor(ep.id)}
+			{@const resume = resumeMs(ep)}
+			{@const progress = progressOf(ep)}
+			{@const played = !!ep.userData?.played}
 			{@const code = episodeCode(ep)}
 			{@const off = isOffline(ep)}
-			<li class="ep" class:offline={off}>
+			<li class="ep" class:offline={off} class:played class:actions={!!ontoggleplayed}>
 				{#if off}
 					<span class="thumb" title={OFFLINE_HINT}>
 						<span class="art"><Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} /></span>
 						<span class="off-badge"><OfflineBadge /></span>
 					</span>
 				{:else}
-				<a class="thumb" href={playerHref(ep.id)} aria-label="{resume ? 'Reprendre' : 'Lire'} {code ? `${code} — ` : ''}{ep.title}">
-					<Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} />
+				<a
+					class="thumb"
+					href={playerHref(ep.id)}
+					aria-label="{resume ? `Reprendre à ${formatClock(resume / 1000)}` : 'Lire'} {code ? `${code} — ` : ''}{ep.title}{played ? ' (vu)' : ''}"
+				>
+					<span class="art"><Artwork image={firstImage(ep, 'thumb', 'backdrop')} ratio="16 / 9" sizes="(max-width: 767px) 40vw, 240px" placeholder={{ title: ep.title }} /></span>
 					<span class="play" class:shown={!!resume} aria-hidden="true"><Icon name="play" size={16} filled /></span>
-					{#if resume && resume.durationMs}
-						<span class="progress" aria-hidden="true"><span style:width="{Math.min(100, (resume.positionMs / resume.durationMs) * 100)}%"></span></span>
+					{#if played}<span class="watch"><WatchBadge played /></span>{/if}
+					{#if progress}
+						<span class="progress" aria-hidden="true"><span style:width="{Math.min(100, progress * 100)}%"></span></span>
 					{/if}
 				</a>
 				{/if}
@@ -51,11 +61,26 @@
 					<span class="top">
 						<span class="num tabular">{ep.indexNumber ?? '–'}</span>
 						<span class="title">{ep.title}{#if off}<span class="visually-hidden"> (hors ligne)</span>{/if}</span>
-						<span class="dur tabular">{formatRuntime(ep.runtimeMs) ?? ''}</span>
+						<span class="dur tabular">
+							{#if resume && ep.runtimeMs}Reste {formatRuntime(ep.runtimeMs - resume)}{:else}{formatRuntime(ep.runtimeMs) ?? ''}{/if}
+						</span>
 					</span>
 					{#if ep.airDate || ep.premiereDate}<span class="date">{metaLine(formatDate(ep.airDate ?? ep.premiereDate))}</span>{/if}
 					{#if ep.overview}<span class="overview">{ep.overview}</span>{/if}
 				</a>
+				{#if ontoggleplayed}
+					<button
+						type="button"
+						class="seen"
+						class:on={played}
+						aria-pressed={played}
+						aria-label="{played ? 'Marquer comme non vu' : 'Marquer comme vu'} : {code ? `${code} — ` : ''}{ep.title}"
+						title={played ? 'Marquer comme non vu' : 'Marquer comme vu'}
+						onclick={() => ontoggleplayed(ep)}
+					>
+						<Icon name={played ? 'check-circle' : 'check'} size={18} />
+					</button>
+				{/if}
 			</li>
 		{/each}
 	{/if}
@@ -77,8 +102,52 @@
 		transition: background-color var(--dur-fast) var(--ease);
 	}
 
+	.ep.actions {
+		grid-template-columns: clamp(160px, 18vw, 240px) minmax(0, 1fr) auto;
+	}
+
 	li.ep:hover {
 		background: var(--surface);
+	}
+
+	/* Watched: the still steps back a little; the text stays fully legible. */
+	.played .thumb .art {
+		display: block;
+		opacity: 0.62;
+		transition: opacity var(--dur-base) var(--ease);
+	}
+
+	.played .thumb:hover .art {
+		opacity: 1;
+	}
+
+	.watch {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		display: flex;
+	}
+
+	.seen {
+		display: grid;
+		place-items: center;
+		width: 36px;
+		height: 36px;
+		align-self: center;
+		border-radius: var(--r-md);
+		color: var(--text-faint);
+		transition:
+			color var(--dur-fast) var(--ease),
+			background-color var(--dur-fast) var(--ease);
+	}
+
+	.seen:hover {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 7%, transparent);
+	}
+
+	.seen.on {
+		color: var(--accent);
 	}
 
 	.thumb {
@@ -202,7 +271,8 @@
 	}
 
 	@media (max-width: 767px) {
-		.ep {
+		.ep,
+		.ep.actions {
 			grid-template-columns: 132px minmax(0, 1fr);
 			gap: var(--sp-3);
 			align-items: start;
@@ -235,6 +305,20 @@
 		.overview {
 			padding-left: 0;
 			grid-column: 1 / -1;
+		}
+
+		.ep.actions {
+			position: relative;
+		}
+
+		.ep.actions .body {
+			padding-right: 36px;
+		}
+
+		.seen {
+			position: absolute;
+			top: 0;
+			right: -6px;
 		}
 	}
 </style>

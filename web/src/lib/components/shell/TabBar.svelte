@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { isActive, tabs } from '$lib/nav';
+	import { isActive, tabsFor } from '$lib/nav';
+	import { session } from '$lib/session.svelte';
 	import Icon from '../Icon.svelte';
+
+	const tabs = $derived(tabsFor(session.isAdmin));
 </script>
 
 <nav class="tabbar" aria-label="Navigation principale">

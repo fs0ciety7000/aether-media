@@ -52,6 +52,8 @@ type itemDTO struct {
 	Available         bool                  `json:"available"`
 	UserData          *userDataDTO          `json:"userData,omitempty"`
 	UnplayedCount     *int64                `json:"unplayedCount,omitempty"`
+	SeriesID          *int64                `json:"seriesId,omitempty"`
+	SeriesTitle       string                `json:"seriesTitle,omitempty"`
 	Video             *videoDTO             `json:"video,omitempty"`
 }
 
@@ -257,6 +259,10 @@ func (s *Server) itemDTOs(r *http.Request, rows []store.BrowseRow) ([]itemDTO, e
 		if row.UnplayedCount.Valid {
 			n := row.UnplayedCount.Int64
 			dto.UnplayedCount = &n
+		}
+		if row.SeriesID.Valid {
+			id := row.SeriesID.Int64
+			dto.SeriesID, dto.SeriesTitle = &id, row.SeriesTitle.String
 		}
 		if !admin {
 			dto.Path = ""

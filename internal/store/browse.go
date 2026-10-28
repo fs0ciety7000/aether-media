@@ -39,7 +39,9 @@ const userExtras = `,
 		  AND NOT EXISTS (SELECT 1 FROM user_item_data x WHERE x.item_id = e.id AND x.user_id = ? AND x.played = 1))
 	END,
 	COALESCE(ud.position_ms, 0), COALESCE(ud.played, 0) = 1, COALESCE(ud.play_count, 0), ud.last_played_at,
-	COALESCE(ud.is_favorite, 0) = 1, ud.rating`
+	COALESCE(ud.is_favorite, 0) = 1, ud.rating,
+	CASE WHEN i.kind = 'episode' THEN (SELECT g.id FROM items p JOIN items g ON g.id = p.parent_id WHERE p.id = i.parent_id) END,
+	CASE WHEN i.kind = 'episode' THEN (SELECT g.title FROM items p JOIN items g ON g.id = p.parent_id WHERE p.id = i.parent_id) END`
 
 // Video width thresholds for resolution classes (width is robust to
 // letterboxing, height is a fallback for narrow/portrait encodes).
@@ -131,6 +133,8 @@ type BrowseRow struct {
 	Favorite      bool
 	UserRating    sql.NullFloat64
 	UnplayedCount sql.NullInt64 // series and seasons
+	SeriesID      sql.NullInt64 // episodes
+	SeriesTitle   sql.NullString
 }
 
 // Browse lists items with dynamic filters and ordering, and the total
@@ -261,7 +265,8 @@ func (s *Store) Browse(ctx context.Context, p BrowseParams) ([]BrowseRow, int, e
 	for rows.Next() {
 		var r BrowseRow
 		if err := rows.Scan(itemDest(&r.Item, &r.ChildCount, &r.VideoWidth, &r.VideoHeight, &r.HDR, &r.Available,
-			&r.UnplayedCount, &r.PositionMs, &r.Played, &r.PlayCount, &r.LastPlayedAt, &r.Favorite, &r.UserRating)...); err != nil {
+			&r.UnplayedCount, &r.PositionMs, &r.Played, &r.PlayCount, &r.LastPlayedAt, &r.Favorite, &r.UserRating,
+			&r.SeriesID, &r.SeriesTitle)...); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, r)

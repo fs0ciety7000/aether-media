@@ -11,7 +11,7 @@ export interface NavItem {
 export const home: NavItem = { href: '/', label: 'Accueil', icon: 'home' };
 export const search: NavItem = { href: '/recherche', label: 'Recherche', icon: 'search' };
 export const libraries: NavItem = { href: '/bibliotheque', label: 'Bibliothèques', icon: 'layers' };
-export const collections: NavItem = { href: '/collections', label: 'Collections', icon: 'folder' };
+export const collections: NavItem = { href: '/collections', label: 'Collections', icon: 'collection' };
 export const identify: NavItem = { href: '/a-identifier', label: 'À identifier', icon: 'wand' };
 export const settings: NavItem = { href: '/reglages/bibliotheques', label: 'Réglages', icon: 'settings', match: '/reglages' };
 export const profile: NavItem = { href: '/profil', label: 'Profil', icon: 'user' };
@@ -19,8 +19,16 @@ export const profile: NavItem = { href: '/profil', label: 'Profil', icon: 'user'
 /** Sidebar, first group. */
 export const discover: NavItem[] = [home, search];
 
-/** Mobile tab bar: five destinations at most. */
-export const tabs: NavItem[] = [home, libraries, search, settings, profile];
+/** Mobile tab bar: five destinations at most (members get Collections instead of Réglages). */
+export function tabsFor(isAdmin: boolean): NavItem[] {
+	return [home, libraries, search, isAdmin ? settings : collections, profile];
+}
+
+/** Settings sub-navigation (admins). */
+export const settingsNav: NavItem[] = [
+	{ href: '/reglages/bibliotheques', label: 'Bibliothèques', icon: 'layers' },
+	{ href: '/reglages/utilisateurs', label: 'Utilisateurs', icon: 'users' }
+];
 
 export function isActive(pathname: string, href: string) {
 	return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');

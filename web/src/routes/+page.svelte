@@ -21,6 +21,10 @@
 	import { formatClock, formatRuntime, metaLine } from '$lib/format';
 	import { episodeCode, isOffline, KIND_LABEL, OFFLINE_HINT } from '$lib/media';
 	import { toasts } from '$lib/toast.svelte';
+	import ThumbCard from '$lib/components/ThumbCard.svelte';
+	import { progressOf, resumeMs } from '$lib/player/resume';
+	import { seriesTitles } from '$lib/series.svelte';
+	import { session } from '$lib/session.svelte';
 
 	let home = $state<HomeData | null>(null);
 	let error = $state<unknown>(null);
@@ -32,6 +36,7 @@
 		if (!silent) loading = true;
 		try {
 			home = await api.home();
+			seriesTitles.resolve([...home.continueWatching, ...home.nextUp]);
 			error = null;
 		} catch (err) {
 			if (!isAbort(err) && !silent) error = err;
@@ -43,8 +48,23 @@
 	onMount(() => {
 		load();
 		// New items or artwork: refresh quietly once the burst is over.
-		return events.debounced(['library.scan.finished', 'item.updated', 'item.image', 'source.status'], () => load(true), 1500);
+		const off = events.debounced(['library.scan.finished', 'item.updated', 'item.image', 'source.status'], () => load(true), 1500);
+		// Back from the player in another tab / after a while: progress moved on.
+		const onVisible = () => document.visibilityState === 'visible' && load(true);
+		document.addEventListener('visibilitychange', onVisible);
+		return () => {
+			off();
+			document.removeEventListener('visibilitychange', onVisible);
+		};
 	});
+
+	/** "Les Veilleurs" for an episode (its series), the title otherwise. */
+	const tileTitle = (it: Item) => (it.kind === 'episode' ? (seriesTitles.get(it) ?? it.title) : it.title);
+	const tileSubtitle = (it: Item) => {
+		if (it.kind !== 'episode') return metaLine(label(it), it.year);
+		const code = episodeCode(it);
+		return seriesTitles.get(it) ? metaLine(code, it.title) : code;
+	};
 
 	async function playHero(entry: { item: Item }) {
 		try {
@@ -91,7 +111,7 @@
 
 <div class="home">
 	{#if empty}
-		<Onboarding />
+		<Onboarding admin={session.isAdmin} />
 	{:else if loading && !home}
 		<h1 class="visually-hidden">Accueil</h1>
 		<div class="top" aria-busy="true">
@@ -137,19 +157,35 @@
 			<ContinueBento items={home.continueWatching} key={(it) => it.id}>
 				{#snippet tile(it, { featured })}
 					{@const img = firstImage(it, 'thumb', 'backdrop')}
+					{@const pos = resumeMs(it) || (it.userData?.positionMs ?? 0)}
 					<ContinueTile
-						href="/item/{it.id}"
-						title={it.title}
-						subtitle={it.kind === 'episode' ? episodeCode(it) : metaLine(label(it), it.year)}
-						elapsed={formatClock(0)}
+						href={playerHref(it.id, { t: pos / 1000 })}
+						title={tileTitle(it)}
+						subtitle={tileSubtitle(it)}
+						elapsed={formatClock(pos / 1000)}
 						total={formatClock((it.runtimeMs ?? 0) / 1000)}
-						progress={0}
+						progress={progressOf(it) ?? 0}
 						src={imageUrl(img, featured ? 780 : 500)}
 						color={img?.dominant}
 						{featured}
 					/>
 				{/snippet}
 			</ContinueBento>
+		{/if}
+
+		{#if home.nextUp.length}
+			<Row title="À suivre" items={home.nextUp} key={(it) => it.id}>
+				{#snippet item(ep)}
+					<ThumbCard
+						href={playerHref(ep.id)}
+						title={seriesTitles.get(ep) ?? ep.title}
+						eyebrow={seriesTitles.get(ep) ? metaLine(episodeCode(ep), ep.title) : episodeCode(ep)}
+						detail={formatRuntime(ep.runtimeMs)}
+						image={firstImage(ep, 'thumb', 'backdrop')}
+						offline={isOffline(ep)}
+					/>
+				{/snippet}
+			</Row>
 		{/if}
 
 		{#each home.recentlyAdded.filter((r) => r.items.length) as group (group.library.id)}
@@ -172,7 +208,7 @@
 		{#if !heroItems.length && !home.recentlyAdded.some((r) => r.items.length) && !home.recommended.length}
 			<EmptyState icon="refresh" title="Analyse en cours">
 				<p>Vos bibliothèques sont prêtes ; les premiers titres apparaîtront ici dès la fin de l’analyse.</p>
-				{#snippet actions()}<Button href="/reglages/bibliotheques">Voir les bibliothèques</Button>{/snippet}
+				{#snippet actions()}{#if session.isAdmin}<Button href="/reglages/bibliotheques">Voir les bibliothèques</Button>{/if}{/snippet}
 			</EmptyState>
 		{/if}
 	{/if}

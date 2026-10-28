@@ -36,6 +36,13 @@
 	import PosterArt from '$lib/demo/PosterArt.svelte';
 	import { currentUser, dominant, films, genres } from '$lib/demo/data';
 	import { theme, THEMES } from '$lib/theme.svelte';
+	import WatchBadge from '$lib/components/WatchBadge.svelte';
+	import Switch from '$lib/components/Switch.svelte';
+	import PasswordField from '$lib/components/auth/PasswordField.svelte';
+	import PasswordStrength from '$lib/components/auth/PasswordStrength.svelte';
+	import UserMenu from '$lib/components/shell/UserMenu.svelte';
+	import CollectionCard from '$lib/components/collections/CollectionCard.svelte';
+	import ProgressLine from '$lib/components/ProgressLine.svelte';
 	import { toasts } from '$lib/toast.svelte';
 
 	const colorTokens = [
@@ -611,6 +618,61 @@
 		</div>
 	</section>
 
+	<!-- Comptes et progression (M6) -->
+	<section class="block" aria-labelledby="s-m6">
+		<div class="heading">
+			<span class="num tabular">13</span>
+			<h2 id="s-m6">Comptes et progression (M6)</h2>
+			<p>Carte de connexion, menu utilisateur, badges de visionnage (« Vu », épisodes non vus, progression), interrupteurs et mot de passe avec indice de robustesse.</p>
+		</div>
+		<div class="m6-grid">
+			<div class="m6-login panel" aria-label="Aperçu de la carte de connexion">
+				<p class="m6-title">Connexion</p>
+				<div class="m6-alert" role="presentation"><Icon name="alert" size={18} /><span><strong>Identifiants incorrects</strong><br />Le nom ou le mot de passe ne correspond à aucun compte.</span></div>
+				<Input label="Nom" value="Camille" size="lg" id="demo-login-name" />
+				<PasswordField label="Mot de passe" value="motdepasse" id="demo-login-pw" />
+				<Button variant="primary" size="lg">Se connecter</Button>
+			</div>
+			<div class="m6-col">
+				<p class="micro m5b-cap">Menu utilisateur (compte connecté)</p>
+				<div class="row-inline"><UserMenu /><UserMenu compact /></div>
+				<p class="micro m5b-cap">Badges sur les affiches</p>
+				<div class="row-inline">
+					<WatchBadge played />
+					<WatchBadge unplayed={3} />
+					<WatchBadge unplayed={128} />
+					<Tag variant="accent">Cet appareil</Tag>
+					<Tag variant="accent" icon="shield">Administrateur</Tag>
+					<Tag>Membre</Tag>
+				</div>
+				<div class="m6-progress"><ProgressLine value={0.42} variant="inline" /><span class="micro tabular">42:10 sur 1:42:00 · reste 1 h 00</span></div>
+				<p class="micro m5b-cap">Robustesse du mot de passe</p>
+				<div class="m6-strength">
+					<PasswordStrength password="abc" />
+					<PasswordStrength password="soleil2024" />
+					<PasswordStrength password="Soleil-de-nuit" />
+					<PasswordStrength password="nuit-étoilée-42!" />
+				</div>
+				<div class="m6-switches panel">
+					<Switch label="Partagée" hint="Visible par tous les utilisateurs du serveur." checked />
+					<Switch label="Masquer les contenus non classés" />
+				</div>
+			</div>
+		</div>
+		<div class="m6-cards">
+			<PosterCard title={films[2].title} year={films[2].year} color={dominant(films[2].hue, films[2].hue2)} href="/design" progress={0.42}>
+				{#snippet art()}{@const f = films[2]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
+			</PosterCard>
+			<PosterCard title={films[3].title} year={films[3].year} color={dominant(films[3].hue, films[3].hue2)} href="/design" played>
+				{#snippet art()}{@const f = films[3]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
+			</PosterCard>
+			<PosterCard title={films[4].title} subtitle="2 saisons" color={dominant(films[4].hue, films[4].hue2)} href="/design" unplayed={3}>
+				{#snippet art()}{@const f = films[4]}<PosterArt title={f.title} year={f.year} credit={f.director} hue={f.hue} hue2={f.hue2} sat={f.sat} scene={f.scene} layout={f.layout} />{/snippet}
+			</PosterCard>
+			<CollectionCard collection={{ id: 'c0', name: 'Soirées d’hiver', kind: 'manual', count: 0, images: {}, shared: true }} posters={[]} />
+		</div>
+	</section>
+
 	<!-- Notifications -->
 	<section class="block" aria-labelledby="s-toasts">
 		<div class="heading">
@@ -634,6 +696,85 @@
 </div>
 
 <style>
+	.m6-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+		gap: var(--sp-6);
+		align-items: start;
+	}
+
+	.m6-cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(140px, 160px));
+		gap: var(--gap);
+		margin-top: var(--sp-5);
+	}
+
+	.m6-login {
+		display: grid;
+		gap: var(--sp-4);
+		padding: var(--sp-6);
+	}
+
+	.m6-title {
+		font-size: 1.5rem;
+		font-weight: var(--fw-heavy);
+	}
+
+	.m6-alert {
+		display: flex;
+		gap: var(--sp-3);
+		padding: var(--sp-3) var(--sp-4);
+		border-radius: var(--r-md);
+		background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent);
+		font-size: var(--fs-small);
+		color: var(--text-muted);
+	}
+
+	.m6-alert :global(svg) {
+		color: var(--danger);
+		flex: none;
+	}
+
+	.m6-alert strong {
+		color: var(--text);
+	}
+
+	.m6-col {
+		display: grid;
+		gap: var(--sp-3);
+		min-width: 0;
+	}
+
+	.m6-progress {
+		display: grid;
+		gap: var(--sp-2);
+		max-width: 360px;
+		color: var(--text-muted);
+	}
+
+	.m6-strength {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--sp-4);
+		max-width: 560px;
+	}
+
+	.m6-switches {
+		display: grid;
+		gap: var(--sp-4);
+		max-width: 560px;
+		padding: var(--sp-4) var(--sp-5);
+	}
+
+	@media (max-width: 899px) {
+		.m6-grid,
+		.m6-strength {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
 	.m5b-sources {
 		display: grid;
 		gap: var(--sp-2);

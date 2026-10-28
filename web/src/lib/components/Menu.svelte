@@ -6,11 +6,14 @@
 		icon?: IconName;
 		onselect: () => void;
 		disabled?: boolean;
+		/** Destructive / leaving action (sign out): drawn after a separator. */
+		separated?: boolean;
 	}
 </script>
 
 <script lang="ts">
 	// Action menu (menu button pattern): ↑ ↓ Home End to move, Enter/Space to run, Esc to close.
+	import type { Snippet } from 'svelte';
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -21,11 +24,15 @@
 		/** Visible trigger text (icon-only when omitted). */
 		text?: string;
 		align?: 'start' | 'end';
-		/** Trigger style. */
-		variant?: 'secondary' | 'image';
+		/** Trigger style (bare: the `trigger` snippet draws everything). */
+		variant?: 'secondary' | 'image' | 'bare';
+		/** Custom trigger content (user block). */
+		trigger?: Snippet;
+		/** Non-interactive block at the top of the list (signed-in user). */
+		header?: Snippet;
 	}
 
-	let { label, items, icon = 'more', text, align = 'end', variant = 'secondary' }: Props = $props();
+	let { label, items, icon = 'more', text, align = 'end', variant = 'secondary', trigger: triggerContent, header }: Props = $props();
 
 	const uid = $props.id();
 	let open = $state(false);
@@ -99,14 +106,20 @@
 		onclick={() => (open ? hide() : show())}
 		onkeydown={onTriggerKey}
 	>
-		<Icon name={icon} size={20} />
-		{#if text}<span>{text}</span>{/if}
+		{#if triggerContent}
+			{@render triggerContent()}
+		{:else}
+			<Icon name={icon} size={20} />
+			{#if text}<span>{text}</span>{/if}
+		{/if}
 	</button>
 
 	{#if open}
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<div class="list {align}" id="menu-{uid}" role="menu" aria-label={label} bind:this={list} onkeydown={onListKey}>
+ 			{#if header}<div class="header" role="presentation">{@render header()}</div>{/if}
 			{#each items as item (item.label)}
+				{#if item.separated}<div class="sep" role="separator"></div>{/if}
 				<button type="button" role="menuitem" tabindex="-1" disabled={item.disabled} onclick={() => run(item)}>
 					{#if item.icon}<Icon name={item.icon} size={18} />{/if}
 					<span>{item.label}</span>
@@ -135,6 +148,32 @@
 		box-shadow: inset 0 0 0 1px var(--line-strong);
 		font-weight: var(--fw-bold);
 		transition: background-color var(--dur-fast) var(--ease);
+	}
+
+	.trigger.bare {
+		width: auto;
+		height: auto;
+		background: none;
+		box-shadow: none;
+		border-radius: var(--r-full);
+		font-weight: inherit;
+	}
+
+	.trigger.bare:hover,
+	.trigger.bare[aria-expanded='true'] {
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+
+	.header {
+		padding: var(--sp-3) var(--sp-3) var(--sp-3);
+		margin-bottom: 4px;
+		box-shadow: 0 1px 0 var(--line);
+	}
+
+	.sep {
+		height: 1px;
+		margin: 4px 6px;
+		background: var(--line);
 	}
 
 	.trigger.text {

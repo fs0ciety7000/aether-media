@@ -50,6 +50,16 @@ export interface Item {
 	video?: { resolution: Resolution; hdr?: string };
 	/** M5b: false when every file of the item sits on offline sources (greyed, playback disabled). Missing = available. */
 	available?: boolean;
+	/** M6: per-user data on movies, episodes and tracks. */
+	userData?: UserData;
+	/** M6: unwatched episodes of a series or season. */
+	unplayedCount?: number;
+	/**
+	 * Not in the contract (yet): series of an episode, when the server provides it.
+	 * The UI falls back to `ancestors` (detail) or a lookup otherwise.
+	 */
+	seriesTitle?: string;
+	seriesId?: number;
 }
 
 export interface Person {
@@ -87,7 +97,8 @@ export interface MediaStream {
 
 export interface MediaFile {
 	id: number;
-	path: string;
+	/** Administrators only (M6). */
+	path?: string;
 	size: number;
 	part?: number;
 	container?: string;
@@ -194,7 +205,7 @@ export interface LibraryFilters {
 	hasHdr: boolean;
 }
 
-export type SortKey = 'title' | 'dateAdded' | 'year' | 'rating' | 'runtime' | 'premiereDate' | 'random';
+export type SortKey = 'title' | 'dateAdded' | 'year' | 'rating' | 'runtime' | 'premiereDate' | 'random' | 'lastPlayed';
 export type SortOrder = 'asc' | 'desc';
 
 export interface ItemQuery {
@@ -208,6 +219,10 @@ export interface ItemQuery {
 	resolution?: Resolution;
 	hdr?: boolean;
 	identify?: IdentifyStatus;
+	/** M6 */
+	played?: boolean;
+	favorite?: boolean;
+	inProgress?: boolean;
 	sort?: SortKey;
 	order?: SortOrder;
 	limit?: number;
@@ -244,6 +259,8 @@ export interface ItemPatch {
 export interface HomeData {
 	hero: Item[];
 	continueWatching: Item[];
+	/** M6: next unwatched episode of each started series. */
+	nextUp: Item[];
 	recentlyAdded: { library: { id: number; name: string; kind: string }; items: Item[] }[];
 	categories: { genre: string; count: number; image?: Image }[];
 	recommended: Item[];
@@ -358,4 +375,93 @@ export interface PlaybackRequest {
 	audioIndex?: number;
 	subtitleIndex?: number;
 	startMs?: number;
+}
+
+// ——— Comptes, progression, collections (M6) ———
+
+export type SubtitleMode = 'auto' | 'always' | 'forced' | 'off';
+
+export interface UserPrefs {
+	audioLanguage?: string;
+	subtitleLanguage?: string;
+	subtitleMode?: SubtitleMode;
+}
+
+/** Parental limit: 0, 6, 10, 12, 16, 18; missing = none. */
+export type RatingAge = 0 | 6 | 10 | 12 | 16 | 18;
+
+export interface User {
+	id: number;
+	name: string;
+	isAdmin: boolean;
+	allLibraries: boolean;
+	/** Access when !allLibraries. */
+	libraryIds: number[];
+	maxRatingAge?: RatingAge;
+	blockUnrated: boolean;
+	prefs: UserPrefs;
+	createdAt: string;
+	lastSeen?: string;
+}
+
+export interface UserData {
+	positionMs: number;
+	played: boolean;
+	playCount: number;
+	lastPlayedAt?: string;
+	favorite: boolean;
+	/** 0–10 */
+	rating?: number;
+}
+
+export interface AuthResult {
+	user: User;
+	token: string;
+}
+
+export interface DeviceSession {
+	/** 64-bit on the server: a string when beyond Number.MAX_SAFE_INTEGER (see api.mySessions). */
+	id: number | string;
+	device: string;
+	client: string;
+	current: boolean;
+	lastSeen: string;
+	createdAt: string;
+}
+
+export interface MePatch {
+	prefs?: UserPrefs;
+	currentPassword?: string;
+	newPassword?: string;
+}
+
+export interface UserInput {
+	name?: string;
+	/** Create, or reset on PATCH. */
+	password?: string;
+	isAdmin?: boolean;
+	allLibraries?: boolean;
+	libraryIds?: number[];
+	/** null on PATCH removes the limit. */
+	maxRatingAge?: RatingAge | null;
+	blockUnrated?: boolean;
+}
+
+export interface UserDataPatch {
+	played?: boolean;
+	favorite?: boolean;
+	rating?: number;
+	positionMs?: number;
+}
+
+export interface Collection {
+	/** "c<id>" manual · "t<name>" automatic (TMDB). */
+	id: string;
+	name: string;
+	kind: 'manual' | 'tmdb';
+	count: number;
+	/** Poster/backdrop of the first item when the collection has none. */
+	images: Item['images'];
+	ownerId?: number;
+	shared: boolean;
 }

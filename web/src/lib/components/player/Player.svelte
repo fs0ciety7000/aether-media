@@ -3,7 +3,7 @@
 	// POST /playback/{id} → attach (direct / native HLS / hls.js) → ping every 10 s → DELETE.
 	// Changing audio track, burnt subtitles or quality restarts the session at the current
 	// position; the last frame stays on screen meanwhile (canvas snapshot).
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
 	import { firstImage, imageUrl } from '$lib/api/images';
@@ -14,7 +14,9 @@
 	import { attachSource, type Engine, type EngineStats } from '$lib/player/engine';
 	import { audioTrackLabel, playbackErrorMessage, PlayerError, subtitleTrackLabel } from '$lib/player/labels';
 	import { prefs, type SubtitleSize } from '$lib/player/prefs';
-	import { resumeFor, saveResume } from '$lib/player/resume';
+	import { resumeMs as resumePosition } from '$lib/player/resume';
+	import { pickAudio, pickSubtitle } from '$lib/player/tracks';
+	import { session } from '$lib/session.svelte';
 	import { nextSibling } from '$lib/player/target';
 	import Artwork from '../Artwork.svelte';
 	import Button from '../Button.svelte';
@@ -150,17 +152,39 @@
 			if (!destroyed) fail(playbackErrorMessage(err));
 			return;
 		}
-		if (startSeconds !== undefined && startSeconds >= 0) return startSession(startSeconds * 1000, { audioIndex, burnIndex: subtitleIndex });
-		const r = resumeFor(itemId);
+		if (startSeconds !== undefined && startSeconds >= 0) return startSession(startSeconds * 1000, initialOptions());
+		// Server-side progress (M6): the position stored by the last session's pings.
+		const r = item ? resumePosition(item) : 0;
 		if (r && item?.kind !== 'track') {
-			resumeMs = r.positionMs;
+			resumeMs = r;
 			phase = 'prompt';
-		} else startSession(0, { audioIndex, burnIndex: subtitleIndex });
+		} else startSession(0, initialOptions());
 	}
 
 	function chooseResume(resume: boolean) {
-		startSession(resume ? resumeMs : 0, { audioIndex, burnIndex: subtitleIndex });
+		startSession(resume ? resumeMs : 0, initialOptions());
 	}
+
+	// ——— Default tracks from the user's preferences ———
+	/** Explicit ?audio / ?sub win; otherwise the preferences apply (once, to the first session). */
+	// The route keys the player on the item: these props never change for an instance.
+	const explicitTracks = untrack(() => audioIndex !== undefined || subtitleIndex !== undefined);
+	let prefsPending = !explicitTracks;
+
+	/** First request: tracks guessed from the probed streams of the first file. */
+	function initialOptions(): StartOptions {
+		if (explicitTracks || !item) return { audioIndex, burnIndex: subtitleIndex };
+		const streams = item.mediaFiles.find((f) => f.streams.length)?.streams ?? [];
+		const audios = streams.filter((st) => st.type === 'audio');
+		const subs = streams.filter((st) => st.type === 'subtitle');
+		const prefs = session.user?.prefs;
+		const audio = pickAudio(audios, prefs);
+		const playedAudio = audio ?? audios.find((a) => a.default) ?? audios[0];
+		const sub = isAudioKind(item) ? -1 : pickSubtitle(subs, prefs, playedAudio?.language);
+		return { audioIndex: audio?.index, burnIndex: sub >= 0 ? sub : undefined };
+	}
+
+	const isAudioKind = (d: ItemDetail) => d.kind === 'track';
 
 	// ——— Session lifecycle ———
 	interface StartOptions {
@@ -200,6 +224,25 @@
 		if (my !== token || destroyed) {
 			api.stopPlayback(next.sessionId);
 			return;
+		}
+
+		// Preferences checked against the session's real tracks (external subtitles, other file…).
+		if (prefsPending) {
+			prefsPending = false;
+			if (!isAudio) {
+				const prefs = session.user?.prefs;
+				const audio = pickAudio(next.audioTracks, prefs);
+				const playedAudio = audio ?? next.audioTracks.find((t) => t.index === next.selectedAudio);
+				const sub = pickSubtitle(next.subtitleTracks, prefs, playedAudio?.language);
+				const subTrack = next.subtitleTracks.find((t) => t.index === sub);
+				const audioChange = !!audio && audio.index !== next.selectedAudio;
+				const burnChange = subTrack?.delivery === 'burn' && next.selectedSubtitle !== sub;
+				if (audioChange || burnChange) {
+					api.stopPlayback(next.sessionId);
+					return startSession(startMs, { ...opts, audioIndex: audio?.index ?? next.selectedAudio, burnIndex: sub >= 0 ? sub : undefined });
+				}
+				if (opts.burnIndex === undefined) opts = { ...opts, burnIndex: subTrack?.delivery === 'vtt' ? sub : undefined };
+			}
 		}
 
 		info = next;
@@ -254,13 +297,19 @@
 		recovering = false;
 	}
 
-	/** Stops the engine and the server session (keepalive when the page is going away). */
+	/**
+	 * Stops the engine and the server session (keepalive when the page is going away).
+	 * The DELETE carries the exact position: the server stores it and finalises the played state.
+	 */
 	function teardown(keepalive: boolean) {
+		const sid = sessionId;
+		const last = sid && firstFrame ? { positionMs: Math.round((ended ? duration : position()) * 1000), paused: true } : null;
 		stopPing();
 		engine?.destroy();
 		engine = null;
-		if (sessionId) api.stopPlayback(sessionId, keepalive);
 		sessionId = null;
+		if (!sid) return;
+		api.stopPlayback(sid, keepalive, last?.positionMs);
 	}
 
 	function retry() {
@@ -287,7 +336,6 @@
 	function startPing() {
 		stopPing();
 		pingTimer = setInterval(() => {
-			saveNow();
 			const sid = sessionId;
 			if (!sid) return;
 			api.pingPlayback(sid, { positionMs: Math.round(position() * 1000), paused }).catch((err) => {
@@ -309,9 +357,10 @@
 		return (video.currentTime || 0) + offset;
 	}
 
+	/** Out-of-band ping (pause, tab hidden, next episode): the server keeps the position. */
 	function saveNow() {
-		if (!item || isAudio || phase !== 'playing' || !firstFrame) return;
-		saveResume(itemId, position() * 1000, duration * 1000);
+		if (!item || !sessionId || phase !== 'playing' || !firstFrame || restarting) return;
+		api.pingPlayback(sessionId, { positionMs: Math.round((ended ? duration : position()) * 1000), paused }).catch(() => {});
 	}
 
 	// ——— Transport ———
@@ -544,7 +593,7 @@
 	function onEnded() {
 		ended = true;
 		paused = true;
-		if (item && !isAudio) saveResume(itemId, duration * 1000, duration * 1000);
+		saveNow();
 		if (isAudio && nextItem) goNext();
 	}
 
@@ -717,7 +766,6 @@
 
 	// ——— Mount / leave ———
 	function onPageHide() {
-		saveNow();
 		teardown(true);
 	}
 
@@ -757,7 +805,6 @@
 
 	onDestroy(() => {
 		destroyed = true;
-		saveNow();
 		token++;
 		teardown(true);
 		clearTimeout(hideTimer);

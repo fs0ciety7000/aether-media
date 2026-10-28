@@ -4,6 +4,7 @@
 	import type { Item } from '$lib/api/types';
 	import { KIND_ICON, KIND_LABEL, isOffline, itemHref } from '$lib/media';
 	import { metaLine, plural } from '$lib/format';
+	import { isPlayed, progressOf } from '$lib/player/resume';
 	import PosterCard from './PosterCard.svelte';
 
 	interface Props {
@@ -36,5 +37,8 @@
 	round={item.kind === 'artist'}
 	icon={KIND_ICON[item.kind]}
 	offline={isOffline(item)}
+	progress={progressOf(item)}
+	played={isPlayed(item)}
+	unplayed={item.kind === 'series' || item.kind === 'season' ? item.unplayedCount : undefined}
 	{sizes}
 />

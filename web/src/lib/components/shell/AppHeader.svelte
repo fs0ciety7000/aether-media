@@ -2,13 +2,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { libraries, scans } from '$lib/api/stores.svelte';
-	import { currentUser } from '$lib/demo/data';
 	import { toasts } from '$lib/toast.svelte';
 	import Logo from '../brand/Logo.svelte';
 	import IconButton from '../IconButton.svelte';
 	import SearchField from '../SearchField.svelte';
 	import ThemeSwitcher from '../ThemeSwitcher.svelte';
-	import UserChip from '../UserChip.svelte';
+	import UserMenu from './UserMenu.svelte';
+	import { session } from '$lib/session.svelte';
 
 	let scrolled = $state(false);
 	let query = $state('');
@@ -55,7 +55,7 @@
 			return;
 		}
 		const names = running.map(([id]) => libraries.get(Number(id))?.name ?? `#${id}`).join(', ');
-		toasts.show('Analyse en cours', { detail: names, action: { label: 'Voir', run: () => goto('/reglages/bibliotheques') } });
+		toasts.show('Analyse en cours', { detail: names, action: session.isAdmin ? { label: 'Voir', run: () => goto('/reglages/bibliotheques') } : undefined });
 	}
 
 	$effect(onScroll);
@@ -78,8 +78,8 @@
 			aria-label={running.length ? `Notifications (${running.length} analyse${running.length > 1 ? 's' : ''} en cours)` : 'Notifications'}
 			onclick={notifications}
 		/>
-		<span class="user-full"><UserChip name={currentUser.name} detail={currentUser.email} hue={currentUser.hue} /></span>
-		<span class="user-compact"><UserChip name={currentUser.name} hue={currentUser.hue} compact /></span>
+		<span class="user-full"><UserMenu /></span>
+		<span class="user-compact"><UserMenu compact /></span>
 	</div>
 </header>
 

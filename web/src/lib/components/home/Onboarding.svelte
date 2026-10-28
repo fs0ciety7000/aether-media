@@ -3,6 +3,13 @@
 	import Button from '../Button.svelte';
 	import Icon from '../Icon.svelte';
 
+	interface Props {
+		/** Members cannot add libraries: they wait for an administrator. */
+		admin?: boolean;
+	}
+
+	let { admin = true }: Props = $props();
+
 	const steps = [
 		{ icon: 'folder', title: 'Choisissez un dossier', text: 'Films, séries ou musique : indiquez où vivent vos fichiers.' },
 		{ icon: 'refresh', title: 'Aether analyse', text: 'Fichiers, NFO et images locales sont lus ; la progression s’affiche en direct.' },
@@ -12,12 +19,16 @@
 
 <section class="onboarding panel" aria-labelledby="onb-title">
 	<div class="intro">
-		<p class="micro eyebrow">Premier lancement</p>
+		<p class="micro eyebrow">{admin ? 'Premier lancement' : 'Bienvenue'}</p>
 		<h1 id="onb-title">Bienvenue dans Aether</h1>
-		<p class="lead">Votre médiathèque est encore vide. Ajoutez une première bibliothèque : Aether s’occupe du reste.</p>
-		<div class="actions">
-			<Button variant="primary" size="lg" icon="plus" href="/reglages/bibliotheques?ajouter=1">Ajouter une bibliothèque</Button>
-		</div>
+		{#if admin}
+			<p class="lead">Votre médiathèque est encore vide. Ajoutez une première bibliothèque : Aether s’occupe du reste.</p>
+			<div class="actions">
+				<Button variant="primary" size="lg" icon="plus" href="/reglages/bibliotheques?ajouter=1">Ajouter une bibliothèque</Button>
+			</div>
+		{:else}
+			<p class="lead">Aucune bibliothèque n’est encore partagée avec vous. Demandez à un administrateur de ce serveur de vous y donner accès.</p>
+		{/if}
 	</div>
 	<ol class="steps" role="list">
 		{#each steps as step, i (step.title)}

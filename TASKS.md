@@ -48,7 +48,6 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-038 Watcher fsnotify + scan périodique de secours
 - [ ] T-039 Extras (bandes-annonces, making-of) rattachés à leur film/série
 - [ ] T-03A Bibliothèques « mixed » : structure séries mal reconnue si pas à la racine
-- [ ] T-03C API : restreindre chemins disque et endpoints d'admin quand l'auth arrive (M6)
 
 ## M3 — Métadonnées ✅
 - [x] T-040 Interface Provider + orchestrateur (ordre, fusion, verrous)
@@ -115,12 +114,15 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0E6 UI : parcours guidé (agents connus, découverte, code, choix des dossiers)
 - [ ] T-0E7 Installation de l'agent en service (systemd, launchd, service Windows)
 
-## M6 — Utilisateurs & progression
-- [ ] T-070 Comptes, argon2id, sessions, rôles
-- [ ] T-071 Accès par bibliothèque + contrôle parental
-- [ ] T-072 Progression, vu, favoris
-- [ ] T-073 Reprendre / À suivre
-- [ ] T-074 Collections (manuelles + TMDB)
+## M6 — Utilisateurs & progression ✅
+- [x] T-070 Comptes, argon2id, sessions, rôles (premier compte = admin, limitation des connexions, contrôle d'Origin)
+- [x] T-071 Accès par bibliothèque + contrôle parental (âge hérité, non classés masquables)
+- [x] T-072 Progression, vu, favoris
+- [x] T-073 Reprendre / À suivre
+- [x] T-074 Collections (manuelles + TMDB)
+- [x] T-03C Chemins disque et endpoints d'admin réservés aux administrateurs
+- [ ] T-075 Notes personnelles affichées dans l'UI (l'API les accepte déjà)
+- [ ] T-076 Avatars d'utilisateurs (image) — aujourd'hui initiales colorées
 
 ## M6b — Synchronisation Trakt / Simkl
 - [ ] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement

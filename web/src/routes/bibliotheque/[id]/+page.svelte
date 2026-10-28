@@ -5,6 +5,7 @@
 	import type { Library } from '$lib/api/types';
 	import ItemBrowser from '$lib/components/browse/ItemBrowser.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { session } from '$lib/session.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { libraryKindInfo } from '$lib/media';
 
@@ -40,7 +41,7 @@
 	<div class="page">
 		<EmptyState icon="alert" title="Bibliothèque introuvable" role="alert">
 			<p>{errorMessage(error)}</p>
-			{#snippet actions()}<Button href="/reglages/bibliotheques">Gérer les bibliothèques</Button>{/snippet}
+			{#snippet actions()}{#if session.isAdmin}<Button href="/reglages/bibliotheques">Gérer les bibliothèques</Button>{:else}<Button href="/" icon="home">Accueil</Button>{/if}{/snippet}
 		</EmptyState>
 	</div>
 {/if}

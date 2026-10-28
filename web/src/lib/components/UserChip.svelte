@@ -6,7 +6,8 @@
 		name: string;
 		detail?: string;
 		src?: string;
-		href?: string;
+		/** Link target; null renders a plain block (inside a menu trigger). */
+		href?: string | null;
 		/** Avatar only (mobile header). */
 		compact?: boolean;
 		hue?: number;
@@ -15,7 +16,7 @@
 	let { name, detail, src, href = '/profil', compact = false, hue }: Props = $props();
 </script>
 
-<a class="user" class:compact {href} aria-label="Profil de {name}">
+<svelte:element this={href ? 'a' : 'span'} class="user" class:compact href={href ?? undefined} aria-label={href ? `Profil de ${name}` : undefined}>
 	<Avatar {name} {src} {hue} size={compact ? 34 : 40} />
 	{#if !compact}
 		<span class="text">
@@ -23,7 +24,7 @@
 			{#if detail}<span class="detail">{detail}</span>{/if}
 		</span>
 	{/if}
-</a>
+</svelte:element>
 
 <style>
 	.user {

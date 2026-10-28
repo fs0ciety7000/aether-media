@@ -1,7 +1,7 @@
 // What "Lecture" plays for each kind, and the player URL.
 import { api } from '$lib/api/client';
 import type { Item, Kind } from '$lib/api/types';
-import { latestResume, resumeFor } from './resume';
+import { resumeMs } from './resume';
 
 /** Kinds the player opens directly. */
 export const PLAYABLE: Kind[] = ['movie', 'episode', 'track'];
@@ -10,7 +10,8 @@ export const HAS_PLAY: Kind[] = ['movie', 'episode', 'track', 'series', 'season'
 
 export function playerHref(id: number, opts: { t?: number; audio?: number; sub?: number } = {}): string {
 	const sp = new URLSearchParams();
-	if (opts.t) sp.set('t', String(Math.round(opts.t)));
+	// t=0 is meaningful: "Depuis le début" skips the resume prompt.
+	if (opts.t !== undefined) sp.set('t', String(Math.round(opts.t)));
 	if (opts.audio !== undefined) sp.set('audio', String(opts.audio));
 	if (opts.sub !== undefined) sp.set('sub', String(opts.sub));
 	const q = sp.toString();
@@ -25,27 +26,48 @@ async function children(parent: number, kind: Kind, signal?: AbortSignal): Promi
 	return [...page.items].sort(byIndex);
 }
 
-/** Regular seasons first; specials (season 0) only when nothing else exists. */
-function firstSeason(seasons: Item[]): Item | undefined {
-	return seasons.find((s) => (s.indexNumber ?? 1) > 0) ?? seasons[0];
+/** In a season (sorted): the in-progress episode, else the first unwatched one. */
+export function nextInSeason(eps: Item[]): Item | undefined {
+	return eps.find((e) => resumeMs(e) > 0 && !e.userData?.played) ?? eps.find((e) => !e.userData?.played);
+}
+
+/** Seasons in watching order: regular seasons, then specials (season 0). */
+function watchOrder(seasons: Item[]): Item[] {
+	return [...seasons.filter((s) => (s.indexNumber ?? 1) > 0), ...seasons.filter((s) => (s.indexNumber ?? 1) <= 0)];
 }
 
 /**
- * Item to play for `item`: itself (movie, episode, track), the in-progress episode of a season
- * (else its first), the first episode of a series' first season, the first track of an album.
+ * Next-up episode of a series: the first unwatched (or in-progress) episode in order,
+ * skipping fully watched seasons. Everything watched: the very first episode.
+ */
+export async function seriesNextUp(seriesId: number, signal?: AbortSignal, knownSeasons?: Item[]): Promise<Item | null> {
+	const seasons = watchOrder(knownSeasons?.length ? [...knownSeasons].sort(byIndex) : await children(seriesId, 'season', signal));
+	let first: Item | undefined;
+	for (const season of seasons) {
+		// unplayedCount === 0: nothing left there (missing on older servers: look inside).
+		if (season.unplayedCount === 0 && first) continue;
+		const eps = await children(season.id, 'episode', signal);
+		first ??= eps[0];
+		if (season.unplayedCount === 0) continue;
+		const next = nextInSeason(eps);
+		if (next) return next;
+	}
+	return first ?? null;
+}
+
+/**
+ * Item to play for `item`: itself (movie, episode, track), the in-progress or first unwatched
+ * episode of a season (else its first), the next-up episode of a series, the first track of an album.
  * `known` lets callers pass already-loaded children (episodes of a season, tracks…).
  */
 export async function resolvePlayTarget(item: Pick<Item, 'id' | 'kind'>, known?: Item[], signal?: AbortSignal): Promise<number | null> {
 	if (PLAYABLE.includes(item.kind)) return item.id;
 	if (item.kind === 'season') {
-		const eps = known?.length ? known : await children(item.id, 'episode', signal);
-		return latestResume(eps.map((e) => e.id))?.id ?? eps[0]?.id ?? null;
+		const eps = known?.length ? [...known].sort(byIndex) : await children(item.id, 'episode', signal);
+		return (nextInSeason(eps) ?? eps[0])?.id ?? null;
 	}
 	if (item.kind === 'series') {
-		const season = firstSeason(await children(item.id, 'season', signal));
-		if (!season) return null;
-		const eps = await children(season.id, 'episode', signal);
-		return latestResume(eps.map((e) => e.id))?.id ?? eps[0]?.id ?? null;
+		return (await seriesNextUp(item.id, signal))?.id ?? null;
 	}
 	if (item.kind === 'album') {
 		const tracks = known?.length ? [...known].sort(byIndex) : await children(item.id, 'track', signal);
@@ -54,12 +76,6 @@ export async function resolvePlayTarget(item: Pick<Item, 'id' | 'kind'>, known?:
 	return null;
 }
 
-/** "Reprendre" when a local resume point exists for the item or one of its known children. */
-export function hasResume(item: Pick<Item, 'id' | 'kind'>, known: Item[] = []): boolean {
-	if (item.kind === 'movie' || item.kind === 'episode') return !!resumeFor(item.id);
-	if (item.kind === 'season' || item.kind === 'series') return !!latestResume(known.map((e) => e.id));
-	return false;
-}
 
 /** Next episode in the same season / next track in the same album (simple version). */
 export async function nextSibling(item: Pick<Item, 'id' | 'kind' | 'parentId'>, signal?: AbortSignal): Promise<Item | null> {

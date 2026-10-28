@@ -3,6 +3,7 @@
 	import type { Image } from '$lib/api/types';
 	import ProgressLine from './ProgressLine.svelte';
 	import OfflineBadge from './OfflineBadge.svelte';
+	import WatchBadge from './WatchBadge.svelte';
 	import Artwork from './Artwork.svelte';
 	import type { IconName } from './Icon.svelte';
 
@@ -30,6 +31,10 @@
 		art?: Snippet;
 		/** 0–1; shows a thin accent bar. */
 		progress?: number;
+		/** Watched: check badge. */
+		played?: boolean;
+		/** Unwatched episodes (series, season): count badge. */
+		unplayed?: number;
 		/** Files on an offline source: greyed with a "Hors ligne" badge. */
 		offline?: boolean;
 		class?: string;
@@ -37,7 +42,7 @@
 		'data-demo'?: string;
 	}
 
-	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, offline = false, class: className, 'data-demo': demo }: Props = $props();
+	let { title, year, href, image, src, ratio = '2 / 3', sizes = '(max-width: 767px) 45vw, 184px', icon, round = false, subtitle, color, art, progress, played = false, unplayed, offline = false, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['poster-card', className, { offline }]} data-demo={demo} title={offline ? 'Source hors ligne' : undefined}>
@@ -45,6 +50,7 @@
 		<div class="art"><Artwork {image} {src} {color} {art} {ratio} {sizes} placeholder={{ title, year, icon }} alt="" /></div>
 		{#if progress}<ProgressLine value={progress} />{/if}
 		{#if offline}<span class="off-badge"><OfflineBadge /></span>{/if}
+		{#if played || unplayed}<span class="watch"><WatchBadge {played} {unplayed} /></span>{/if}
 	</div>
 	<div class="meta">
 		<span class="title">{title}</span>
@@ -105,6 +111,19 @@
 		top: 8px;
 		left: 8px;
 		z-index: 1;
+	}
+
+	.watch {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 1;
+		display: flex;
+	}
+
+	.round .watch {
+		top: 6%;
+		right: 6%;
 	}
 
 	.round .off-badge {

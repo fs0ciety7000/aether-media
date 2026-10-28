@@ -109,3 +109,15 @@ export function isOffline(item: { available?: boolean } | undefined | null): boo
 }
 
 export const OFFLINE_HINT = 'Source hors ligne';
+
+/** Languages offered in the playback preferences (ISO 639-2/B, as ffprobe reports them). */
+export const PREF_LANGUAGES: { value: string; label: string }[] = [
+	'fre', 'eng', 'ger', 'spa', 'ita', 'por', 'dut', 'jpn', 'kor', 'chi', 'rus', 'ara', 'swe', 'dan', 'nor', 'fin', 'pol', 'tur'
+].map((c) => ({ value: c, label: LANGS[c] }));
+
+export const SUBTITLE_MODES: { value: 'auto' | 'always' | 'forced' | 'off'; label: string; hint: string }[] = [
+	{ value: 'auto', label: 'Automatique', hint: 'Sous-titres quand la langue audio diffère de votre langue de sous-titres ; sinon, seulement les passages forcés.' },
+	{ value: 'always', label: 'Toujours', hint: 'Sous-titres dans votre langue dès qu’ils existent.' },
+	{ value: 'forced', label: 'Forcés seulement', hint: 'Uniquement les passages traduits (dialogues en langue étrangère, panneaux).' },
+	{ value: 'off', label: 'Désactivés', hint: 'Jamais de sous-titres par défaut ; vous pouvez toujours en choisir pendant la lecture.' }
+];

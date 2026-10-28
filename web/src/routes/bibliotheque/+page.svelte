@@ -2,6 +2,7 @@
 	// Library index (the mobile tab bar has no sidebar).
 	import { libraries } from '$lib/api/stores.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { session } from '$lib/session.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -29,8 +30,8 @@
 		</div>
 	{:else if !libraries.list.length}
 		<EmptyState icon="layers" title="Aucune bibliothèque">
-			<p>Ajoutez un dossier de films, de séries ou de musique pour commencer.</p>
-			{#snippet actions()}<Button variant="primary" icon="plus" href="/reglages/bibliotheques?ajouter=1">Ajouter une bibliothèque</Button>{/snippet}
+			<p>{session.isAdmin ? 'Ajoutez un dossier de films, de séries ou de musique pour commencer.' : 'Aucune bibliothèque n’est encore partagée avec vous.'}</p>
+			{#snippet actions()}{#if session.isAdmin}<Button variant="primary" icon="plus" href="/reglages/bibliotheques?ajouter=1">Ajouter une bibliothèque</Button>{/if}{/snippet}
 		</EmptyState>
 	{:else}
 		<ul class="list" role="list">

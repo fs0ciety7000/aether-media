@@ -8,6 +8,7 @@ const api = env.AETHER_API ?? 'http://127.0.0.1:8096';
 export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
-		proxy: { '/api': { target: api, changeOrigin: true } }
+		// changeOrigin stays off: the server checks that Origin matches Host on cookie writes (CSRF, M6).
+		proxy: { '/api': { target: api, changeOrigin: false } }
 	}
 });

@@ -4,7 +4,13 @@
 	import '$lib/styles/base.css';
 
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { setAuthHandlers } from '$lib/api/client';
+	import Button from '$lib/components/Button.svelte';
+	import Logo from '$lib/components/brand/Logo.svelte';
+	import { isPublicPath, loginHref, session } from '$lib/session.svelte';
+	import { toasts } from '$lib/toast.svelte';
 	import AppHeader from '$lib/components/shell/AppHeader.svelte';
 	import Sidebar from '$lib/components/shell/Sidebar.svelte';
 	import TabBar from '$lib/components/shell/TabBar.svelte';
@@ -16,8 +22,10 @@
 	const SIDEBAR_KEY = 'aether:sidebar';
 	let collapsed = $state(readCollapsed());
 	const version = $derived(system.info?.version);
-	/** Full-screen routes (the player) render without the app shell. */
-	const bare = $derived(page.route.id?.startsWith('/lecture') ?? false);
+	const publicRoute = $derived(isPublicPath(page.url.pathname));
+	/** Full-screen routes (the player, login, first run) render without the app shell. */
+	const bare = $derived((page.route.id?.startsWith('/lecture') ?? false) || publicRoute);
+	const ready = $derived(publicRoute || session.status === 'authenticated');
 
 	function readCollapsed() {
 		try {
@@ -36,16 +44,66 @@
 		}
 	}
 
-	// Shared data: everything degrades gracefully when the API is unreachable.
+	const here = () => page.url.pathname + page.url.search;
+	let lastForbidden = 0;
+
 	onMount(() => {
 		system.ensure();
+		setAuthHandlers({
+			onUnauthenticated: () => {
+				session.expire();
+				if (!isPublicPath(page.url.pathname)) goto(loginHref(here()), { replaceState: true });
+			},
+			onForbidden: () => {
+				// One toast per burst (several requests can be refused at once).
+				if (Date.now() - lastForbidden < 3000) return;
+				lastForbidden = Date.now();
+				toasts.show('Action réservée aux administrateurs');
+			}
+		});
+		session.init();
+	});
+
+	// Gate every private route on the session; send first runs to the assistant.
+	$effect(() => {
+		const status = session.status;
+		if (publicRoute) return;
+		if (status === 'setup') goto('/bienvenue', { replaceState: true });
+		else if (status === 'anonymous') goto(loginHref(here()), { replaceState: true });
+	});
+
+	// Shared data, once signed in (reloaded when another account signs in).
+	let dataFor: number | null = null;
+	$effect(() => {
+		const user = session.user;
+		if (session.status !== 'authenticated' || !user) return;
+		if (dataFor === user.id) return;
+		const first = dataFor === null;
+		dataFor = user.id;
 		libraries.ensure();
 		scans.ensure();
-		unmatched.ensure();
+		if (!first) libraries.refresh();
+		if (user.isAdmin) {
+			unmatched.ensure();
+			if (!first) unmatched.refresh();
+		} else unmatched.count = 0;
 	});
 </script>
 
-{#if bare}
+{#if !ready}
+	<div class="splash" aria-busy={session.status === 'unknown'}>
+		<Logo size={44} wordmark={false} />
+		{#if session.status === 'unreachable'}
+			<div class="splash-text" role="alert">
+				<p class="splash-title">Le serveur est injoignable</p>
+				<p>Vérifiez qu’Aether est démarré, puis réessayez.</p>
+				<Button icon="refresh" onclick={() => session.reload()}>Réessayer</Button>
+			</div>
+		{:else}
+			<span class="visually-hidden">Chargement…</span>
+		{/if}
+	</div>
+{:else if bare}
 	{@render children()}
 {:else}
 	<a class="skip" href="#contenu">Aller au contenu</a>
@@ -71,6 +129,47 @@
 <Toaster />
 
 <style>
+	.splash {
+		display: grid;
+		place-content: center;
+		justify-items: center;
+		gap: var(--sp-5);
+		min-height: 100vh;
+		min-height: 100dvh;
+		padding: var(--sp-5);
+		background: var(--bg);
+		text-align: center;
+	}
+
+	.splash :global(.logo) {
+		animation: breathe 1.6s var(--ease) infinite alternate;
+	}
+
+	.splash-text {
+		display: grid;
+		justify-items: center;
+		gap: var(--sp-3);
+		color: var(--text-muted);
+	}
+
+	.splash-title {
+		color: var(--text);
+		font-size: var(--fs-h2);
+		font-weight: var(--fw-bold);
+	}
+
+	@keyframes breathe {
+		from {
+			opacity: 0.45;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.splash :global(.logo) {
+			animation: none;
+		}
+	}
+
 	.shell {
 		--sidebar-w: 248px;
 		display: grid;

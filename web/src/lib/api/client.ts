@@ -1,6 +1,9 @@
 // Typed client for /api/v1. Every call accepts an AbortSignal; errors are ApiError.
 import type {
+	AuthResult,
 	Candidate,
+	Collection,
+	DeviceSession,
 	HomeData,
 	ItemDetail,
 	Item,
@@ -18,7 +21,12 @@ import type {
 	SourceInput,
 	SourcePatch,
 	SourceTestResult,
-	SystemInfo
+	SystemInfo,
+	User,
+	UserData,
+	UserDataPatch,
+	UserInput,
+	MePatch
 } from './types';
 
 export const API_BASE = '/api/v1';
@@ -45,11 +53,46 @@ export function isAbort(err: unknown): boolean {
 	return err instanceof DOMException && err.name === 'AbortError';
 }
 
+/** UI copy for known server error codes (the server's own messages are terse, lower-case). */
+const CODE_MESSAGES: Record<string, string> = {
+	invalid_credentials: 'Nom ou mot de passe incorrect.',
+	rate_limited: 'Trop de tentatives. Réessayez dans quelques minutes.',
+	unauthenticated: 'Votre session a expiré. Reconnectez-vous.',
+	forbidden: 'Action réservée aux administrateurs.',
+	weak_password: 'Le mot de passe doit faire au moins 8 caractères.',
+	wrong_password: 'Le mot de passe actuel est incorrect.',
+	name_taken: 'Ce nom est déjà utilisé.',
+	last_admin: 'Impossible : c’est le dernier administrateur.',
+	already_setup: 'Aether est déjà configuré.',
+	bad_origin: 'Requête refusée (origine inattendue).'
+};
+
 /** Human message for any thrown value (French UI copy). */
 export function errorMessage(err: unknown): string {
-	if (err instanceof ApiError) return err.message;
+	if (err instanceof ApiError) return CODE_MESSAGES[err.code] ?? sentence(err.message);
 	if (err instanceof TypeError) return 'Le serveur est injoignable.';
 	return 'Une erreur inattendue est survenue.';
+}
+
+function sentence(m: string): string {
+	const t = m.trim();
+	if (!t) return t;
+	return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?…]$/.test(t) ? '' : '.');
+}
+
+// ——— Global auth handling (registered by the root layout) ———
+
+export interface AuthHandlers {
+	/** 401 on a request that expects a session: send the user to the login page. */
+	onUnauthenticated?: () => void;
+	/** 403: the current user may not do this. */
+	onForbidden?: (err: ApiError) => void;
+}
+
+let handlers: AuthHandlers = {};
+
+export function setAuthHandlers(h: AuthHandlers) {
+	handlers = h;
 }
 
 type Params = Record<string, string | number | boolean | undefined | null | (string | number)[]>;
@@ -72,16 +115,27 @@ interface RequestOptions {
 	body?: unknown;
 	params?: Params;
 	signal?: AbortSignal;
+	/**
+	 * false: a 401/403 is the caller's business (login form, session probe) —
+	 * no redirect, no toast.
+	 */
+	auth?: boolean;
+	/** Survives the page (pagehide). */
+	keepalive?: boolean;
+	/** Keep integer ids beyond 2^53 exact (as strings): JSON.parse would round them. */
+	bigIds?: boolean;
 }
 
-export async function request<T>(path: string, { method = 'GET', body, params, signal }: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, { method = 'GET', body, params, signal, auth = true, keepalive, bigIds }: RequestOptions = {}): Promise<T> {
 	const headers: Record<string, string> = { accept: 'application/json' };
 	if (body !== undefined) headers['content-type'] = 'application/json';
 	const res = await fetch(API_BASE + path + query(params), {
 		method,
 		headers,
 		body: body === undefined ? undefined : JSON.stringify(body),
-		signal
+		signal,
+		keepalive,
+		credentials: 'same-origin'
 	});
 	if (!res.ok) {
 		let code = `http_${res.status}`;
@@ -93,10 +147,14 @@ export async function request<T>(path: string, { method = 'GET', body, params, s
 		} catch {
 			/* not JSON */
 		}
-		throw new ApiError(res.status, code, message);
+		const err = new ApiError(res.status, code, message);
+		if (auth && res.status === 401) handlers.onUnauthenticated?.();
+		else if (auth && res.status === 403) handlers.onForbidden?.(err);
+		throw err;
 	}
 	if (res.status === 204) return undefined as T;
-	const text = await res.text();
+	let text = await res.text();
+	if (bigIds) text = text.replace(/"id"\s*:\s*(\d{16,})/g, '"id":"$1"');
 	return (text ? JSON.parse(text) : undefined) as T;
 }
 
@@ -167,7 +225,9 @@ export const api = {
 		request<void>(`/libraries/${libraryId}/sources/${sourceId}`, { method: 'DELETE' }),
 
 	items: async (q: ItemQuery, signal?: AbortSignal) => {
-		const page = await request<ItemPage>('/items', { params: q as Params, signal });
+		// `played=false` is a real filter: query() drops false values, so send it as text.
+		const params = { ...q, played: q.played === undefined ? undefined : String(q.played) } as Params;
+		const page = await request<ItemPage>('/items', { params, signal });
 		page.items = (page.items ?? []).map(normalizeItem);
 		return page;
 	},
@@ -188,6 +248,7 @@ export const api = {
 		return {
 			hero: (h.hero ?? []).map(normalizeItem),
 			continueWatching: (h.continueWatching ?? []).map(normalizeItem),
+			nextUp: (h.nextUp ?? []).map(normalizeItem),
 			recentlyAdded: (h.recentlyAdded ?? []).map((r) => ({ ...r, items: (r.items ?? []).map(normalizeItem) })),
 			categories: h.categories ?? [],
 			recommended: (h.recommended ?? []).map(normalizeItem)
@@ -223,15 +284,83 @@ export const api = {
 		p.startMs ??= 0;
 		return p;
 	},
-	pingPlayback: (sessionId: string, body: { positionMs: number; paused: boolean }) =>
-		request<void>(`/playback/sessions/${encodeURIComponent(sessionId)}/ping`, { method: 'POST', body }),
+	pingPlayback: (sessionId: string, body: { positionMs: number; paused: boolean }, keepalive = false) =>
+		request<void>(`/playback/sessions/${encodeURIComponent(sessionId)}/ping`, { method: 'POST', body, keepalive, auth: !keepalive }),
 	/**
 	 * Stops a session. `keepalive` lets the request outlive the page (pagehide / unload):
 	 * sendBeacon cannot send DELETE.
 	 */
-	stopPlayback: (sessionId: string, keepalive = false) =>
-		fetch(`${API_BASE}/playback/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE', keepalive }).then(
+	stopPlayback: (sessionId: string, keepalive = false, positionMs?: number) =>
+		fetch(`${API_BASE}/playback/sessions/${encodeURIComponent(sessionId)}`, {
+			method: 'DELETE',
+			keepalive,
+			credentials: 'same-origin',
+			// M6: the final position, so the server can finalise the played state in one request.
+			...(positionMs !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positionMs: Math.round(positionMs) }) } : {})
+		}).then(
 			() => undefined,
 			() => undefined
-		)
+		),
+
+	// ——— Comptes (M6) ———
+	setup: async (body: { name: string; password: string; device?: string }) =>
+		normalizeAuth(await request<AuthResult>('/setup', { method: 'POST', body, auth: false })),
+	login: async (body: { name: string; password: string; device?: string }) =>
+		normalizeAuth(await request<AuthResult>('/auth/login', { method: 'POST', body, auth: false })),
+	logout: () => request<void>('/auth/logout', { method: 'POST', auth: false }),
+	/** Session probe: a 401 here is an answer, not a redirect. */
+	me: async (signal?: AbortSignal) => normalizeUser(await request<User>('/me', { signal, auth: false })),
+	patchMe: async (body: MePatch) => normalizeUser(await request<User>('/me', { method: 'PATCH', body })),
+	// Session ids are 64-bit random integers: kept as strings to survive JSON.parse.
+	mySessions: async (signal?: AbortSignal) => (await request<DeviceSession[]>('/me/sessions', { signal, bigIds: true })) ?? [],
+	revokeSession: (id: DeviceSession['id']) => request<void>(`/me/sessions/${encodeURIComponent(String(id))}`, { method: 'DELETE' }),
+	users: async (signal?: AbortSignal) => ((await request<User[]>('/users', s(signal))) ?? []).map(normalizeUser),
+	createUser: async (body: UserInput) => normalizeUser(await request<User>('/users', { method: 'POST', body })),
+	patchUser: async (id: number, body: UserInput) => normalizeUser(await request<User>(`/users/${id}`, { method: 'PATCH', body })),
+	deleteUser: (id: number) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+
+	// ——— Progression (M6) ———
+	putUserData: async (itemId: number, body: UserDataPatch) =>
+		normalizeUserData(await request<UserData>(`/items/${itemId}/userdata`, { method: 'PUT', body })),
+
+	// ——— Collections (M6) ———
+	collections: async (signal?: AbortSignal) => ((await request<Collection[]>('/collections', s(signal))) ?? []).map(normalizeCollection),
+	collectionItems: async (id: string, signal?: AbortSignal) => {
+		const r = await request<{ collection: Collection; items: Item[] }>(`/collections/${encodeURIComponent(id)}/items`, s(signal));
+		return { collection: normalizeCollection(r.collection), items: (r.items ?? []).map(normalizeItem) };
+	},
+	createCollection: async (body: { name: string; shared?: boolean }) =>
+		normalizeCollection(await request<Collection>('/collections', { method: 'POST', body })),
+	patchCollection: async (id: string, body: { name?: string; shared?: boolean }) => {
+		const c = await request<Collection | undefined>(`/collections/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+		return c ? normalizeCollection(c) : undefined;
+	},
+	deleteCollection: (id: string) => request<void>(`/collections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+	addToCollection: (id: string, itemId: number) => request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'PUT' }),
+	removeFromCollection: (id: string, itemId: number) =>
+		request<void>(`/collections/${encodeURIComponent(id)}/items/${itemId}`, { method: 'DELETE' })
 };
+
+export function normalizeUser(u: User): User {
+	u.libraryIds ??= [];
+	u.prefs ??= {};
+	u.allLibraries ??= true;
+	u.blockUnrated ??= false;
+	return u;
+}
+
+function normalizeAuth(r: AuthResult): AuthResult {
+	if (r?.user) normalizeUser(r.user);
+	return r;
+}
+
+export function normalizeUserData(d: UserData | undefined): UserData {
+	return { positionMs: 0, played: false, playCount: 0, favorite: false, ...(d ?? {}) };
+}
+
+function normalizeCollection(c: Collection): Collection {
+	c.images ??= {};
+	c.count ??= 0;
+	c.shared ??= false;
+	return c;
+}

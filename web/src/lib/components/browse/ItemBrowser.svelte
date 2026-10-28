@@ -8,8 +8,16 @@
 		{ value: 'premiereDate', label: 'Date de sortie' },
 		{ value: 'rating', label: 'Note' },
 		{ value: 'runtime', label: 'Durée' },
+		{ value: 'lastPlayed', label: 'Vu récemment' },
 		{ value: 'random', label: 'Aléatoire' }
 	];
+
+	/** Watch-state filters (M6): URL `vu` → API params. */
+	export const WATCH_FILTERS = [
+		{ value: 'non', label: 'Non vus', query: { played: false } },
+		{ value: 'encours', label: 'En cours', query: { inProgress: true } },
+		{ value: 'oui', label: 'Vus', query: { played: true } }
+	] as const;
 </script>
 
 <script lang="ts">
@@ -29,6 +37,7 @@
 	import ItemCard from '../ItemCard.svelte';
 	import Select from '../Select.svelte';
 	import Skeleton from '../Skeleton.svelte';
+	import { session } from '$lib/session.svelte';
 
 	interface Props {
 		title: string;
@@ -55,6 +64,8 @@
 	const yearFrom = $derived(num(sp.get('de')));
 	const yearTo = $derived(num(sp.get('a')));
 	const view = $derived(sp.get('vue') === 'albums' ? 'albums' : 'artistes');
+	const watch = $derived(WATCH_FILTERS.find((w) => w.value === sp.get('vu')));
+	const favorite = $derived(sp.get('favoris') === '1');
 	const isMusic = $derived(library?.kind === 'music');
 	const isVideo = $derived(!isMusic);
 
@@ -85,12 +96,14 @@
 		hdr: hdr || undefined,
 		yearFrom,
 		yearTo,
+		...(isVideo ? watch?.query : undefined),
+		favorite: favorite || undefined,
 		sort,
 		order: order === defaultOrder ? undefined : order,
 		limit: PAGE
 	});
 	const queryKey = $derived(JSON.stringify(query));
-	const activeFilters = $derived(!!(genre || resolution || hdr || yearFrom || yearTo));
+	const activeFilters = $derived(!!(genre || resolution || hdr || yearFrom || yearTo || watch || favorite));
 
 	function update(changes: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -102,7 +115,7 @@
 	}
 
 	function clearFilters() {
-		update({ genre: undefined, res: undefined, hdr: undefined, de: undefined, a: undefined });
+		update({ genre: undefined, res: undefined, hdr: undefined, de: undefined, a: undefined, vu: undefined, favoris: undefined });
 	}
 
 	// ——— Filters available in this library ———
@@ -272,8 +285,16 @@
 			</div>
 		</div>
 
-		{#if filters?.years || (isVideo && filters && (filters.resolutions.length || filters.hasHdr)) || activeFilters}
+		{#if isVideo || filters?.years || activeFilters}
 			<div class="line secondary" role="group" aria-label="Autres filtres">
+				{#if isVideo}
+					<span class="watch" role="group" aria-label="État de visionnage">
+						{#each WATCH_FILTERS as w (w.value)}
+							<Chip toggle={false} selected={watch?.value === w.value} onclick={() => update({ vu: watch?.value === w.value ? undefined : w.value })}>{w.label}</Chip>
+						{/each}
+						<Chip toggle={false} selected={favorite} onclick={() => update({ favoris: favorite ? undefined : '1' })}>Favoris</Chip>
+					</span>
+				{/if}
 				{#if filters?.years}
 					<span class="years">
 						<span class="micro years-label" aria-hidden="true">Années</span>
@@ -325,13 +346,19 @@
 	{:else if !loading && !items.length}
 		{#if activeFilters}
 			<EmptyState icon="sliders" title="Aucun titre ne correspond" role="status">
-				<p>Essayez d’élargir la période ou de retirer un filtre.</p>
+				<p>
+					{#if watch?.value === 'encours'}Rien en cours de lecture ici pour l’instant.{:else if favorite}Aucun favori ici : touchez le cœur sur une fiche pour en ajouter.{:else if watch?.value === 'non'}Vous avez tout vu ici. Bravo !{:else}Essayez d’élargir la période ou de retirer un filtre.{/if}
+				</p>
 				{#snippet actions()}<Button icon="x" onclick={clearFilters}>Effacer les filtres</Button>{/snippet}
 			</EmptyState>
 		{:else}
 			<EmptyState icon="folder" title="Cette bibliothèque est vide" role="status">
-				<p>Lancez une analyse depuis les réglages, ou vérifiez que les dossiers contiennent des médias reconnus.</p>
-				{#snippet actions()}<Button href="/reglages/bibliotheques">Gérer les bibliothèques</Button>{/snippet}
+				{#if session.isAdmin}
+					<p>Lancez une analyse depuis les réglages, ou vérifiez que les dossiers contiennent des médias reconnus.</p>
+				{:else}
+					<p>Aucun titre disponible pour l’instant.</p>
+				{/if}
+				{#snippet actions()}{#if session.isAdmin}<Button href="/reglages/bibliotheques">Gérer les bibliothèques</Button>{/if}{/snippet}
 			</EmptyState>
 		{/if}
 	{:else}
@@ -475,6 +502,15 @@
 
 	.chips > :global(*) {
 		flex: none;
+	}
+
+	.watch {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: var(--sp-2);
+		padding-right: var(--sp-3);
+		margin-right: var(--sp-1);
+		box-shadow: 1px 0 0 var(--line);
 	}
 
 	.years {

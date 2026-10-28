@@ -7,22 +7,28 @@
 
 	interface Props {
 		files: MediaFile[];
+		/** File names are for administrators (the server omits paths for members). */
+		showPath?: boolean;
 	}
 
-	let { files }: Props = $props();
+	let { files, showPath = false }: Props = $props();
 	const uid = $props.id();
 </script>
 
 {#if files.length}
 	<section class="tech" aria-labelledby="tech-{uid}">
 		<SectionHeader title="Informations techniques" id="tech-{uid}" />
-		{#each files as f (f.id)}
+		{#each files as f, i (f.id)}
 			{@const video = f.streams.filter((s) => s.type === 'video')}
 			{@const audio = f.streams.filter((s) => s.type === 'audio')}
 			{@const subs = f.streams.filter((s) => s.type === 'subtitle')}
 			<div class="file panel">
 				<div class="file-head">
-					<p class="path" title={f.path}>{f.path.split('/').pop()}</p>
+					{#if showPath && f.path}
+						<p class="path" title={f.path}>{f.path.split('/').pop()}</p>
+					{:else}
+						<p class="path">{files.length > 1 ? `Fichier ${i + 1}` : 'Fichier'}</p>
+					{/if}
 					<p class="file-meta tabular">
 						{metaLine(f.part ? `Partie ${f.part}` : undefined, f.container?.toUpperCase(), formatBytes(f.size), formatBitrate(f.bitrate), formatTrackTime(f.durationMs))}
 					</p>

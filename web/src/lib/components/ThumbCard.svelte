@@ -5,6 +5,7 @@
 	import Icon from './Icon.svelte';
 	import ProgressLine from './ProgressLine.svelte';
 	import OfflineBadge from './OfflineBadge.svelte';
+	import WatchBadge from './WatchBadge.svelte';
 
 	interface Props {
 		title: string;
@@ -19,6 +20,8 @@
 		color?: string;
 		art?: Snippet;
 		progress?: number;
+		/** Watched: check badge. */
+		played?: boolean;
 		/** Show the play affordance on hover. */
 		playable?: boolean;
 		/** Files on an offline source: greyed, badge, no play affordance. */
@@ -28,7 +31,7 @@
 		'data-demo'?: string;
 	}
 
-	let { title, eyebrow, detail, href, image, src, sizes = '(max-width: 767px) 80vw, 300px', color, art, progress, playable = true, offline = false, class: className, 'data-demo': demo }: Props = $props();
+	let { title, eyebrow, detail, href, image, src, sizes = '(max-width: 767px) 80vw, 300px', color, art, progress, played = false, playable = true, offline = false, class: className, 'data-demo': demo }: Props = $props();
 </script>
 
 <svelte:element this={href ? 'a' : 'div'} {href} class={['thumb-card', className, { offline }]} data-demo={demo} title={offline ? 'Source hors ligne' : undefined}>
@@ -39,6 +42,7 @@
 			<span class="play" aria-hidden="true"><Icon name="play" size={18} filled /></span>
 		{/if}
 		{#if progress}<ProgressLine value={progress} />{/if}
+		{#if played}<span class="watch"><WatchBadge played /></span>{/if}
 	</div>
 	<div class="meta">
 		<div class="text">
@@ -92,6 +96,14 @@
 		top: 8px;
 		left: 8px;
 		z-index: 1;
+	}
+
+	.watch {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 1;
+		display: flex;
 	}
 
 	.play {

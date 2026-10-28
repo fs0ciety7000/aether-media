@@ -1,8 +1,9 @@
 <script lang="ts">
 	// Item detail, adapted to the kind: movie, series, season, episode, artist, album.
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, errorMessage, isAbort } from '$lib/api/client';
+	import { api, errorMessage, isAbort, normalizeUserData } from '$lib/api/client';
 	import { events } from '$lib/api/events.svelte';
 	import { firstImage } from '$lib/api/images';
 	import { libraries } from '$lib/api/stores.svelte';
@@ -16,7 +17,9 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import OfflineBadge from '$lib/components/OfflineBadge.svelte';
+	import ProgressLine from '$lib/components/ProgressLine.svelte';
 	import ItemCard from '$lib/components/ItemCard.svelte';
+	import AddToCollectionDialog from '$lib/components/collections/AddToCollectionDialog.svelte';
 	import EditItemDialog from '$lib/components/items/EditItemDialog.svelte';
 	import IdentifyDialog from '$lib/components/items/IdentifyDialog.svelte';
 	import Menu, { type MenuItem } from '$lib/components/Menu.svelte';
@@ -24,10 +27,11 @@
 	import SectionHeader from '$lib/components/SectionHeader.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Tag from '$lib/components/Tag.svelte';
-	import { formatDate, formatRuntime, metaLine, plural } from '$lib/format';
+	import { formatClock, formatDate, formatRuntime, metaLine, plural } from '$lib/format';
 	import { episodeCode, isOffline, KIND_ICON, KIND_LABEL, OFFLINE_HINT } from '$lib/media';
-	import { latestResume } from '$lib/player/resume';
-	import { HAS_PLAY, hasResume, playerHref, resolvePlayTarget } from '$lib/player/target';
+	import { isFavorite, isPlayed, progressOf, resumeMs } from '$lib/player/resume';
+	import { HAS_PLAY, nextInSeason, playerHref, resolvePlayTarget, seriesNextUp } from '$lib/player/target';
+	import { session } from '$lib/session.svelte';
 	import { toasts } from '$lib/toast.svelte';
 
 	const id = $derived(Number(page.params.id));
@@ -41,6 +45,9 @@
 	let series = $state<ItemDetail | null>(null);
 	let editOpen = $state(false);
 	let identifyOpen = $state(false);
+	let collectOpen = $state(false);
+	/** Bumped to refetch the episodes on screen (after a watched toggle on the series). */
+	let episodesVersion = $state(0);
 
 	const byIndex = (a: Item, b: Item) =>
 		(a.parentIndexNumber ?? 0) - (b.parentIndexNumber ?? 0) || (a.indexNumber ?? 1e9) - (b.indexNumber ?? 1e9) || a.title.localeCompare(b.title, 'fr');
@@ -114,9 +121,11 @@
 
 	$effect(() => {
 		const s = selectedSeason;
-		episodes = [];
+		const silent = untrack(() => episodesVersion > 0 && episodes.length > 0 && episodes[0]?.parentId === s?.id);
+		void episodesVersion;
+		if (!silent) episodes = [];
 		if (!s) return;
-		episodesLoading = true;
+		if (!silent) episodesLoading = true;
 		const ctrl = new AbortController();
 		api
 			.items({ parent: s.id, limit: 200 }, ctrl.signal)
@@ -183,12 +192,18 @@
 	const albumArtist = $derived(item?.kind === 'album' ? item.ancestors.find((a) => a.kind === 'artist') : undefined);
 	const albumDuration = $derived(item?.kind === 'album' ? children.reduce((sum, t) => sum + (t.runtimeMs ?? 0), 0) : 0);
 
+	const collectable = $derived(!!item && ['movie', 'series', 'artist', 'album'].includes(item.kind));
 	const menuItems = $derived<MenuItem[]>(
 		item
 			? [
-					{ label: 'Actualiser les métadonnées', icon: 'refresh', onselect: refresh },
-					...(['movie', 'series', 'artist', 'album'].includes(item.kind) ? [{ label: 'Identifier…', icon: 'wand' as const, onselect: () => (identifyOpen = true) }] : []),
-					{ label: 'Modifier…', icon: 'edit', onselect: () => (editOpen = true) }
+					...(collectable ? [{ label: 'Ajouter à une collection…', icon: 'list-plus' as const, onselect: () => (collectOpen = true) }] : []),
+					...(session.isAdmin
+						? [
+								{ label: 'Actualiser les métadonnées', icon: 'refresh' as const, onselect: refresh, separated: collectable },
+								...(['movie', 'series', 'artist', 'album'].includes(item.kind) ? [{ label: 'Identifier…', icon: 'wand' as const, onselect: () => (identifyOpen = true) }] : []),
+								{ label: 'Modifier…', icon: 'edit' as const, onselect: () => (editOpen = true) }
+							]
+						: [])
 				]
 			: []
 	);
@@ -204,17 +219,134 @@
 	}
 
 	/** Children the "Lecture" button can pick from without another request. */
-	const known = $derived(item?.kind === 'series' ? episodes : item?.kind === 'season' || item?.kind === 'album' ? children : []);
-	const resumable = $derived(item ? hasResume(item, known) : false);
+	const known = $derived(item?.kind === 'season' || item?.kind === 'album' ? children : []);
 	let resolving = $state(false);
 
-	async function play() {
+	// ——— Progress (M6) ———
+	/** Next-up episode of a series (first unwatched or in progress), resolved in the background. */
+	let nextUp = $state<Item | null>(null);
+	$effect(() => {
+		const it = item;
+		const list = seasons;
+		void episodesVersion;
+		if (it?.kind !== 'series' || !list.length) {
+			nextUp = null;
+			return;
+		}
+		const ctrl = new AbortController();
+		seriesNextUp(it.id, ctrl.signal, list)
+			.then((n) => (nextUp = n))
+			.catch(() => {});
+		return () => ctrl.abort();
+	});
+
+	/** Episode the Lecture button plays for a series / season. */
+	const upNext = $derived(item?.kind === 'series' ? nextUp : item?.kind === 'season' ? (nextInSeason(children) ?? null) : null);
+	/** Movie / episode resume point, or the next-up episode's. */
+	const resumeAt = $derived(item?.kind === 'movie' || item?.kind === 'episode' ? resumeMs(item) : resumeMs(upNext));
+	const upNextCode = $derived(upNext ? episodeCode(upNext) : undefined);
+	/** Started: something watched already (else a plain "Lecture"). */
+	const started = $derived(!!upNext && (resumeAt > 0 || (item?.unplayedCount !== undefined && upNext.indexNumber !== undefined && !(upNext.indexNumber <= 1 && (upNext.parentIndexNumber ?? 1) <= 1))));
+	const playLabel = $derived.by(() => {
+		if (resumeAt) return upNextCode && item?.kind !== 'episode' ? `Reprendre ${upNextCode}` : `Reprendre à ${formatClock(resumeAt / 1000)}`;
+		if (upNextCode && started && (item?.kind === 'series' || item?.kind === 'season')) return `Lecture ${upNextCode}`;
+		return 'Lecture';
+	});
+	const played = $derived(isPlayed(item));
+	const favorite = $derived(isFavorite(item));
+	const canWatch = $derived(!!item && ['movie', 'episode', 'series', 'season'].includes(item.kind));
+	const canFavorite = $derived(!!item && ['movie', 'episode', 'series'].includes(item.kind));
+	const progress = $derived(item?.kind === 'movie' || item?.kind === 'episode' ? progressOf(item) : undefined);
+	let savingWatch = $state(false);
+
+	async function togglePlayed() {
+		if (!item || savingWatch) return;
+		const it = item;
+		const want = !played;
+		const before = { userData: it.userData, unplayedCount: it.unplayedCount };
+		savingWatch = true;
+		// Optimistic: the button flips at once.
+		if (it.kind === 'series' || it.kind === 'season') it.unplayedCount = want ? 0 : Math.max(1, it.unplayedCount ?? 1);
+		else it.userData = { ...normalizeUserData(it.userData), played: want, positionMs: want ? 0 : (it.userData?.positionMs ?? 0) };
+		try {
+			const d = await api.putUserData(it.id, { played: want });
+			if (it.kind === 'movie' || it.kind === 'episode') it.userData = d;
+			toasts.show(want ? `« ${it.title} » marqué comme vu` : `« ${it.title} » marqué comme non vu`);
+			if (it.kind === 'series' || it.kind === 'season') {
+				// Every episode changed: refresh the counts and the lists on screen.
+				await load(true);
+				episodesVersion++;
+			}
+		} catch (err) {
+			it.userData = before.userData;
+			it.unplayedCount = before.unplayedCount;
+			toasts.show('Modification impossible', { detail: errorMessage(err) });
+		} finally {
+			savingWatch = false;
+		}
+	}
+
+	async function toggleFavorite() {
+		if (!item) return;
+		const it = item;
+		const want = !favorite;
+		const before = it.userData;
+		it.userData = { ...normalizeUserData(it.userData), favorite: want };
+		try {
+			it.userData = await api.putUserData(it.id, { favorite: want });
+			toasts.show(want ? 'Ajouté aux favoris' : 'Retiré des favoris', { detail: it.title, duration: 3000 });
+		} catch (err) {
+			it.userData = before;
+			toasts.show('Modification impossible', { detail: errorMessage(err) });
+		}
+	}
+
+	/** Watched toggle on one episode of the list: patch it in place, then the counters. */
+	async function toggleEpisode(ep: Item) {
+		const want = !ep.userData?.played;
+		const isSeries = item?.kind === 'series';
+		const before = ep.userData;
+		const patch = (u: Item['userData']) => {
+			const list = isSeries ? episodes : children;
+			const idx = list.findIndex((e) => e.id === ep.id);
+			if (idx >= 0) list[idx] = { ...list[idx], userData: u };
+		};
+		patch({ ...normalizeUserData(before), played: want, positionMs: want ? 0 : (before?.positionMs ?? 0) });
+		try {
+			patch(await api.putUserData(ep.id, { played: want }));
+			const delta = want ? -1 : 1;
+			if (item && item.unplayedCount !== undefined) item.unplayedCount = Math.max(0, item.unplayedCount + delta);
+			const season = isSeries ? seasons.find((s) => s.id === ep.parentId) : undefined;
+			if (season && season.unplayedCount !== undefined) season.unplayedCount = Math.max(0, season.unplayedCount + delta);
+			if (isSeries) nextUp = null;
+			if (isSeries) seriesNextUp(item!.id, undefined, seasons).then((n) => (nextUp = n), () => {});
+		} catch (err) {
+			patch(before);
+			toasts.show('Modification impossible', { detail: errorMessage(err) });
+		}
+	}
+
+	async function play(fromStart = false) {
 		if (!item || resolving || offline) return;
 		resolving = true;
 		try {
-			// A series resumes the in-progress episode of the season on screen, if any.
-			const inProgress = item.kind === 'series' ? latestResume(episodes.map((e) => e.id))?.id : undefined;
-			const target = inProgress ?? (await resolvePlayTarget(item, known));
+			if ((item.kind === 'movie' || item.kind === 'episode') && !fromStart) {
+				// Explicit start: the player skips its own resume prompt.
+				goto(playerHref(item.id, { t: resumeAt / 1000 }));
+				return;
+			}
+			if (fromStart) {
+				const target = item.kind === 'movie' || item.kind === 'episode' ? item.id : upNext?.id;
+				if (target) {
+					goto(playerHref(target, { t: 0 }));
+					return;
+				}
+			}
+			if (upNext) {
+				goto(playerHref(upNext.id, { t: resumeMs(upNext) / 1000 }));
+				return;
+			}
+			const target = await resolvePlayTarget(item, known);
 			if (target) goto(playerHref(target));
 			else toasts.show('Rien à lire pour l’instant', { detail: 'Aucun épisode ou piste n’a encore été trouvé.' });
 		} catch (err) {
@@ -322,11 +454,47 @@
 						aria-disabled={offline ? 'true' : undefined}
 						title={offline ? OFFLINE_HINT : undefined}
 						aria-describedby={offline ? 'offline-note' : undefined}
-						onclick={play}>{resumable ? 'Reprendre' : 'Lecture'}</Button
+						onclick={() => play()}>{playLabel}</Button
 					>
+					{#if resumeAt && !offline}
+						<Button size="lg" icon="refresh" onclick={() => play(true)}>Depuis le début</Button>
+					{/if}
 					{#if offline}<span id="offline-note" class="visually-hidden">{OFFLINE_HINT} : les fichiers de ce titre sont sur une source hors ligne.</span>{/if}
 				{/if}
-				<Menu label="Plus d’actions" items={menuItems} icon="more" text="Plus" />
+				{#if canWatch}
+					<Button
+						size="lg"
+						icon={played ? 'check-circle' : 'check'}
+						class={played ? 'is-on' : undefined}
+						aria-pressed={played}
+						aria-busy={savingWatch}
+						title={played ? 'Marquer comme non vu' : undefined}
+						onclick={togglePlayed}>{played ? 'Vu' : 'Marquer comme vu'}</Button
+					>
+				{/if}
+				{#if canFavorite}
+					<Button
+						size="lg"
+						round
+						icon="heart"
+						iconFilled={favorite}
+						class={favorite ? 'is-on' : undefined}
+						aria-pressed={favorite}
+						aria-label={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+						title={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+						onclick={toggleFavorite}
+					/>
+				{/if}
+				{#if menuItems.length}<Menu label="Plus d’actions" items={menuItems} icon="more" text="Plus" />{/if}
+			{/snippet}
+
+			{#snippet extra()}
+				{#if progress && resumeAt}
+					<div class="resume-line">
+						<ProgressLine value={progress} variant="inline" />
+						<span class="tabular">{formatClock(resumeAt / 1000)} sur {formatClock((it.runtimeMs ?? 0) / 1000)} · reste {formatRuntime((it.runtimeMs ?? 0) - resumeAt)}</span>
+					</div>
+				{/if}
 			{/snippet}
 		</DetailHeader>
 
@@ -351,7 +519,11 @@
 									onclick={() => selectSeason(s)}
 								>
 									{s.title}
-									{#if s.childCount}<span class="tab-count tabular">{s.childCount}</span>{/if}
+									{#if s.unplayedCount === 0 && s.childCount}
+										<span class="tab-done" title="Saison vue"><Icon name="check" size={14} /><span class="visually-hidden">(vue)</span></span>
+									{:else if s.unplayedCount}
+										<span class="tab-count unseen tabular" title="{s.unplayedCount} non vu{s.unplayedCount > 1 ? 's' : ''}">{s.unplayedCount}<span class="visually-hidden"> non vus</span></span>
+									{:else if s.childCount}<span class="tab-count tabular">{s.childCount}</span>{/if}
 								</button>
 							{/each}
 						</div>
@@ -362,7 +534,7 @@
 									<a href="/item/{selectedSeason.id}">Voir la saison</a>
 								</div>
 							{/if}
-							<EpisodeList episodes={episodes} loading={episodesLoading} label="Épisodes de {selectedSeason?.title ?? 'la saison'}" />
+							<EpisodeList episodes={episodes} loading={episodesLoading} label="Épisodes de {selectedSeason?.title ?? 'la saison'}" ontoggleplayed={toggleEpisode} />
 						</div>
 					{:else}
 						<p class="muted">Aucune saison pour l’instant.</p>
@@ -373,7 +545,7 @@
 			{#if it.kind === 'season'}
 				<section class="block" aria-labelledby="eps-title">
 					<SectionHeader title="Épisodes" id="eps-title" />
-					<EpisodeList episodes={children} loading={childrenLoading} label="Épisodes" />
+					<EpisodeList episodes={children} loading={childrenLoading} label="Épisodes" ontoggleplayed={toggleEpisode} />
 				</section>
 			{/if}
 
@@ -421,7 +593,7 @@
 			{/if}
 
 			{#if it.kind === 'movie' || it.kind === 'episode'}
-				<TechPanel files={it.mediaFiles} />
+				<TechPanel files={it.mediaFiles} showPath={session.isAdmin} />
 			{/if}
 
 			{#if similar.length}
@@ -434,6 +606,7 @@
 
 	<EditItemDialog bind:open={editOpen} item={it} onsaved={(u) => (item = { ...u, ancestors: u.ancestors.length ? u.ancestors : it.ancestors })} />
 	<IdentifyDialog bind:open={identifyOpen} item={it} onidentified={() => setTimeout(() => load(true), 1500)} />
+	{#if collectable}<AddToCollectionDialog bind:open={collectOpen} item={it} />{/if}
 {/if}
 
 <style>
@@ -549,6 +722,38 @@
 		background: var(--surface-active);
 		color: var(--text);
 		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+	}
+
+	.tab-done {
+		display: inline-grid;
+		place-items: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+	}
+
+	.tab-count.unseen {
+		background: var(--accent-soft);
+		color: var(--accent-ink);
+		font-weight: var(--fw-heavy);
+	}
+
+	.resume-line {
+		display: grid;
+		gap: var(--sp-2);
+		max-width: 420px;
+		font-size: var(--fs-small);
+		color: var(--text-muted);
+	}
+
+	.detail :global(.btn.secondary.is-on) {
+		color: var(--accent-ink);
+	}
+
+	.detail :global(.btn.secondary.is-on svg) {
+		color: var(--accent);
 	}
 
 	.tab-count {

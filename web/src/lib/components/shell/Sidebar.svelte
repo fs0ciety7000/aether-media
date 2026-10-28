@@ -2,7 +2,8 @@
 	import { page } from '$app/state';
 	import { libraries as librariesStore, unmatched } from '$lib/api/stores.svelte';
 	import { libraryKindInfo } from '$lib/media';
-	import { collections, discover, identify, isActive, settings, type NavItem } from '$lib/nav';
+	import { collections, discover, identify, isActive, profile, settings, type NavItem } from '$lib/nav';
+	import { session } from '$lib/session.svelte';
 	import Logo from '../brand/Logo.svelte';
 	import Icon from '../Icon.svelte';
 
@@ -15,7 +16,8 @@
 	let { collapsed, ontoggle, version }: Props = $props();
 
 	const libs = $derived(librariesStore.list);
-	const showIdentify = $derived(unmatched.count > 0 || isActive(page.url.pathname, identify.href));
+	const admin = $derived(session.isAdmin);
+	const showIdentify = $derived(admin && (unmatched.count > 0 || isActive(page.url.pathname, identify.href)));
 </script>
 
 {#snippet link(item: NavItem, badge?: number)}
@@ -52,7 +54,7 @@
 			{#each libs as lib (lib.id)}
 				{@render link({ href: `/bibliotheque/${lib.id}`, label: lib.name, icon: libraryKindInfo(lib.kind).icon })}
 			{/each}
-			{#if librariesStore.loaded && !libs.length}
+			{#if librariesStore.loaded && !libs.length && admin}
 				<li>
 					<a class="link add" href="/reglages/bibliotheques?ajouter=1" title={collapsed ? 'Ajouter une bibliothèque' : undefined}>
 						<Icon name="plus" size={18} />
@@ -67,7 +69,7 @@
 	<div class="bottom">
 		<ul role="list">
 			{#if showIdentify}{@render link(identify, unmatched.count)}{/if}
-			{@render link(settings)}
+			{#if admin}{@render link(settings)}{:else}{@render link(profile)}{/if}
 		</ul>
 
 		<div class="foot">

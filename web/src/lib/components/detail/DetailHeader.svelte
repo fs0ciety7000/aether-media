@@ -25,9 +25,11 @@
 		overview?: string;
 		chips?: Snippet;
 		actions?: Snippet;
+		/** Below the actions (resume progress). */
+		extra?: Snippet;
 	}
 
-	let { title, eyebrow, backdrop, poster, logo, artwork = 'poster', icon, year, crumbs, meta, tagline, overview, chips, actions }: Props = $props();
+	let { title, eyebrow, backdrop, poster, logo, artwork = 'poster', icon, year, crumbs, meta, tagline, overview, chips, actions, extra }: Props = $props();
 
 	let expanded = $state(false);
 	let clamped = $state(false);
@@ -91,6 +93,7 @@
 			{/if}
 			{#if chips}<div class="chips">{@render chips()}</div>{/if}
 			{#if actions}<div class="actions">{@render actions()}</div>{/if}
+			{#if extra}{@render extra()}{/if}
 		</div>
 	</div>
 </header>
@@ -106,7 +109,7 @@
 		padding: clamp(160px, 15vw, 250px) 28px 28px;
 		min-height: clamp(440px, 37vw, 580px);
 		border-radius: var(--r-xl);
-		overflow: hidden;
+		/* Not clipped: the "Plus" menu may overflow the card; the backdrop clips itself. */
 		background: var(--bg-sunken);
 		box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line);
 		color: var(--text);
@@ -130,6 +133,7 @@
 		inset: 0;
 		z-index: -1;
 		overflow: hidden;
+		border-radius: inherit;
 		background: var(--ground);
 	}
 
@@ -300,6 +304,7 @@
 		.backdrop {
 			bottom: auto;
 			height: min(56vw, 260px);
+			border-radius: var(--r-lg) var(--r-lg) 0 0;
 		}
 
 		.scrim {

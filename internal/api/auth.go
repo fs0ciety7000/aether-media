@@ -373,7 +373,7 @@ func (s *Server) setPassword(w http.ResponseWriter, r *http.Request, userID int6
 }
 
 type sessionDTO struct {
-	ID        int64     `json:"id"`
+	ID        int64     `json:"id,string"` // 64-bit: a JSON string keeps JavaScript precise
 	Device    string    `json:"device"`
 	Client    string    `json:"client"`
 	Current   bool      `json:"current"`
