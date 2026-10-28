@@ -574,7 +574,7 @@ func (s *Service) Disconnect(ctx context.Context, userID int64, service string) 
 	if err := s.store.DeleteSyncConnection(ctx, c.ID); err != nil {
 		return err
 	}
-	s.hubPublish(map[string]any{"userId": userID, "service": service, "status": "disconnected", "syncing": false})
+	s.hubPublish(userID, map[string]any{"userId": userID, "service": service, "status": "disconnected", "syncing": false})
 	return nil
 }
 
@@ -821,9 +821,9 @@ func (s *Service) localChanged(ctx context.Context, userID, except int64) {
 	}
 }
 
-func (s *Service) hubPublish(data map[string]any) {
+func (s *Service) hubPublish(userID int64, data map[string]any) {
 	if s.hub != nil {
-		s.hub.Publish("sync.status", data)
+		s.hub.PublishUser(userID, "sync.status", data)
 	}
 }
 
@@ -848,7 +848,7 @@ func (s *Service) publish(ctx context.Context, connID int64) {
 	if v.LastError != "" {
 		data["lastError"] = v.LastError
 	}
-	s.hubPublish(data)
+	s.hubPublish(c.UserID, data)
 }
 
 // jobError turns a provider error into a job outcome: rate limits wait for

@@ -190,7 +190,7 @@ func (m *Manager) pingAgents(ctx context.Context) {
 		}
 		_ = m.store.SetAgentStatus(ctx, db.SetAgentStatusParams{Status: status, LastError: msg, Column3: status, ID: a.ID})
 		if a.Status != status {
-			m.hub.Publish("agent.status", map[string]any{"id": a.ID, "status": status, "lastError": msg})
+			m.hub.PublishAdmin("agent.status", map[string]any{"id": a.ID, "status": status, "lastError": msg})
 		}
 	}
 }

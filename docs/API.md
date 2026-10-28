@@ -97,6 +97,7 @@ type Library = { id: number; name: string; kind: "movies" | "shows" | "music" | 
   - `library.scan.started` `{ libraryId, name }` · `library.scan.progress` `{ libraryId, processed, total }`
   - `library.scan.finished` `{ libraryId, files, added, updated, unchanged, removed, skipped, unavailable?, durationMs }`
   - `item.updated` `{ id, kind }` · `item.image` `{ id, type }`
+  - **Destinataires** : `library.scan.started`, `library.scan.progress`, `source.status` et `agent.status` ne sont envoyés qu'aux administrateurs ; `library.scan.finished` à tous, sans le champ `unavailable` (chemins, consultables dans les journaux) ; `sync.status` et `userdata.changed` uniquement à l'utilisateur concerné.
 
 ## Précisions
 - `genre` : une seule valeur (nom exact, insensible à la casse).

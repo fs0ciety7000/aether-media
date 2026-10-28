@@ -106,7 +106,7 @@ func (s *Server) record(r *http.Request, p *play, pos int64) {
 			s.log.Error("progression", "err", err)
 		}
 		if s.Hub != nil {
-			s.Hub.Publish("userdata.changed", map[string]any{"userId": p.userID, "itemId": p.itemID})
+			s.Hub.PublishUser(p.userID, "userdata.changed", map[string]any{"userId": p.userID, "itemId": p.itemID})
 		}
 		// The service records the play itself (Trakt counts a stop ≥ 80 % as watched).
 		s.scrobble(r, p, syncsvc.ActStop, max(percent(pos, p.durationMs), 90))

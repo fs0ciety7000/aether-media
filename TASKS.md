@@ -126,7 +126,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-075 Notes personnelles affichées dans l'UI (l'API les accepte déjà)
 - [ ] T-076 Avatars d'utilisateurs (image) — aujourd'hui initiales colorées
 
-## M6b — Synchronisation Trakt / Simkl
+## M6b — Synchronisation Trakt / Simkl ✅ (validation réelle à faire : T-0C6)
 - [x] T-0C0 Connexions par utilisateur (Trakt device code, Simkl PIN), stockage chiffré des jetons, rafraîchissement, révocation ; identifiants d'application par config/env ou API admin (chiffrés)
 - [x] T-0C1 Scrobbling en direct (start/pause/stop depuis les pings du lecteur, `/scrobble/*` chez Trakt comme chez Simkl)
 - [x] T-0C2 Historique vu : import initial + synchronisation incrémentale bidirectionnelle (fusion à trois points, la date la plus récente gagne)
@@ -141,6 +141,10 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-0C9 Import ciblé des éléments nouvellement ajoutés à la bibliothèque (aujourd'hui : récupération complète toutes les 24 h ou « synchroniser maintenant » avec `full`)
 - [ ] T-0CA Historique Trakt : visionnages multiples (plays, dates) — seuls vu / non vu et la dernière date sont synchronisés
 - [ ] T-0CB `stream.TestIntegrationIdleTimeout` instable sous `-race` quand toute la suite tourne (passe seul)
+- [x] T-0CE SSE filtré par destinataire (événements de synchro et de progression réservés à l'utilisateur concerné ; scans, sources et agents aux admins)
+- [ ] T-0CF Publier `sync.status syncing:true` dès qu'un changement local met une synchro en file ; journal : retirer le préfixe de fonction redondant des messages
+- [ ] T-0CG Membres : état hors ligne d'une source mis à jour en direct (aujourd'hui au rechargement ou à la fin d'un scan, `source.status` étant réservé aux admins)
+- [ ] T-0CH Annulation explicite d'un appairage Trakt/Simkl en cours côté serveur ; action « Ma liste » dans un menu des cartes
 
 ## M7 — Finition & distribution
 - [ ] T-080 Assistant de premier lancement

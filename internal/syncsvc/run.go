@@ -173,7 +173,7 @@ func (s *Service) syncConn(ctx context.Context, p Provider, creds Creds, access 
 	if len(changed) > 0 {
 		if s.hub != nil {
 			for id := range changed {
-				s.hub.Publish("userdata.changed", map[string]any{"userId": conn.UserID, "itemId": id})
+				s.hub.PublishUser(conn.UserID, "userdata.changed", map[string]any{"userId": conn.UserID, "itemId": id})
 			}
 		}
 		// Imported changes travel on to the user's other links.

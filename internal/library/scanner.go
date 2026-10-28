@@ -109,7 +109,7 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 	}
 
 	s.log.Info("scan démarré", "library", lib.Name, "kind", lib.Kind)
-	s.hub.Publish("library.scan.started", map[string]any{"libraryId": libID, "name": lib.Name})
+	s.hub.PublishAdmin("library.scan.started", map[string]any{"libraryId": libID, "name": lib.Name})
 
 	var files []file
 	var unavailable []string
@@ -170,7 +170,7 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 		if err != nil {
 			return res, err
 		}
-		s.hub.Publish("library.scan.progress", map[string]any{
+		s.hub.PublishAdmin("library.scan.progress", map[string]any{
 			"libraryId": libID, "processed": min(i+batchSize, len(files)), "total": len(files),
 		})
 	}
@@ -185,7 +185,10 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 	s.log.Info("scan terminé", "library", lib.Name, "files", res.Files, "added", res.Added,
 		"updated", res.Updated, "unchanged", res.Unchanged, "removed", res.Removed,
 		"skipped", res.Skipped, "duration_ms", res.DurationMs)
-	s.hub.Publish("library.scan.finished", res)
+	// Public so members' lists refresh; the unavailable paths stay private.
+	pub := res
+	pub.Unavailable = nil
+	s.hub.Publish("library.scan.finished", pub)
 	if s.AfterScan != nil {
 		s.AfterScan(ctx, libID)
 	}

@@ -294,7 +294,7 @@ func (s *Server) watchlistRemove(w http.ResponseWriter, r *http.Request) {
 // schedules its synchronisation.
 func (s *Server) userDataChanged(r *http.Request, itemID int64) {
 	if s.Hub != nil {
-		s.Hub.Publish("userdata.changed", map[string]any{"userId": uid(r), "itemId": itemID})
+		s.Hub.PublishUser(uid(r), "userdata.changed", map[string]any{"userId": uid(r), "itemId": itemID})
 	}
 	s.localChanged(r, uid(r))
 }

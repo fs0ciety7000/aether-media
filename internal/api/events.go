@@ -23,6 +23,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var userID int64
+	if p := principalFrom(r); p != nil {
+		userID = p.user.ID
+	}
+	admin := isAdmin(r)
 	ch, unsubscribe := s.Hub.Subscribe()
 	defer unsubscribe()
 	keepalive := time.NewTicker(25 * time.Second)
@@ -34,6 +39,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-keepalive.C:
 			fmt.Fprint(w, ": ping\n\n")
 		case ev := <-ch:
+			if !ev.VisibleTo(userID, admin) {
+				continue
+			}
 			data, err := json.Marshal(ev)
 			if err != nil {
 				continue

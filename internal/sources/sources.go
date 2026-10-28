@@ -367,7 +367,7 @@ func (m *Manager) SetStatus(ctx context.Context, src db.LibrarySource, err error
 	}
 	if src.Status != status {
 		m.log.Info("source "+map[string]string{"online": "en ligne", "offline": "hors ligne"}[status], "source", src.ID, "name", src.Name, "err", msg)
-		m.hub.Publish("source.status", map[string]any{"id": src.ID, "libraryId": src.LibraryID, "status": status, "lastError": msg})
+		m.hub.PublishAdmin("source.status", map[string]any{"id": src.ID, "libraryId": src.LibraryID, "status": status, "lastError": msg})
 	}
 }
 
