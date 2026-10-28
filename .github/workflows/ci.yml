@@ -52,6 +52,7 @@ jobs:
         include:
           - { goos: linux,   goarch: amd64 }
           - { goos: linux,   goarch: arm64 }
+          - { goos: linux,   goarch: arm, goarm: "7" }
           - { goos: darwin,  goarch: arm64 }
           - { goos: darwin,  goarch: amd64 }
           - { goos: windows, goarch: amd64 }
@@ -69,14 +70,27 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
         run: |
           ext=""; [ "$GOOS" = windows ] && ext=".exe"
-          make build && mv bin/aether "bin/aether-$GOOS-$GOARCH$ext"
+          make build && mv bin/aether "bin/aether-$GOOS-$GOARCH${GOARM:+v$GOARM}$ext"
       - uses: actions/upload-artifact@v4
         with:
-          name: aether-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: aether-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
           path: bin/
 
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+  # Image Docker (amd64) construite sans push, puis vérifiée : FFmpeg avec
+  # zscale/tonemap et libass, binaire, utilisateur non root, healthcheck.
   docker:
     needs: [web, go]
     runs-on: ubuntu-latest
@@ -87,4 +101,25 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: aether:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Vérifier l'image
+        run: |
+          docker run --rm --entrypoint sh aether:ci -c '
+            set -e
+            aether version
+            test "$(id -u)" != 0
+            ffmpeg -hide_banner -filters | grep -E " (zscale|tonemap|subtitles) "
+            ffmpeg -hide_banner -hwaccels | grep -E "vaapi|qsv|cuda"'
+          docker run -d --name aether-ci aether:ci
+          for i in $(seq 1 45); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' aether-ci)" = healthy ] && exit 0
+            sleep 2
+          done
+          docker logs aether-ci; exit 1
+      - run: docker image ls aether:ci

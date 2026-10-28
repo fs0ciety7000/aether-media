@@ -18,7 +18,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-014 Init SvelteKit (adapter-static), embarqué via `embed.FS`
 - [x] T-015 CI GitHub Actions : lint, tests, build multi-OS (pas encore exécutée sur GitHub)
 - [x] T-016 Dockerfile (avec FFmpeg) + docker-compose d'exemple
-- [ ] T-017 Alléger l'image Docker (787 Mo avec le FFmpeg Debian) → FFmpeg statique ou jellyfin-ffmpeg
+- [x] T-017 Image Docker allégée : debian:trixie-slim + jellyfin-ffmpeg 7 (VAAPI/QSV/NVENC, zscale/tonemap, libass), étapes de compilation sur la plateforme de build (multi-arch sans émulation) — 787 → 515 Mo (compressée : 210 → 131 Mo) en amd64
+- [ ] T-018 Image : mesurer et tester l'arm64 sur une vraie machine (pas d'émulation QEMU dans l'environnement de dev) ; pilotes GPU testés sur du vrai matériel (Intel, AMD, NVIDIA)
 
 ## M1 — Design system & shell ✅
 - [x] T-020 `tokens.css` + 5 thèmes + sélecteur de thème
@@ -112,7 +113,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-0E4 Sélecteur de dossiers pour les sources locales du serveur
 - [x] T-0E5 Fichiers cachés jamais exposés par l'agent (ex. ~/.ssh si un dossier personnel est partagé)
 - [x] T-0E6 UI : parcours guidé (agents connus, découverte, code, choix des dossiers)
-- [ ] T-0E7 Installation de l'agent en service (systemd, launchd, service Windows) — avec M7
+- [x] T-0E7 `aether agent|service install|uninstall|status` : systemd (système ou `--user`), LaunchDaemon / LaunchAgent, service Windows natif (x/sys/windows/svc, journal dans un fichier), `--dry-run`
+- [ ] T-0EA Service Windows : choix du compte (aujourd'hui LocalSystem) et rotation du journal ; tester install/arrêt/désinstallation sur un vrai Windows et un vrai macOS (seuls la génération et la compilation croisée sont testées)
 - [ ] T-0E8 Supprimer un partage d'agent depuis l'UI (route serveur à exposer)
 - [ ] T-0E9 Découverte réseau : tester sur un vrai LAN (la diffusion UDP n'est pas disponible dans l'environnement de dev)
 
@@ -150,7 +152,8 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [ ] T-080 Assistant de premier lancement
 - [ ] T-081 Admin : bibliothèques, utilisateurs, tâches, journaux
 - [ ] T-082 PWA (manifest, service worker)
-- [ ] T-083 Paquets : Docker multi-arch, .deb/.rpm, Homebrew, Windows
+- [x] T-083 Paquets : GoReleaser (linux amd64/arm64/armv7, darwin, windows ; tar.gz/zip ; .deb/.rpm avec compte `aether`, unités systemd, /var/lib/aether ; cask Homebrew ; images ghcr.io multi-arch via dockers_v2 ; SBOM ; checksums), workflow `release.yml` sur tag `v*`, docs/INSTALL.md
+- [ ] T-085 Première release : créer le dépôt `homebrew-tap` (puis `skip_upload: false` + secret `HOMEBREW_TAP_TOKEN`), choisir et ajouter la LICENSE (archives et paquets), vérifier le workflow sur un tag de test, signature/notarisation macOS et Windows
 - [ ] T-084 Docs utilisateur + audit a11y / perfs → release v0.1.0
 
 ## M8 — Fédération (v1.1)

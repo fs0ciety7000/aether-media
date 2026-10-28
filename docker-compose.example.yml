@@ -1,4 +1,5 @@
 # Exemple : docker compose -f docker-compose.example.yml up -d
+# Guide complet : docs/INSTALL.md
 services:
   aether:
     image: ghcr.io/fs0ciety7000/aether:latest
@@ -9,13 +10,27 @@ services:
       - "8096:8096"
     environment:
       TZ: Europe/Paris
+      # Accélération matérielle : none | auto | vaapi | qsv | nvenc
+      # AETHER_HWACCEL: vaapi
+      # AETHER_TMDB_API_KEY: "votre-clé"
     volumes:
       - ./data:/data
       # Vos bibliothèques, en lecture seule (chemins compatibles *arr).
       - /srv/media/movies:/media/movies:ro
       - /srv/media/tv:/media/tv:ro
       - /srv/media/music:/media/music:ro
-    # Accélération matérielle (VAAPI / QSV), plus tard :
+    # GPU Intel / AMD (VAAPI, QSV) : exposez /dev/dri et ajoutez le groupe
+    # propriétaire de /dev/dri/renderD128 (« getent group render | cut -d: -f3 »).
     # devices:
     #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - "993"
+    # GPU NVIDIA (NVENC) : nécessite nvidia-container-toolkit sur l'hôte.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu, video]
     restart: unless-stopped

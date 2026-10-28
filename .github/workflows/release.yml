@@ -1,0 +1,53 @@
+name: Release
+
+# Publie une release à chaque tag vX.Y.Z : binaires (Linux, macOS, Windows),
+# archives, .deb / .rpm, images Docker multi-arch sur ghcr.io, SBOM et sommes
+# de contrôle. La release GitHub est créée en brouillon (voir .goreleaser.yaml).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # release GitHub
+  packages: write   # ghcr.io/fs0ciety7000/aether
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # changelog
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # L'interface est construite par le hook « before » de GoReleaser (make web).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Tests
+        run: go test ./...
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: anchore/sbom-action/download-syft@v0
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tap Homebrew (fs0ciety7000/homebrew-tap) : inutilisé tant que
+          # homebrew_casks.skip_upload vaut true.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

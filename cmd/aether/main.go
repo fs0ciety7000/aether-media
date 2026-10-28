@@ -56,6 +56,10 @@ Usage :
   aether agent [-config agent.toml]       mode agent : partage les médias de cette machine
                                           avec un serveur Aether (sans configuration : appairez-le
                                           depuis l'interface avec le code affiché)
+  aether agent install|uninstall|status [--user] [--name N] [--dry-run]
+                                          installe l'agent comme service du système
+  aether service install|uninstall|status [--user] [--name N] [--dry-run]
+                                          installe le serveur comme service du système
   aether healthcheck [-addr url]          vérifie qu'un serveur répond (Docker)
   aether version                          affiche la version
 `
@@ -77,7 +81,9 @@ func main() {
 	case "library":
 		err = runLibrary(args)
 	case "agent":
-		err = runAgent(args)
+		err = runAgentCmd(args) // agent, ou agent install|uninstall|status
+	case "service":
+		err = runServiceCmd(roleServer, args)
 	case "healthcheck":
 		err = runHealthcheck(args)
 	case "version":
@@ -253,7 +259,7 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signalContext() // + arrêt du service Windows
 	defer stop()
 
 	svc, err := newServices(ctx, cfg, log)
@@ -519,7 +525,7 @@ func runAgent(args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signalContext() // + arrêt du service Windows
 	defer stop()
 	return srv.Run(ctx)
 }

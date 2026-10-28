@@ -1,0 +1,186 @@
+# GoReleaser — paquets d'Aether (voir docs/INSTALL.md).
+#   Vérifier :      goreleaser check
+#   Essai local :   goreleaser release --snapshot --clean --skip=publish,docker,sbom
+#   Publication :   pousser un tag vX.Y.Z (.github/workflows/release.yml)
+version: 2
+project_name: aether
+
+before:
+  hooks:
+    - go mod download
+    # L'interface (SvelteKit) est embarquée dans le binaire : elle doit être
+    # construite avant la compilation Go.
+    - make web
+
+builds:
+  - id: aether
+    main: ./cmd/aether
+    binary: aether
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/fs0ciety7000/aether-media/internal/version.Version={{ .Version }}
+      - -X github.com/fs0ciety7000/aether-media/internal/version.Commit={{ .ShortCommit }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64, arm]
+    goarm: ["7"]
+    ignore:
+      - { goos: darwin, goarch: arm }
+      - { goos: windows, goarch: arm }
+      - { goos: windows, goarch: arm64 }
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: aether
+    ids: [aether]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - README.md
+      - aether.example.toml
+      - docs/INSTALL.md
+      - docs/AGENT_PROTOCOL.md
+
+nfpms:
+  - id: aether
+    ids: [aether]
+    package_name: aether
+    file_name_template: "{{ .ConventionalFileName }}"
+    vendor: Aether
+    homepage: https://github.com/fs0ciety7000/aether-media
+    maintainer: fs0ciety7000 <https://github.com/fs0ciety7000>
+    description: |-
+      Serveur multimédia self-hosted (films, séries, musique).
+      Inclut le mode agent, qui partage les médias d'une machine avec un serveur Aether.
+    section: video
+    priority: optional
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    # FFmpeg est nécessaire à l'analyse et au transcodage, mais peut venir
+    # d'ailleurs (jellyfin-ffmpeg7, build statique) : simple recommandation.
+    recommends:
+      - ffmpeg
+    suggests:
+      - jellyfin-ffmpeg7
+    contents:
+      - src: packaging/systemd/aether.service
+        dst: /usr/lib/systemd/system/aether.service
+      - src: packaging/systemd/aether-agent.service
+        dst: /usr/lib/systemd/system/aether-agent.service
+      - src: packaging/etc/aether.env
+        dst: /etc/aether/aether.env
+        type: config|noreplace
+        file_info:
+          mode: 0640
+      - src: packaging/etc/agent.env
+        dst: /etc/aether/agent.env
+        type: config|noreplace
+        file_info:
+          mode: 0640
+      - src: aether.example.toml
+        dst: /usr/share/doc/aether/aether.example.toml
+      - src: docs/INSTALL.md
+        dst: /usr/share/doc/aether/INSTALL.md
+    scripts:
+      preinstall: packaging/scripts/preinstall.sh
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+      postremove: packaging/scripts/postremove.sh
+    rpm:
+      group: Applications/Multimedia
+    deb:
+      fields:
+        Bugs: https://github.com/fs0ciety7000/aether-media/issues
+
+# Homebrew : GoReleaser v2 génère désormais des « casks » (les formules
+# « brews » sont dépréciées). Publication désactivée tant que le dépôt
+# fs0ciety7000/homebrew-tap n'existe pas : passer skip_upload à false et
+# fournir HOMEBREW_TAP_TOKEN au workflow de release.
+homebrew_casks:
+  - name: aether
+    ids: [aether]
+    binaries: [aether]
+    repository:
+      owner: fs0ciety7000
+      name: homebrew-tap
+      token: '{{ envOrDefault "HOMEBREW_TAP_TOKEN" "" }}'
+    directory: Casks
+    homepage: https://github.com/fs0ciety7000/aether-media
+    description: Serveur multimédia self-hosted (films, séries, musique) et agent de partage
+    skip_upload: true
+    commit_author:
+      name: aether-bot
+      email: noreply@github.com
+    hooks:
+      post:
+        # Binaire non notarisé : retire l'attribut de quarantaine de Gatekeeper.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/aether"]
+          end
+    caveats: |
+      FFmpeg :   brew install ffmpeg
+      Serveur :  aether service install --user   → http://localhost:8096
+      Agent :    aether agent install --user     (partage les médias de ce Mac)
+
+# Images multi-arch : ghcr.io/fs0ciety7000/aether (amd64, arm64), construites
+# avec buildx à partir des binaires ci-dessus et de jellyfin-ffmpeg.
+dockers_v2:
+  - id: aether
+    ids: [aether]
+    dockerfile: packaging/docker/Dockerfile
+    images:
+      - ghcr.io/fs0ciety7000/aether
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: Aether
+      org.opencontainers.image.description: Serveur multimédia self-hosted
+      org.opencontainers.image.source: https://github.com/fs0ciety7000/aether-media
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+    sbom: true
+
+# SBOM (SPDX, via syft) de chaque archive et paquet.
+sboms:
+  - id: archives
+    artifacts: archive
+  - id: packages
+    artifacts: package
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^TASKS"
+
+release:
+  github:
+    owner: fs0ciety7000
+    name: aether-media
+  # Brouillon : la release est relue puis publiée à la main.
+  draft: true
+  prerelease: auto
+  name_template: "Aether {{ .Version }}"
