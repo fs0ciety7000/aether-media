@@ -56,7 +56,7 @@ Objectif : comme Jellyfin, on installe l'agent, on le lance **sans fichier de co
 - `DELETE /agent/v1/pair` (authentifié) : le serveur appelant se désappaire (son jeton est révoqué).
 
 ## Navigation et partages (authentifié)
-- Racines de navigation : `browse_roots` dans `agent.toml`, sinon les emplacements usuels du système (dossier personnel, `/mnt`, `/media`, `/srv`, `/data`, `/volume1`… ; lecteurs sous Windows ; `/Volumes` sous macOS).
+- Racines de navigation : `browse_roots` dans `agent.toml` ou la variable `AETHER_AGENT_BROWSE_ROOTS` (liste séparée comme `PATH`, prioritaire), sinon les emplacements usuels du système (dossier personnel, `/mnt`, `/media`, `/srv`, `/data`, `/volume1`… ; lecteurs sous Windows ; `/Volumes` sous macOS).
 - `GET /agent/v1/browse?path=<chemin absolu>` → `{ "path", "parent"?, "dirs": [{ "name", "path" }] }` (sans `path` : les racines). Hors racines → 403 `denied`.
 - `GET /agent/v1/shares` → `[{ "name", "path", "managed": bool }]` (`managed` = créé par l'interface, supprimable).
 - `POST /agent/v1/shares` `{ "path", "name"? }` → `201 { "name", "path" }` — le dossier doit exister et être dans les racines ; nom dérivé du dossier si absent (minuscules, `[a-z0-9_-]`, suffixe numérique si pris). Si un partage existe déjà pour ce chemin, il est renvoyé (200).

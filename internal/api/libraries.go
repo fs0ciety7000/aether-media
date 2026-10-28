@@ -16,6 +16,7 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/library"
 	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
 type sourceDTO struct {
@@ -249,6 +250,10 @@ func (s *Server) sourceError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusBadRequest, "invalid_source", ve.Msg)
 		return true
 	}
+	if errors.Is(err, vfs.ErrOffline) {
+		writeError(w, http.StatusBadGateway, "agent_offline", "agent injoignable à cette adresse")
+		return true
+	}
 	s.internalError(w, err)
 	return true
 }
@@ -371,7 +376,7 @@ func (s *Server) patchSource(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal([]byte(src.Config), &cfg)
 	in := sources.Input{Kind: src.Kind, Name: src.Name, Root: src.Root}
 	if cfg.Agent != nil {
-		in.Agent = &sources.AgentIn{URL: cfg.Agent.URL, Share: cfg.Agent.Share}
+		in.Agent = &sources.AgentIn{AgentID: cfg.Agent.AgentID, URL: cfg.Agent.URL, Share: cfg.Agent.Share}
 	}
 	if cfg.SFTP != nil {
 		in.SFTP = &sources.SFTPInput{Host: cfg.SFTP.Host, Port: cfg.SFTP.Port, User: cfg.SFTP.User, HostKey: cfg.SFTP.HostKey}

@@ -251,7 +251,7 @@ type Folder = { name: string; path: string }
 (admin)
 - `GET /agents` → `Agent[]`
 - `POST /agents/discover` → `DiscoveredAgent[]` (diffusion UDP ~2 s sur le réseau local)
-- `POST /agents/pair` `{ url, code }` → `Agent` · 400 `invalid_source` (« code d'appairage incorrect ou expiré », « trop d'essais… »)
+- `POST /agents/pair` `{ url, code }` → `Agent` · 400 `invalid_source` (« code d'appairage incorrect ou expiré », « trop d'essais… ») · 502 `agent_offline` si l'agent est injoignable
 - `GET /agents/{id}/browse?path=` → `{ path, parent?, dirs: Folder[] }` (sans `path` : racines de la machine)
 - `GET /agents/{id}/shares` → `{ name, path, managed }[]` · `POST /agents/{id}/shares` `{ path, name? }` → `201 { name, path }` (idempotent par chemin)
 - `DELETE /agents/{id}` → 204 (désappairage) · 409 `agent_in_use` si des sources l'utilisent

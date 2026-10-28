@@ -64,7 +64,8 @@ type fileConfig struct {
 }
 
 // LoadConfig reads an agent.toml file. Unknown keys are rejected. The
-// environment variables AETHER_AGENT_LISTEN and AETHER_AGENT_DATA_DIR
+// environment variables AETHER_AGENT_LISTEN, AETHER_AGENT_DATA_DIR and
+// AETHER_AGENT_BROWSE_ROOTS (list separated like PATH)
 // override the corresponding file values. An empty path skips the file and
 // only applies defaults and environment overrides: this is the zero-config
 // mode, where shares and paired servers are managed from the server's UI.
@@ -106,6 +107,9 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if v := os.Getenv("AETHER_AGENT_DATA_DIR"); v != "" {
 		cfg.DataDir = v
+	}
+	if v := os.Getenv("AETHER_AGENT_BROWSE_ROOTS"); v != "" {
+		cfg.BrowseRoots = filepath.SplitList(v)
 	}
 	cfg.applyDefaults()
 	return cfg, nil

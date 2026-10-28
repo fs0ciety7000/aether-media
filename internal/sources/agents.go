@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
+	"github.com/fs0ciety7000/aether-media/internal/vfs"
 )
 
 // agentCreds resolves the URL and token of an agent source: from the paired
@@ -118,6 +119,9 @@ func (m *Manager) Pair(ctx context.Context, rawURL, code string) (db.RemoteAgent
 		case http.StatusTooManyRequests:
 			return db.RemoteAgent{}, invalid("trop d'essais : patientez quelques minutes")
 		}
+	}
+	if ae == nil && err != nil {
+		return db.RemoteAgent{}, fmt.Errorf("%w: agent injoignable: %v", vfs.ErrOffline, err) //nolint:errorlint // keep a single sentinel
 	}
 	if err != nil {
 		return db.RemoteAgent{}, err
