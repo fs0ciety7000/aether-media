@@ -296,7 +296,9 @@ func TestAgentCircuitBreaker(t *testing.T) {
 	attempts := cl.accepted.Load() - start
 	t.Logf("agent bloqué : %d appels → %d tentative(s) de connexion", calls+3, attempts)
 	// The failing call(s) holding a concurrency slot, then ~1 probe per step.
-	if limit := int64(DefaultAgentConcurrency + 5); attempts > limit {
+	// The margin absorbs slow -race runners (8 seen on CI); what matters is
+	// that 43 calls do not turn into dozens of connections.
+	if limit := int64(DefaultAgentConcurrency + 10); attempts > limit {
 		t.Fatalf("%d connection attempts while blocked, want ≤ %d", attempts, limit)
 	}
 

@@ -165,6 +165,14 @@ type MediaFile struct {
 	SourceID   sql.NullInt64  `json:"sourceId"`
 }
 
+type MediaKeyframe struct {
+	MediaFileID int64  `json:"mediaFileId"`
+	Version     string `json:"version"`
+	Count       int64  `json:"count"`
+	Data        []byte `json:"data"`
+	CreatedAt   int64  `json:"createdAt"`
+}
+
 type MediaStream struct {
 	ID                int64   `json:"id"`
 	MediaFileID       int64   `json:"mediaFileId"`
