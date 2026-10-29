@@ -3,8 +3,10 @@ package main
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 func (s *serviceSpec) resolve(dry bool) error {
@@ -63,8 +65,31 @@ func installSteps(s serviceSpec) ([]step, error) {
 		writeFileStep(s.plistPath(), launchdPlist(s), 0o644),
 		cmdStep("launchctl", "bootout", target).tolerant(),
 		cmdStep("launchctl", "enable", target),
-		cmdStep("launchctl", "bootstrap", s.domain(), s.plistPath()),
+		bootstrapStep(s.domain(), s.plistPath(), target),
 	), nil
+}
+
+// bootstrapStep loads the plist. "launchctl bootout" returns before the old
+// job is gone, and a bootstrap issued meanwhile fails with "5: Input/output
+// error": wait for the old job to disappear, then retry a few times.
+func bootstrapStep(domain, plist, target string) step {
+	st := cmdStep("launchctl", "bootstrap", domain, plist)
+	run := st.run
+	st.run = func() error {
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) && exec.Command("launchctl", "print", target).Run() == nil {
+			time.Sleep(250 * time.Millisecond)
+		}
+		var err error
+		for range 5 {
+			if err = run(); err == nil {
+				return nil
+			}
+			time.Sleep(time.Second)
+		}
+		return err
+	}
+	return st
 }
 
 func uninstallSteps(s serviceSpec) ([]step, error) {
