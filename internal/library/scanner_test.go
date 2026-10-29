@@ -118,6 +118,7 @@ func TestScanMovies(t *testing.T) {
 		"Ignored/.aetherignore",
 		"Ignored/Ignored (2001).mkv",
 		"@eaDir/Thumb (2002).mkv",
+		"Avatar (2009) {tmdb-19995}/Avatar (2009) [tmdbid-19995] - [BR-DISK]-GRP.ISO", // disc image: ignored
 	)
 	lib := f.library(KindMovies, root)
 

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
+	"github.com/fs0ciety7000/aether-media/internal/sources"
 	"github.com/fs0ciety7000/aether-media/internal/store/db"
 	"github.com/fs0ciety7000/aether-media/internal/stream"
 	"github.com/fs0ciety7000/aether-media/internal/syncsvc"
@@ -144,7 +147,8 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sreq := stream.Request{Info: info, Path: input, AudioIndex: -1, SubtitleIndex: -1, Profile: req.Profile, StartMs: max(0, req.StartMs)}
+	sreq := stream.Request{Info: info, Path: input, AudioIndex: -1, SubtitleIndex: -1, Profile: req.Profile, StartMs: max(0, req.StartMs),
+		Source: s.keyframeSource(mf)}
 	if req.AudioIndex != nil {
 		sreq.AudioIndex = *req.AudioIndex
 	}
@@ -159,6 +163,13 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 	sess, err := s.Playback.Streams.Start(ctx, sreq)
 	if errors.Is(err, stream.ErrBusy) {
 		writeError(w, http.StatusServiceUnavailable, "transcode_busy", "trop de lectures en cours sur le serveur")
+		return
+	}
+	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+		return // the client gave up
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		writeError(w, http.StatusGatewayTimeout, "start_timeout", "le serveur n'a pas pu préparer la lecture à temps")
 		return
 	}
 	if err != nil {
@@ -212,6 +223,25 @@ func (s *Server) startPlayback(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// keyframeSource lets the stream manager read the keyframe index of a
+// file through its source (a few ranged reads, even on a remote agent) and
+// cache it for this version of the file.
+func (s *Server) keyframeSource(mf *db.MediaFile) stream.Source {
+	path, sourceID := mf.Path, mf.SourceID.Int64
+	return stream.Source{
+		MediaFileID: mf.ID,
+		Version:     fmt.Sprintf("%d:%d", mf.Size, mf.Mtime),
+		Remote:      sources.IsRemote(path),
+		Open: func(ctx context.Context) (io.ReadSeekCloser, int64, error) {
+			f, err := s.Sources.Open(ctx, path, sourceID)
+			if err != nil {
+				return nil, 0, err
+			}
+			return f, f.Size(), nil
+		},
+	}
 }
 
 func (s *Server) pingPlayback(w http.ResponseWriter, r *http.Request) {

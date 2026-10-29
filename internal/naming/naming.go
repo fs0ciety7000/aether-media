@@ -182,6 +182,34 @@ var (
 	sidecarExts  = set("nfo", "strm", "txt", "nzb", "ifo", "bup", "torrent", "part", "sfv", "md5", "cue", "log", "m3u", "m3u8")
 )
 
+// IsDiscImage reports whether path is a disc image (.iso): Blu-ray or DVD
+// images are not playable in v0.1 (FFmpeg cannot read the UDF file system)
+// and are left out of libraries.
+func IsDiscImage(path string) bool { return fileExt(path) == "iso" }
+
+// doubledHalfRe: the repeated half of a doubled folder name must look like
+// a *arr folder ("Title (Year)", "{tmdb-…}"), so that real titles made of a
+// repeated word ("Bora Bora", "Baden Baden") are left alone.
+var doubledHalfRe = regexp.MustCompile(`(?i)\((?:19|20)\d{2}\)|[\[{](?:tmdb|imdb|tvdb)(?:id)?-`)
+
+// undoubleName returns the first half of a folder name made of the same
+// *arr folder name twice ("Heat (1995) {tmdb-949}Heat (1995) {tmdb-949}"),
+// as left by some file moves or scripts; other names are returned unchanged.
+func undoubleName(name string) string {
+	s := strings.TrimSpace(name)
+	n := len(s)
+	if n < 12 {
+		return name
+	}
+	for _, mid := range []int{n / 2, (n + 1) / 2} {
+		a, b := strings.TrimSpace(s[:mid]), strings.TrimSpace(s[mid:])
+		if a != "" && a == b && doubledHalfRe.MatchString(a) {
+			return a
+		}
+	}
+	return name
+}
+
 // IsVideo reports whether path has a video file extension (case-insensitive).
 func IsVideo(path string) bool { return videoExts[fileExt(path)] }
 

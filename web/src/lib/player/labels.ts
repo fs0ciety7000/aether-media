@@ -2,6 +2,7 @@
 import { ApiError } from '$lib/api/client';
 import type { PlaybackMethod, PlaybackTrack } from '$lib/api/types';
 import { channelsLabel, codecName, languageName } from '$lib/media';
+import { isTimeout } from './watchdog';
 
 export const METHOD_LABEL: Record<PlaybackMethod, string> = {
 	direct: 'Lecture directe',
@@ -53,7 +54,10 @@ export function subtitleTrackLabel(t: PlaybackTrack): { main: string; detail: st
 
 /** French message for a playback failure. */
 export function playbackErrorMessage(err: unknown): string {
+	if (isTimeout(err)) return 'Le serveur n’a pas pu démarrer la lecture à temps. La source de ce fichier est peut-être trop lente ou injoignable.';
 	if (err instanceof ApiError) {
+		if (err.code === 'source_offline') return 'La source de ce fichier (agent ou serveur distant) est hors ligne.';
+		if (err.code === 'start_timeout' || err.status === 504) return 'Le serveur n’a pas pu préparer la lecture à temps. La source de ce fichier est peut-être trop lente.';
 		if (err.code === 'transcode_busy' || err.status === 503) return 'Trop de lectures en cours sur le serveur, réessayez dans un instant.';
 		if (err.status === 404) return 'Ce titre ou son fichier est introuvable sur le serveur.';
 		if (err.status === 422 || err.code === 'no_media') return 'Aucun fichier lisible pour ce titre.';

@@ -18,19 +18,16 @@ import (
 	"github.com/fs0ciety7000/aether-media/internal/media/probe"
 )
 
-// keyframeScanTimeout bounds one ffprobe packet scan. MP4 indexes make it
-// near-instant; MKV/TS must be read through, which is I/O bound.
-const keyframeScanTimeout = 3 * time.Minute
-
 // keyframes are the video keyframe times of a file, in seconds on the
 // "zero-based" timeline FFmpeg uses with -start_at_zero (packet pts minus
 // the container start time), sorted ascending.
 type keyframes []float64
 
 // scanKeyframes lists the keyframes of the first video stream with a
-// packet-header scan (no decoding).
-func scanKeyframes(ctx context.Context, ffprobe, path string) (keyframes, error) {
-	ctx, cancel := context.WithTimeout(ctx, keyframeScanTimeout)
+// packet scan (no decoding). It reads the whole file: used for local files
+// only, bounded by timeout.
+func scanKeyframes(ctx context.Context, ffprobe, path string, timeout time.Duration) (keyframes, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	args := []string{"-v", "error"}
 	args = append(args, inputOptions(path)...)
@@ -96,9 +93,8 @@ func parseKeyframes(out []byte) (keyframes, error) {
 	return out2, nil
 }
 
-// keyframeCache is a small in-memory LRU of keyframe lists keyed by
-// path + probed size + duration. (A persistent cache in the database would avoid
-// re-scanning after restarts; see the package report.)
+// keyframeCache is a small in-memory LRU of keyframe lists (see
+// keyframeCacheKey); the database keeps them across restarts.
 type keyframeCache struct {
 	mu    sync.Mutex
 	max   int

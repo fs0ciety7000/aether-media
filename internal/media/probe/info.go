@@ -25,9 +25,12 @@ type Info struct {
 	DurationMs int64
 	Bitrate    int64 // bits/s
 	Size       int64
-	Streams    []Stream
-	Chapters   []Chapter
-	Tags       map[string]string // format tags, lower-cased keys (title, artist, album_artist, album, track, disc, date, genre, ...)
+	// StartTime is the container start time in seconds (ffprobe
+	// format.start_time): the timestamp FFmpeg's -start_at_zero subtracts.
+	StartTime float64
+	Streams   []Stream
+	Chapters  []Chapter
+	Tags      map[string]string // format tags, lower-cased keys (title, artist, album_artist, album, track, disc, date, genre, ...)
 }
 
 // Stream describes one elementary stream.

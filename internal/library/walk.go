@@ -38,10 +38,17 @@ var ignoreMarkers = map[string]bool{".aetherignore": true, ".ignore": true, ".pl
 // not treat its files as deleted (offline agent, unmounted share...).
 var ErrRootUnavailable = errors.New("library root unavailable")
 
+// walkStats counts files left out of a walk.
+type walkStats struct {
+	discImages []string // disc images (.iso), not supported: relative paths
+}
+
 // walk lists the media files of a source accepted by keep. A source that
 // cannot be listed, or lists nothing at all, is reported as unavailable
-// rather than as "no files".
-func walk(ctx context.Context, fsys vfs.FS, src db.LibrarySource, keep func(name string) bool) ([]file, error) {
+// rather than as "no files". Disc images are never kept (v0.1 cannot play
+// them): they are counted in stats instead of being probed, failing, and
+// shown as unreadable files.
+func walk(ctx context.Context, fsys vfs.FS, src db.LibrarySource, keep func(name string) bool, stats *walkStats) ([]file, error) {
 	var found []file
 	var ignored []string // directories holding an ignore marker
 	sawAny := false
@@ -61,7 +68,16 @@ func walk(ctx context.Context, fsys vfs.FS, src db.LibrarySource, keep func(name
 			ignored = append(ignored, path.Dir(e.Path))
 			return nil
 		}
-		if strings.HasPrefix(name, ".") || !keep(name) || naming.ClassifyExtra(e.Path) == "sample" {
+		if strings.HasPrefix(name, ".") {
+			return nil
+		}
+		if naming.IsDiscImage(name) {
+			if stats != nil {
+				stats.discImages = append(stats.discImages, e.Path)
+			}
+			return nil
+		}
+		if !keep(name) || naming.ClassifyExtra(e.Path) == "sample" {
 			return nil
 		}
 		found = append(found, file{

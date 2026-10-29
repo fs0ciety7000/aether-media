@@ -409,7 +409,7 @@ func lastWord(s string) string {
 // ParseSeriesFolder parses a series folder name such as
 // "Breaking Bad (2008) {tvdb-81189}" or "Case Closed (1996-2007)".
 func ParseSeriesFolder(name string) Series {
-	name = baseName(name)
+	name = undoubleName(baseName(name))
 	var sr Series
 	sr.IDs, name = extractIDs(name)
 	name = yearRangeRe.ReplaceAllString(name, "($1)")

@@ -77,7 +77,7 @@ func ParseMovie(path string) Movie {
 		if strings.HasSuffix(c, ":") { // "C:" drive
 			break
 		}
-		folder = c
+		folder = undoubleName(c)
 		break
 	}
 	if folder == "" {

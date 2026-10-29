@@ -85,7 +85,7 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 - [x] T-066 Accélération matérielle (détection + options ; paramètres testés, pas de GPU dans l'environnement de dev)
 - [x] T-067 Matrice de tests de lecture (Playwright)
 - [x] T-03B Sous-titres externes
-- [ ] T-068 Cache des images clés en base (remux MKV/TS : lecture complète du fichier au 1er lancement)
+- [x] T-068 Images clés sans lecture complète : index Cues des MKV/WebM lu par quelques lectures par plages (`internal/media/mkv`, vérifié sur trois clusters échantillons), cache en base (`media_keyframes`, migration 00012), scan ffprobe réservé aux fichiers locaux (40 s au plus, puis en arrière-plan). E2E agent derrière un proxy à 50 Mbit/s et 40 ms de latence, MKV de 2,3 Go H.264 + TrueHD : démarrage du remux 180 s (scan expiré, repli sur transcodage) → 1,8 s (index : 6 lectures, 6,3 Mo), 0,8 s en cache ; premier segment 188 s → 7,5 s
 - [ ] T-069 Chapitres dans l'API et sur la barre de progression
 - [ ] T-06A Valider l'accélération matérielle sur vrai GPU (VAAPI/NVENC/QSV)
 - [ ] T-06B Mini-lecteur audio persistant
@@ -179,13 +179,16 @@ Légende : `[ ]` à faire · `[~]` en cours · `[x]` fait · 🔒 bloqué par un
 
 ## Après la v0.1.0
 - Validation sur matériel et services réels : T-018 (arm64, GPU), T-06A / T-088 (accélération matérielle sur vrai GPU, puis à chaud), T-087 (PWA sur iPhone / iPad), T-0C6 (Trakt / Simkl avec de vrais comptes), T-0E9 (découverte UDP sur un vrai LAN)
-- Fonctions reportées : T-039 (extras), T-03A, T-048 (nouveaux épisodes), T-04A (fanart.tv), T-04C, T-056, T-057 (page personne), T-068, T-069 (chapitres), T-06B (mini-lecteur audio), T-075, T-076, T-0B4 (transcodage par l’agent), T-0B9, T-0BA, T-0BB, T-0BC, T-0C7, T-0C8, T-0C9, T-0CA, T-0CC (Simkl AUTH V2, avant avril 2027), T-0CD, T-0CF, T-0CG, T-0CH, T-0E8, T-08B, T-08C, T-085 (signature / notarisation)
+- Fonctions reportées : T-039 (extras), T-03A, T-048 (nouveaux épisodes), T-04A (fanart.tv), T-04C, T-056, T-057 (page personne), T-069 (chapitres), T-06B (mini-lecteur audio), T-075, T-076, T-0B4 (transcodage par l’agent), T-0B9, T-0BA, T-0BB, T-0BC, T-0C7, T-0C8, T-0C9, T-0CA, T-0CC (Simkl AUTH V2, avant avril 2027), T-0CD, T-0CF, T-0CG, T-0CH, T-0E8, T-08B, T-08C, T-085 (signature / notarisation)
 - [ ] T-095 Commande de secours `aether user reset-password` (aujourd’hui, sans second administrateur, aucun moyen hors interface)
 - [ ] T-096 Variantes d’images WebP ou AVIF (Lighthouse « modern-image-formats » : pas d’encodeur WebP en Go pur, il faut passer par FFmpeg ou un encodeur dédié)
 - [ ] T-097 Performance mobile (Lighthouse simulé, CPU ×4 : 55 à 93 selon les pages, accueil 55 à 62) : TBT de 130 ms à 1,6 s à l’hydratation (accueil, bibliothèque, fiche), CSS global inutilisé à ~70 % (découper `0.css` par route), rangées hors écran de l’accueil rendues plus tard, LCP mobile 2,7 à 4,3 s ; mesurer sur un vrai téléphone
 - [ ] T-098 Netguard : liste d’exceptions configurable (serveur d’images sur le LAN cité dans des NFO) et photos d’acteurs locales (`.actors/`, chemins absolus des NFO) servies par le cache
 - [ ] T-099 Facettes et genres de l’accueil : premier calcul à froid ~170 ms sur 20 000 éléments (ensuite en cache) ; `TopGenres` compte aussi les éléments masqués par le contrôle parental (les compteurs, pas les éléments) ; précalcul à la fin d’un scan
 - [ ] T-09B `agent.TestDiscovery` instable quand toute la suite tourne en parallèle (« impossible d'envoyer la requête de découverte », diffusion UDP) ; passe seul
+- [ ] T-09C Images clés des fichiers distants sans Cues (TS, M2TS, MP4, MKV sans index) : scan par l'agent, près du fichier (endpoint à côté de `/probe`), résultat mis en cache en base ; aujourd'hui la vidéo est transcodée
+- [ ] T-09D Doublon du nom de dossier signalé sur rc.2 (« 21 Grams (2003) {tmdb-470}21 Grams (2003) {tmdb-470}/… » dans l'URL du proxy, titre « 21 Grams (2003) 21 Grams ») : non reproduit avec les noms exacts (test `TestRadarrNamesThroughAgentAndProxy`, E2E), le masquage est hors de cause (`TestRedactProxyURL`). L'agent ayant analysé ce chemin, le dossier existe probablement tel quel sur la seedbox : à vérifier avec `ls` chez l'utilisateur. Le parseur lit désormais une fois un nom de dossier *arr répété
+- [ ] T-09E Lecture d'un agent dont la liaison est plus lente que le débit du fichier (remux Blu-ray à 30-40 Mbit/s) : aucune méthode ne tient le temps réel ; proposer une qualité réduite (transcodage) d'après le débit mesuré de l'agent
 - [ ] T-09A Pagination par clé (keyset) au lieu d’OFFSET pour les très grandes bibliothèques (page 100 : ~70 ms à 20 000 éléments, croît linéairement)
 
 ## M8 — Fédération (v1.1)

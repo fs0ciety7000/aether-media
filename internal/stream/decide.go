@@ -56,6 +56,8 @@ type Request struct {
 	// text subtitle (which is normally delivered as a WebVTT side-car).
 	// Image subtitles are always burnt.
 	BurnSubtitle bool
+	// Source locates the file for the keyframe index (remux); optional.
+	Source Source
 }
 
 // Decision is the outcome of Decide.

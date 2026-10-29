@@ -324,6 +324,7 @@ func runServe(args []string) error {
 		MaxTranscodes: cfg.Transcode.MaxSessions,
 		HWAccel:       cfg.Transcode.HWAccel,
 		VAAPIDevice:   cfg.Transcode.VAAPIDevice,
+		Keyframes:     keyframeStore{svc.store, log},
 		Logger:        log,
 	})
 	bindSettings(svc.settings, svc.tmdb, svc.refresher, streams, watcher)
@@ -572,4 +573,20 @@ func serverIdentity(dir string) (string, string) {
 	id := hex.EncodeToString(b)
 	_ = os.WriteFile(p, []byte(id), 0o600)
 	return id, "Aether · " + name
+}
+
+// keyframeStore adapts the database to stream.KeyframeStore (T-068).
+type keyframeStore struct {
+	st  *store.Store
+	log *slog.Logger
+}
+
+func (k keyframeStore) LoadKeyframes(ctx context.Context, id int64, version string) ([]float64, bool) {
+	return k.st.LoadKeyframes(ctx, id, version)
+}
+
+func (k keyframeStore) SaveKeyframes(ctx context.Context, id int64, version string, kf []float64) {
+	if err := k.st.SaveKeyframes(ctx, id, version, kf); err != nil {
+		k.log.Warn("images clés non enregistrées", "mediaFile", id, "err", err)
+	}
 }

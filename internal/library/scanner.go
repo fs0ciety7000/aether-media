@@ -113,12 +113,13 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 
 	var files []file
 	var unavailable []string
+	var stats walkStats
 	offline := map[int64]bool{}
 	for _, src := range srcs {
 		fsys, _, err := s.Sources.FS(ctx, src.ID)
 		var found []file
 		if err == nil {
-			found, err = walk(ctx, fsys, src, func(name string) bool { return accepts(lib.Kind, name) })
+			found, err = walk(ctx, fsys, src, func(name string) bool { return accepts(lib.Kind, name) }, &stats)
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -136,6 +137,10 @@ func (s *Scanner) Scan(ctx context.Context, libID int64, full bool) (Result, err
 	}
 	res.Files = len(files)
 	res.Unavailable = unavailable
+	if n := len(stats.discImages); n > 0 {
+		s.log.Info("images disque ignorées : format non pris en charge (ISO Blu-ray ou DVD ; le film peut être extrait en MKV avec MakeMKV)",
+			"library", lib.Name, "count", n, "example", stats.discImages[0])
+	}
 
 	ids := make(map[string]int64) // item key → id, shared across batches
 	seen := make(map[string]bool, len(files))

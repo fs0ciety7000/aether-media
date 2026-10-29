@@ -71,3 +71,21 @@ func TestRedaction(t *testing.T) {
 		t.Errorf("redaction too wide: %s / %s", Format(entries[0]), Format(entries[3]))
 	}
 }
+
+// The signed proxy URL keeps its path intact: only the signature segment is
+// masked, once, and masking twice changes nothing (a doubled folder name in
+// a log line therefore comes from the path itself, not from the masking).
+func TestRedactProxyURL(t *testing.T) {
+	path := "21%20Grams%20%282003%29%20%7Btmdb-470%7D/21%20Grams%20%282003%29%20%5Btmdbid-470%5D%20-%20%5BMULTi%5D%5BBluray-1080p%5D%5BDTS%205.1%5D%5Bx264%5D-AiRLiNE.mkv"
+	for _, sig := range []string{"OShlTd-LIQAbH7SSZBsFvib01FrfJTrMKPY6CvMsBok", "1234abcd_-", "-x"} {
+		in := "http://127.0.0.1:8096/internal/vfs/1/1793302954/" + sig + "/" + path
+		want := "http://127.0.0.1:8096/internal/vfs/1/1793302954/[masqué]/" + path
+		got := Redact(in)
+		if got != want {
+			t.Fatalf("Redact(%q)\n= %q\nwant %q", in, got, want)
+		}
+		if again := Redact(got); again != want {
+			t.Fatalf("Redact is not idempotent: %q", again)
+		}
+	}
+}

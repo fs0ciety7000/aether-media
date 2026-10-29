@@ -62,3 +62,26 @@ test('ladder and degrade', () => {
 	assert.deepEqual(degradeProfile(full, 2).videoCodecs, ['h264']);
 	assert.deepEqual(degradeProfile(full, 2).audioCodecs, ['aac']);
 });
+
+// ——— Watchdogs (no endless spinner) ———
+import { FIRST_FRAME_TIMEOUT_MS, isTimeout, STALL_TIMEOUT_MS, START_TIMEOUT_MS, watchFor } from '../src/lib/player/watchdog.ts';
+
+test('watchdog: waiting for the first image', () => {
+	const w = watchFor({ phase: 'playing', firstFrame: false, waiting: false, paused: true });
+	assert.equal(w?.ms, FIRST_FRAME_TIMEOUT_MS);
+	assert.match(w?.message ?? '', /ne démarre pas/);
+});
+
+test('watchdog: stalled after playing, not when paused or idle', () => {
+	assert.equal(watchFor({ phase: 'playing', firstFrame: true, waiting: true, paused: false })?.ms, STALL_TIMEOUT_MS);
+	assert.equal(watchFor({ phase: 'playing', firstFrame: true, waiting: true, paused: true }), null);
+	assert.equal(watchFor({ phase: 'playing', firstFrame: true, waiting: false, paused: false }), null);
+	assert.equal(watchFor({ phase: 'error', firstFrame: false, waiting: true, paused: false }), null);
+	assert.equal(watchFor({ phase: 'starting', firstFrame: false, waiting: true, paused: false }), null);
+});
+
+test('watchdog: start timeout above the server budget', () => {
+	assert.ok(START_TIMEOUT_MS > 40_000 + 30_000);
+	assert.ok(isTimeout({ name: 'TimeoutError' }));
+	assert.ok(!isTimeout(new TypeError('Load failed')));
+});

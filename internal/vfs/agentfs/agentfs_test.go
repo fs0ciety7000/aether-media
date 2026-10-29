@@ -679,3 +679,52 @@ func TestPinnedHTTP2(t *testing.T) {
 		t.Fatalf("%d connections, want 1 (HTTP/2)", c)
 	}
 }
+
+// ReadAt issues one bounded request per call and leaves the sequential
+// reader alone (container index reads).
+func TestReadAtBounded(t *testing.T) {
+	for _, ignore := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ignoreRange=%v", ignore), func(t *testing.T) {
+			a := newFake()
+			a.ignoreRng = ignore
+			data := make([]byte, 1<<20+5)
+			for i := range data {
+				data[i] = byte(i * 7)
+			}
+			a.add("Movies/21 Grams (2003) {tmdb-470}/21 Grams (2003) [tmdbid-470].mkv", data)
+			_, f := newTestFS(t, a, "")
+			fl, err := f.Open(context.Background(), "Movies/21 Grams (2003) {tmdb-470}/21 Grams (2003) [tmdbid-470].mkv")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer fl.Close()
+			ra, ok := fl.(io.ReaderAt)
+			if !ok {
+				t.Fatal("httpFile does not implement io.ReaderAt")
+			}
+			before := a.gets.Load()
+			buf := make([]byte, 4096)
+			for _, off := range []int64{len64(data) - 4096, 0, 777_777} {
+				n, err := ra.ReadAt(buf, off)
+				if err != nil || n != len(buf) || !bytes.Equal(buf, data[off:off+4096]) {
+					t.Fatalf("ReadAt(%d) = %d, %v", off, n, err)
+				}
+			}
+			if got := a.gets.Load() - before; got != 3 {
+				t.Errorf("requests = %d, want 3", got)
+			}
+			// Past the end: short read with io.EOF.
+			n, err := ra.ReadAt(buf, len64(data)-10)
+			if n != 10 || !errors.Is(err, io.EOF) {
+				t.Errorf("tail ReadAt = %d, %v", n, err)
+			}
+			// The sequential reader still starts at 0.
+			head := make([]byte, 16)
+			if _, err := io.ReadFull(fl, head); err != nil || !bytes.Equal(head, data[:16]) {
+				t.Fatalf("Read after ReadAt: %v", err)
+			}
+		})
+	}
+}
+
+func len64(b []byte) int64 { return int64(len(b)) }

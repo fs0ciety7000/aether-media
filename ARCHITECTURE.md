@@ -178,6 +178,8 @@ items_fts (FTS5 : title, original_title, overview, people, genres)
 2. `stream/decision` choisit :
    - **Direct Play** : fichier servi tel quel avec HTTP Range (MP4/WebM/MKV-compatible + codecs supportés).
    - **Remux** (Direct Stream) : codecs OK mais conteneur KO → `ffmpeg -c copy` vers HLS fMP4.
+     La copie vidéo est découpée sur les images clés de la source. Elles viennent du cache en base (`media_keyframes`), sinon de l'index Cues du MKV (`media/mkv`, quelques lectures par plages), sinon, pour un fichier local seulement, d'un scan ffprobe borné. Un fichier distant n'est jamais lu en entier : sans index, la vidéo est transcodée. Le lecteur abandonne avec un message clair si le démarrage dépasse 90 s ou si aucune image n'arrive (75 s).
+   - **Images disque** (`.iso`) : ignorées à l'analyse en v0.1.
    - **Transcode** : vidéo et/ou audio réencodés (H.264/AAC par défaut, HEVC/AV1 si supportés), HLS fMP4 avec segments générés à la demande et seek → relance de FFmpeg à la bonne position.
 3. Sous-titres : texte (SRT/ASS/VTT) → WebVTT servi à part ; image (PGS/VobSub) → incrustation (burn-in) seulement si l'utilisateur les active.
 4. Accélération matérielle (VAAPI, QSV, NVENC, VideoToolbox, AMF) en option, avec détection au démarrage.

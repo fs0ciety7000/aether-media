@@ -31,6 +31,7 @@ Première version publique : la « Première séance ». Elle couvre le périmè
 - Avancer ou reculer n'importe où, choix des pistes audio et des sous-titres (WebVTT, ou incrustation des sous-titres image PGS / VobSub).
 - Accélération matérielle optionnelle (VAAPI, QSV, NVENC, VideoToolbox) et conversion HDR vers SDR.
 - Lecteur web : raccourcis clavier, plein écran, reprise, épisode suivant.
+- Remux des gros MKV d'un agent distant (seedbox) en quelques secondes : les images clés sont lues dans l'index Cues du fichier (quelques lectures par plages, ~6 Mo) au lieu d'un scan ffprobe qui lisait tout le fichier, puis gardées en base. Le lecteur affiche une erreur claire au lieu d'un chargement sans fin. Les images disque `.iso` sont ignorées à l'analyse, et l'avertissement « zscale » ne s'affiche plus que si un tone mapping HDR est nécessaire.
 
 ### Utilisateurs et synchronisation
 - Comptes multiples (argon2id), sessions révocables, accès par bibliothèque, contrôle parental par âge (classification héritée des séries et saisons).
@@ -53,5 +54,7 @@ Première version publique : la « Première séance ». Elle couvre le périmè
 - Accélération matérielle, image arm64, service Windows et LaunchAgent macOS, ainsi que l'ajout à l'écran d'accueil iOS, n'ont pas encore été validés sur du matériel réel.
 - La synchronisation Trakt et Simkl a été vérifiée contre la documentation officielle et des serveurs simulés. Il reste à l'essayer avec de vrais comptes.
 - Le transcodage par l'agent, près des fichiers, n'est pas encore disponible : l'agent sert les fichiers et le serveur transcode.
+- Images disque (`.iso` Blu-ray ou DVD) non prises en charge : elles sont ignorées à l'analyse (une ligne dans le journal). Extraire le film en MKV, par exemple avec MakeMKV.
+- Un fichier distant sans index des images clés (TS, MP4, AVI, MKV sans Cues) n'est jamais lu en entier pour un remux : sa vidéo est transcodée.
 
 [0.1.0]: https://github.com/fs0ciety7000/aether-media/releases/tag/v0.1.0

@@ -35,6 +35,7 @@ type Config struct {
 	IdleTimeout   time.Duration // default 60s (no ping and no segment request)
 	HWAccel       string        // "none" (default) | "vaapi" | "qsv" | "nvenc" | "videotoolbox" | "auto"
 	VAAPIDevice   string        // default /dev/dri/renderD128
+	Keyframes     KeyframeStore // persistent keyframe cache (optional)
 	Logger        *slog.Logger
 }
 
@@ -60,6 +61,11 @@ type Manager struct {
 	capsOnce   sync.Once
 	toneMapper toneMapper
 	hw         string
+	toneWarn   sync.Once // "no zscale" warning, once, when tone mapping is needed
+
+	bgScans  map[string]bool // background keyframe scans in progress (guarded by mu)
+	bgCtx    context.Context
+	bgCancel context.CancelFunc
 
 	throttleAhead time.Duration
 
@@ -111,10 +117,12 @@ func NewManager(cfg Config) *Manager {
 		log:      log.With("component", "stream"),
 		kfCache:  newKeyframeCache(128),
 		sessions: map[string]*Session{},
+		bgScans:  map[string]bool{},
 		stop:     make(chan struct{}),
 
 		throttleAhead: defaultThrottle,
 	}
+	m.bgCtx, m.bgCancel = context.WithCancel(context.Background())
 	m.wg.Add(1)
 	go m.reaper()
 	return m
@@ -130,8 +138,6 @@ func (m *Manager) caps() {
 		out, err := exec.CommandContext(ctx, m.cfg.FFmpeg, "-hide_banner", "-filters").Output()
 		if err == nil && hasFilter(out, "zscale") && hasFilter(out, "tonemap") {
 			m.toneMapper = toneMapZscale
-		} else {
-			m.log.Warn("ffmpeg lacks zscale/tonemap: HDR tone mapping falls back to a colorspace conversion (inaccurate)")
 		}
 		m.hw = m.cfg.HWAccel
 		if m.hw == HWAuto {
@@ -162,6 +168,7 @@ type Session struct {
 	DurationMs int64
 	Path       string
 	Info       *probe.Info
+	Source     Source
 
 	m          *Manager
 	dir        string
@@ -215,6 +222,7 @@ func (m *Manager) Start(ctx context.Context, r Request) (*Session, error) {
 		DurationMs: r.Info.DurationMs,
 		Path:       r.Path,
 		Info:       r.Info,
+		Source:     r.Source,
 		m:          m,
 		profile:    r.Profile,
 		started:    time.Now(),
@@ -274,7 +282,7 @@ func (m *Manager) prepare(ctx context.Context, s *Session) error {
 	seg := m.cfg.SegmentSec
 	d := &s.Decision
 	if d.VideoCopy {
-		kf, err := m.keyframes(ctx, s.Path, s.Info)
+		kf, err := m.keyframes(ctx, s.Path, s.Info, s.Source)
 		var p *plan
 		if err == nil {
 			p, err = keyframePlan(kf, total, seg)
@@ -284,16 +292,24 @@ func (m *Manager) prepare(ctx context.Context, s *Session) error {
 				return ctx.Err()
 			}
 			// Without keyframes a video copy cannot be segmented reliably.
-			m.log.Warn("keyframe scan failed, falling back to transcode", "path", s.Path, "err", err)
+			m.log.Warn("images clés indisponibles : la vidéo sera transcodée au lieu d'être copiée", "path", s.Path, "err", err)
 			d.Method = MethodTranscode
 			d.VideoCopy = false
 			if !hasReason(d.Reasons, ReasonVideoCodec) {
 				d.Reasons = append(d.Reasons, ReasonVideoCodec)
 			}
+			if v := s.Info.Video(); v != nil && isToneMappable(v) {
+				d.ToneMap = true // H.264 output is SDR
+			}
 			d.TargetHeight, d.VideoBitrate = transcodeTarget(s.Info.Video(), streamByIndex(s.Info, d.AudioIndex), d.AudioCopy, s.profile)
 		} else {
 			s.plan = p
 		}
+	}
+	if d.ToneMap && m.toneMapper == toneMapColorspace {
+		m.toneWarn.Do(func() {
+			m.log.Warn("FFmpeg sans zscale/tonemap : le tone mapping HDR → SDR se fait par une simple conversion d'espace colorimétrique (couleurs approximatives). Installez un FFmpeg compilé avec libzimg pour un rendu fidèle.")
+		})
 	}
 	if s.plan == nil {
 		if total <= 0 {
@@ -315,21 +331,6 @@ func (m *Manager) prepare(ctx context.Context, s *Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.startRun(start)
-}
-
-func (m *Manager) keyframes(ctx context.Context, path string, info *probe.Info) (keyframes, error) {
-	key := kfKey(path, info)
-	if kf, ok := m.kfCache.get(key); ok {
-		return kf, nil
-	}
-	t := time.Now()
-	kf, err := scanKeyframes(ctx, m.cfg.FFprobe, path)
-	if err != nil {
-		return nil, err
-	}
-	m.log.Debug("keyframes scanned", "path", path, "count", len(kf), "took", time.Since(t))
-	m.kfCache.put(key, kf)
-	return kf, nil
 }
 
 func (m *Manager) releaseSlot(s *Session) {
@@ -380,6 +381,7 @@ func (m *Manager) Shutdown(ctx context.Context) {
 	if !m.closed {
 		m.closed = true
 		close(m.stop)
+		m.bgCancel()
 	}
 	ids := make([]string, 0, len(m.sessions))
 	for id := range m.sessions {

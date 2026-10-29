@@ -259,6 +259,56 @@ func (hf *httpFile) Read(p []byte) (int, error) {
 	}
 }
 
+// ReadAt reads len(p) bytes at off with one bounded ranged request
+// ("bytes=off-end"), independent of the sequential reader: small random
+// reads (a container index) then cost exactly what they read, instead of an
+// open-ended response that keeps streaming until it is abandoned.
+func (hf *httpFile) ReadAt(p []byte, off int64) (int, error) {
+	if hf.closed {
+		return 0, errors.New("agentfs: read on closed file")
+	}
+	if off < 0 {
+		return 0, errors.New("agentfs: negative offset")
+	}
+	if off >= hf.size {
+		return 0, io.EOF
+	}
+	want := min(int64(len(p)), hf.size-off)
+	if want == 0 {
+		return 0, nil
+	}
+	h := http.Header{"Range": {"bytes=" + strconv.FormatInt(off, 10) + "-" + strconv.FormatInt(off+want-1, 10)}}
+	resp, err := hf.fs.do(hf.ctx, http.MethodGet, hf.url, h)
+	if err != nil {
+		return 0, err
+	}
+	defer drainResp(resp)
+	switch resp.StatusCode {
+	case http.StatusPartialContent:
+		start, _, _, ok := parseContentRange(resp.Header.Get("Content-Range"))
+		if !ok || start != off {
+			return 0, fmt.Errorf("%w: agent: unexpected Content-Range %q", vfs.ErrOffline, resp.Header.Get("Content-Range"))
+		}
+	case http.StatusOK:
+		if _, err := io.CopyN(io.Discard, resp.Body, off); err != nil {
+			return 0, fmt.Errorf("%w: agent: %w", vfs.ErrOffline, err)
+		}
+	default:
+		return 0, statusErr(resp)
+	}
+	n, err := io.ReadFull(resp.Body, p[:want])
+	if err != nil {
+		if hf.ctx.Err() != nil {
+			return n, hf.ctx.Err()
+		}
+		return n, fmt.Errorf("%w: agent: read: %w", vfs.ErrOffline, err)
+	}
+	if int64(n) < int64(len(p)) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 func (hf *httpFile) Seek(offset int64, whence int) (int64, error) {
 	if hf.closed {
 		return 0, errors.New("agentfs: seek on closed file")

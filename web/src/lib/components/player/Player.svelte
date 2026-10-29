@@ -19,6 +19,7 @@
 	import { pickAudio, pickSubtitle } from '$lib/player/tracks';
 	import { session } from '$lib/session.svelte';
 	import { nextSibling } from '$lib/player/target';
+	import { START_TIMEOUT_MS, watchFor } from '$lib/player/watchdog';
 	import Artwork from '../Artwork.svelte';
 	import Button from '../Button.svelte';
 	import Icon, { type IconName } from '../Icon.svelte';
@@ -212,13 +213,17 @@
 		const profile = degradeProfile(detectProfile(quality), profileLevel);
 		let next: PlaybackInfo;
 		try {
-			next = await api.startPlayback(itemId, {
-				profile,
-				mediaFileId,
-				audioIndex: opts.audioIndex !== undefined && opts.audioIndex >= 0 ? opts.audioIndex : undefined,
-				subtitleIndex: opts.burnIndex !== undefined && opts.burnIndex >= 0 ? opts.burnIndex : undefined,
-				startMs: Math.max(0, Math.round(startMs))
-			});
+			next = await api.startPlayback(
+				itemId,
+				{
+					profile,
+					mediaFileId,
+					audioIndex: opts.audioIndex !== undefined && opts.audioIndex >= 0 ? opts.audioIndex : undefined,
+					subtitleIndex: opts.burnIndex !== undefined && opts.burnIndex >= 0 ? opts.burnIndex : undefined,
+					startMs: Math.max(0, Math.round(startMs))
+				},
+				AbortSignal.timeout(START_TIMEOUT_MS)
+			);
 		} catch (err) {
 			if (my === token && !destroyed) fail(playbackErrorMessage(err));
 			return;
@@ -585,6 +590,21 @@
 		buffered = out;
 		bufferAhead = ahead;
 	}
+
+	// Watchdogs: no image long after the session started, or stuck buffering → a clear error
+	// instead of an endless spinner (native HLS in particular retries silently forever).
+	const watch = $derived(watchFor({ phase, firstFrame, waiting: waiting || recovering || restarting, paused }));
+	// Keyed on the message: the timer restarts only when the kind of wait changes.
+	const watchKey = $derived(watch?.message ?? '');
+	$effect(() => {
+		if (!watchKey) return;
+		const w = untrack(() => watch);
+		if (!w) return;
+		const t = setTimeout(() => {
+			if (!destroyed) fail(w.message);
+		}, w.ms);
+		return () => clearTimeout(t);
+	});
 
 	function onPlaying() {
 		waiting = false;

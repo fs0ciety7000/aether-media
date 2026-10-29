@@ -90,6 +90,15 @@ var movieCases = []struct {
 	{"Movie Name (2015) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole).mkv", Movie{Title: "Movie Name", Year: 2015}},
 	{"The Movie (2010)/The Movie (2010) - 1080p.mkv", Movie{Title: "The Movie", Year: 2010}},
 	{"Movie Name (2010) {tmdb-12345}.mkv", Movie{Title: "Movie Name", Year: 2010, IDs: ProviderIDs{TMDB: "12345"}}},
+	// Radarr layout with Blu-ray remux release names (real libraries).
+	{"src:1:/21 Grams (2003) {tmdb-470}/21 Grams (2003) [tmdbid-470] - [MULTi][Bluray-1080p][DTS 5.1][x264]-AiRLiNE.mkv",
+		Movie{Title: "21 Grams", Year: 2003, IDs: ProviderIDs{TMDB: "470"}}},
+	{"/Volumes/Media/Movies/300 (2007) {tmdb-1271}/300 (2007) [tmdbid-1271] - [MULTi VFF][Bluray-1080p][TrueHD Atmos 7.1][x264]-FoX.mkv",
+		Movie{Title: "300", Year: 2007, IDs: ProviderIDs{TMDB: "1271"}}},
+	// A folder name repeated twice (left by a file move) is read once.
+	{"src:1:/21 Grams (2003) {tmdb-470}21 Grams (2003) {tmdb-470}/21 Grams (2003) [tmdbid-470] - [MULTi][Bluray-1080p][DTS 5.1][x264]-AiRLiNE.mkv",
+		Movie{Title: "21 Grams", Year: 2003, IDs: ProviderIDs{TMDB: "470"}}},
+	{"Movies/Heat (1995)Heat (1995)/heat.mkv", Movie{Title: "Heat", Year: 1995}},
 	{"The Matrix (1999) [imdbid-tt0133093].mkv", Movie{Title: "The Matrix", Year: 1999, IDs: ProviderIDs{IMDB: "tt0133093"}}},
 	{"The Matrix (1999) {imdb-tt0133093}.mkv", Movie{Title: "The Matrix", Year: 1999, IDs: ProviderIDs{IMDB: "tt0133093"}}},
 	{"Movies/The Matrix (1999) [tmdbid-603]/The.Matrix.1999.1080p.mkv", Movie{Title: "The Matrix", Year: 1999, IDs: ProviderIDs{TMDB: "603"}}},
@@ -237,4 +246,29 @@ func FuzzParseMovie(f *testing.F) {
 			t.Fatalf("bad ids %+v", m.IDs)
 		}
 	})
+}
+
+func TestDoubledFolder(t *testing.T) {
+	for in, want := range map[string]string{
+		"21 Grams (2003) {tmdb-470}21 Grams (2003) {tmdb-470}": "21 Grams (2003) {tmdb-470}",
+		"Heat (1995) Heat (1995)":                              "Heat (1995)",
+		"Heat (1995)":                                          "Heat (1995)",
+		"Tora! Tora! Tora!":                                    "Tora! Tora! Tora!",
+		"New York, New York":                                   "New York, New York",
+		"Bora Bora":                                            "Bora Bora",
+		"Baden Baden":                                          "Baden Baden",
+	} {
+		if got := undoubleName(in); got != want {
+			t.Errorf("undoubleName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if s := ParseSeriesFolder("21 Grams (2003) {tmdb-470}21 Grams (2003) {tmdb-470}"); s.Title != "21 Grams" || s.Year != 2003 || s.IDs.TMDB != "470" {
+		t.Errorf("ParseSeriesFolder = %+v", s)
+	}
+}
+
+func TestDiscImage(t *testing.T) {
+	if !IsDiscImage("Movies/Avatar (2009)/Avatar (2009) [BR-DISK].ISO") || IsDiscImage("a.mkv") {
+		t.Fatal("IsDiscImage")
+	}
 }

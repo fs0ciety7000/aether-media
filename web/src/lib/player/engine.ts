@@ -8,7 +8,9 @@
 // Error policy (hls.js): media errors → recoverMediaError(), then swapAudioCodec() +
 // recoverMediaError(), then fatal "media". Network errors → hls.js' own retries (generous
 // timeouts: segments are produced on demand), then startLoad() with exponential backoff
-// (1, 2, 4, 8 s), then fatal "network". Any other fatal error → fatal "other".
+// (1, 2, 4, 8 s), then fatal "network"; HTTP 500 (FFmpeg failed) and 404 (session gone) are
+// fatal at once. Any other fatal error → fatal "other". The player adds its own watchdogs
+// (no first image, stuck buffering: see watchdog.ts), which also cover native HLS.
 
 import type { PlaybackInfo } from '$lib/api/types';
 import type HlsType from 'hls.js';
@@ -136,6 +138,8 @@ async function attachHlsJs(video: HTMLVideoElement, url: string, opts: EngineOpt
 			const status = data.response?.code;
 			// Session gone (stopped server-side): retrying the same URLs is pointless.
 			if (status === 404 || status === 410) return fail(new PlayerError('network', 'La session de lecture a expiré.'));
+			// FFmpeg failed on the server (already retried by hls.js): retrying again is pointless.
+			if (status === 500) return fail(new PlayerError('other', 'Le serveur n’a pas pu produire la vidéo (échec du transcodage ou source illisible).'));
 			if (networkAttempts < RETRY_DELAYS.length) {
 				opts.onRecovering?.('network');
 				clearTimeout(retryTimer);

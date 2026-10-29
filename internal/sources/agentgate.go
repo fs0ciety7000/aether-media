@@ -374,3 +374,17 @@ func (f gatedFile) Read(p []byte) (int, error) {
 	}
 	return n, err
 }
+
+// ReadAt forwards bounded reads (one ranged request each) when the file
+// supports them, reporting failures to the gate like Read.
+func (f gatedFile) ReadAt(p []byte, off int64) (int, error) {
+	ra, ok := f.File.(io.ReaderAt)
+	if !ok {
+		return 0, errors.ErrUnsupported
+	}
+	n, err := ra.ReadAt(p, off)
+	if err != nil && !errors.Is(err, io.EOF) {
+		err = f.g.done(f.ctx, err)
+	}
+	return n, err
+}

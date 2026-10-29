@@ -77,6 +77,7 @@ type rawFormat struct {
 	Duration   flexValue         `json:"duration"`
 	Size       flexValue         `json:"size"`
 	BitRate    flexValue         `json:"bit_rate"`
+	StartTime  flexValue         `json:"start_time"`
 	Tags       map[string]string `json:"tags"`
 }
 
@@ -157,6 +158,7 @@ func ParseOutput(data []byte, path string) (*Info, error) {
 		formatName = f.FormatName
 		info.DurationMs = secondsToMs(f.Duration.float())
 		info.Size = f.Size.int64()
+		info.StartTime = f.StartTime.float()
 		info.Bitrate = f.BitRate.int64()
 		info.Tags = normaliseFormatTags(f.Tags)
 	}
